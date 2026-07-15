@@ -4,7 +4,7 @@
 
 ## 项目
 
-ST App — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3），用于 SillyTavern 风格的 AI 角色扮演聊天。支持导入 SillyTavern 兼容的角色卡、预设和世界书，可对接 OpenAI 兼容 / Gemini / Claude API 进行流式聊天。包名：`me.rerere.stapp`。不是 git 仓库。
+ST App — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3），用于 SillyTavern 风格的 AI 角色扮演聊天。支持导入 SillyTavern 兼容的角色卡、预设和世界书，可对接 OpenAI 兼容 / Gemini / Claude API 进行流式聊天。包名：`me.rerere.stapp`。
 
 ## 常用命令
 
