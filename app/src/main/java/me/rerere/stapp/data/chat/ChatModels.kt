@@ -1,0 +1,50 @@
+package me.rerere.stapp.data.chat
+
+import kotlinx.serialization.Serializable
+
+/**
+ * 消息的一个版本（重新生成的历史版本 / 备选开场白），同时是分支点：
+ * [tail] 持有该版本名下的分支下文（本消息之后的整条时间线），切换版本时随之换入换出。
+ * 不变式：当前显示版本（alts[altIdx]）的 tail 恒为空 —— 它的下文就是会话
+ * messages 里本消息之后的部分；只有非当前版本才在 tail 里保存自己的下文。
+ */
+@Serializable
+data class MsgAlt(
+    val content: String = "",
+    val reasoning: String = "",
+    val model: String = "",
+    val reasoningMs: Long = 0,
+    val tail: List<ChatMessage> = emptyList(),
+)
+
+/** 非图片附件：name 为原始文件名（显示用），path 为 filesDir 相对路径 */
+@Serializable
+data class MsgFile(
+    val name: String = "",
+    val path: String = "",
+)
+
+/** 单条聊天消息。content/reasoning/model/reasoningMs 始终镜像 alts[altIdx]（alts 为空表示只有单版本） */
+@Serializable
+data class ChatMessage(
+    val role: String,             // "user" | "assistant"
+    val content: String = "",
+    val reasoning: String = "",   // 思考过程（如 deepseek-reasoner / claude thinking）
+    val model: String = "",       // 生成该消息的模型 ID（仅 assistant；开场白为空）
+    val reasoningMs: Long = 0,    // 思考耗时（毫秒）
+    val ts: Long = System.currentTimeMillis(),
+    val alts: List<MsgAlt> = emptyList(),  // 多版本（含当前版本）
+    val altIdx: Int = 0,
+    val images: List<String> = emptyList(),   // 图片附件（filesDir 相对路径，发送时编码为 base64）
+    val files: List<MsgFile> = emptyList(),   // 其它文件附件（发送时尝试以文本内联进 prompt）
+)
+
+/** 聊天会话：每个角色卡对应独立的聊天列表 */
+data class ChatSession(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val charFile: String = "",    // 角色卡文件名，空 = 无角色的普通聊天
+    val charName: String = "",
+    val messages: List<ChatMessage> = emptyList(),
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+)
