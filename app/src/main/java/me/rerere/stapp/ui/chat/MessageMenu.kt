@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.SquarePen
-import com.composables.icons.lucide.Trash
+import com.composables.icons.lucide.Trash2
 
 // 消息长按菜单，基于 Figma 节点 19-385：底部弹窗，3 个操作
 
@@ -86,7 +86,7 @@ fun MessageMenu(
             MenuRow(
                 icon = {
                     Icon(
-                        Lucide.Trash,
+                        Lucide.Trash2,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.error // 原 Figma 值 #BA1A1A
