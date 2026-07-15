@@ -22,7 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -55,18 +54,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.CircleChevronLeft
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import me.rerere.stapp.R
 import me.rerere.stapp.data.preset.PromptItem
 import me.rerere.stapp.data.preset.StPreset
-
-private val Space4 = 4.dp
-private val Space8 = 8.dp
-private val Space12 = 12.dp
-private val Space16 = 16.dp
+import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.ConfirmDeleteDialog
+import me.rerere.stapp.ui.components.Space4
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space12
+import me.rerere.stapp.ui.components.Space16
 
 val SOURCES = listOf("openai", "claude", "makersuite", "custom", "openrouter", "google")
 val ROLES = listOf("system", "user", "assistant")
@@ -92,23 +91,7 @@ fun PresetEditorScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Column {
-                Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-                        .statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        Lucide.CircleChevronLeft, stringResource(R.string.back), Modifier.size(24.dp).clickable { onBack() },
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        preset.name, style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.size(24.dp))
-                }
+                AppTopBar(preset.name, onBack)
                 PrimaryScrollableTabRow(
                     selectedTabIndex = tab,
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -160,21 +143,16 @@ fun PresetEditorScreen(
 
     deleteConfirmIdx?.let { idx ->
         val name = editable.prompts.getOrNull(idx)?.name?.ifBlank { stringResource(R.string.unnamed_prompt) } ?: stringResource(R.string.unnamed_prompt)
-        AlertDialog(
-            onDismissRequest = { deleteConfirmIdx = null },
-            title = { Text(stringResource(R.string.delete_prompt_title)) },
-            text = { Text(stringResource(R.string.delete_prompt_msg_fmt, name)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    editable = editable.copy(
-                        prompts = editable.prompts.toMutableList().also { it.removeAt(idx) }
-                    )
-                    deleteConfirmIdx = null
-                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.delete_prompt_title),
+            text = stringResource(R.string.delete_prompt_msg_fmt, name),
+            onConfirm = {
+                editable = editable.copy(
+                    prompts = editable.prompts.toMutableList().also { it.removeAt(idx) }
+                )
+                deleteConfirmIdx = null
             },
-            dismissButton = {
-                TextButton(onClick = { deleteConfirmIdx = null }) { Text(stringResource(R.string.cancel)) }
-            }
+            onDismiss = { deleteConfirmIdx = null },
         )
     }
 

@@ -2,9 +2,9 @@ package me.rerere.stapp.data.preset
 
 import android.content.Context
 import android.net.Uri
-import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.rerere.stapp.data.JsonFileDir
 import org.json.JSONObject
 import java.io.File
 
@@ -13,26 +13,16 @@ object PresetRepository {
     private const val PRESETS_DIR = "presets"
     private const val REGEX_DIR = "regex"
 
-    fun presetsDir(context: Context): File =
-        File(context.filesDir, PRESETS_DIR).also { it.mkdirs() }
-
-    private fun regexDir(context: Context): File =
-        File(context.filesDir, REGEX_DIR).also { it.mkdirs() }
+    fun presetsDir(context: Context): File = JsonFileDir.dir(context, PRESETS_DIR)
 
     /** 列出所有已导入的预设名（文件名，不含 .json）。 */
-    suspend fun listNames(context: Context): List<String> = withContext(Dispatchers.IO) {
-        presetsDir(context).listFiles()
-            ?.filter { it.extension == "json" }
-            ?.map { it.nameWithoutExtension }
-            ?.sortedBy { it }
-            ?: emptyList()
-    }
+    suspend fun listNames(context: Context): List<String> =
+        JsonFileDir.listNames(context, PRESETS_DIR)
 
     suspend fun load(context: Context, name: String): StPreset = withContext(Dispatchers.IO) {
-        val file = File(presetsDir(context), "$name.json")
+        val file = JsonFileDir.file(context, PRESETS_DIR, name)
         if (!file.exists()) throw IllegalStateException("预设文件不存在: $name")
-        val json = JSONObject(file.readText())
-        PresetParser.parse(json, name)
+        PresetParser.parse(JSONObject(file.readText()), name)
     }
 
     /** 从 content URI（文件选择器结果）导入预设。 */
@@ -40,24 +30,17 @@ object PresetRepository {
         val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
             ?: throw IllegalStateException("无法读取文件")
         val json = JSONObject(text)
-        // 从 ContentResolver 查询真实文件名
-        val displayName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (idx >= 0 && cursor.moveToFirst()) cursor.getString(idx) else null
-        }
-        val name = displayName
-            ?.removeSuffix(".json")
-            ?.takeIf { it.isNotBlank() }
+        val name = JsonFileDir.queryDisplayName(context, uri)
+            ?.removeSuffix(".json")?.takeIf { it.isNotBlank() }
             ?: "preset_${System.currentTimeMillis()}"
-        val file = File(presetsDir(context), "$name.json")
-        file.writeText(text)
+        JsonFileDir.file(context, PRESETS_DIR, name).writeText(text)
         PresetParser.parse(json, name)
     }
 
     /** 保存（覆盖）预设。 */
     suspend fun save(context: Context, preset: StPreset) = withContext(Dispatchers.IO) {
         // 重建原始 JSON，保留 prompts 结构（只更新顶层字段）
-        val file = File(presetsDir(context), "${preset.name}.json")
+        val file = JsonFileDir.file(context, PRESETS_DIR, preset.name)
         val root = if (file.exists()) JSONObject(file.readText()) else JSONObject()
 
         root.put("chat_completion_source", preset.chatCompletionSource)
@@ -78,35 +61,21 @@ object PresetRepository {
         file.writeText(root.toString(2))
     }
 
-    suspend fun delete(context: Context, name: String) = withContext(Dispatchers.IO) {
-        File(presetsDir(context), "$name.json").delete()
-    }
+    suspend fun delete(context: Context, name: String) =
+        JsonFileDir.delete(context, PRESETS_DIR, name)
 
     /** 重命名预设，成功返回 true（目标名已存在或源不存在则失败） */
-    suspend fun rename(context: Context, oldName: String, newName: String): Boolean = withContext(Dispatchers.IO) {
-        if (newName.isBlank() || newName == oldName) return@withContext false
-        val src = File(presetsDir(context), "$oldName.json")
-        val dst = File(presetsDir(context), "$newName.json")
-        if (!src.exists() || dst.exists()) return@withContext false
-        src.renameTo(dst)
-    }
+    suspend fun rename(context: Context, oldName: String, newName: String): Boolean =
+        JsonFileDir.rename(context, PRESETS_DIR, oldName, newName)
 
     /** 清空所有预设 */
-    suspend fun clear(context: Context) = withContext(Dispatchers.IO) {
-        presetsDir(context).listFiles()?.forEach { it.delete() }
-        Unit
-    }
+    suspend fun clear(context: Context) = JsonFileDir.clear(context, PRESETS_DIR)
 
-    suspend fun listRegexNames(context: Context): List<String> = withContext(Dispatchers.IO) {
-        regexDir(context).listFiles()
-            ?.filter { it.extension == "json" }
-            ?.map { it.nameWithoutExtension }
-            ?.sortedBy { it }
-            ?: emptyList()
-    }
+    suspend fun listRegexNames(context: Context): List<String> =
+        JsonFileDir.listNames(context, REGEX_DIR)
 
     suspend fun loadRegex(context: Context, name: String): RegexScript = withContext(Dispatchers.IO) {
-        val file = File(regexDir(context), "$name.json")
+        val file = JsonFileDir.file(context, REGEX_DIR, name)
         val json = JSONObject(file.readText())
         PresetParser.parseRegexScript(json)
     }

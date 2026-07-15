@@ -6,10 +6,10 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.net.Uri
-import android.provider.OpenableColumns
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.rerere.stapp.data.JsonFileDir
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -130,10 +130,7 @@ object CharacterRepository {
 
         val json = JSONObject(jsonStr)
 
-        val displayName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (idx >= 0 && cursor.moveToFirst()) cursor.getString(idx) else null
-        }
+        val displayName = JsonFileDir.queryDisplayName(context, uri)
         val name = displayName
             ?.removeSuffix(".json")?.removeSuffix(".png")
             ?.takeIf { it.isNotBlank() }

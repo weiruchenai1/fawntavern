@@ -7,13 +7,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -40,7 +38,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.CircleChevronLeft
 import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquare
@@ -53,10 +50,10 @@ import me.rerere.stapp.R
 import me.rerere.stapp.data.chat.ChatRepository
 import me.rerere.stapp.data.chat.ChatSession
 import me.rerere.stapp.data.settings.SearchHistoryStore
-
-private val Space8 = 8.dp
-private val Space12 = 12.dp
-private val Space16 = 16.dp
+import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space12
+import me.rerere.stapp.ui.components.Space16
 
 /** 一条消息命中结果 */
 private data class SearchHit(
@@ -89,28 +86,7 @@ fun SearchScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            // 与其他页面一致的页头：CircleChevronLeft + 居中标题
-            Box(
-                Modifier.fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                Icon(
-                    Lucide.CircleChevronLeft, stringResource(R.string.back),
-                    Modifier.size(24.dp).clickable { onBack() },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    stringResource(R.string.search_chats),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                )
-            }
-        }
+        topBar = { AppTopBar(stringResource(R.string.search_chats), onBack) }
     ) { padding ->
         // 在当前角色卡的会话里搜消息内容，每个会话取首个命中片段
         val hits: List<SearchHit> = if (query.isBlank()) emptyList() else {

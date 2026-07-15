@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -38,14 +37,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.rerere.stapp.R
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.CircleChevronLeft
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Trash2
@@ -54,11 +51,12 @@ import kotlinx.coroutines.launch
 import me.rerere.stapp.data.worldbook.WorldBook
 import me.rerere.stapp.data.worldbook.WorldBookEntry
 import me.rerere.stapp.data.worldbook.WorldBookRepository
-
-private val Space4 = 4.dp
-private val Space8 = 8.dp
-private val Space12 = 12.dp
-private val Space16 = 16.dp
+import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.ConfirmDeleteDialog
+import me.rerere.stapp.ui.components.Space4
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space12
+import me.rerere.stapp.ui.components.Space16
 
 @Composable
 fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
@@ -118,18 +116,15 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
     }
 
     deletingEntry?.let { entry ->
-        AlertDialog(
-            onDismissRequest = { deletingEntry = null },
-            title = { Text(stringResource(R.string.delete_entry_title)) },
-            text = { Text(stringResource(R.string.delete_entry_msg_fmt, entry.comment.ifBlank { "Entry ${entry.id}" })) },
-            confirmButton = {
-                TextButton(onClick = {
-                    entries = entries.filter { it.id != entry.id }
-                    saveBook()
-                    deletingEntry = null
-                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.delete_entry_title),
+            text = stringResource(R.string.delete_entry_msg_fmt, entry.comment.ifBlank { "Entry ${entry.id}" }),
+            onConfirm = {
+                entries = entries.filter { it.id != entry.id }
+                saveBook()
+                deletingEntry = null
             },
-            dismissButton = { TextButton(onClick = { deletingEntry = null }) { Text(stringResource(R.string.cancel)) } }
+            onDismiss = { deletingEntry = null },
         )
     }
 
@@ -137,21 +132,7 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-                    .statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Lucide.CircleChevronLeft, stringResource(R.string.back), Modifier.size(24.dp).clickable { onBack() },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(book.name, style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.size(24.dp))
-            }
-        }
+        topBar = { AppTopBar(book.name, onBack) }
     ) { padding ->
         if (entries.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {

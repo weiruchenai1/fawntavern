@@ -4,9 +4,7 @@ import android.graphics.BitmapFactory
 import me.rerere.stapp.data.settings.FontSizeStore
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
@@ -35,7 +32,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.CircleChevronLeft
 import com.composables.icons.lucide.Lucide
 import me.rerere.stapp.R
 import me.rerere.stapp.data.api.ApiConfigStore
@@ -43,6 +39,7 @@ import me.rerere.stapp.data.chat.ChatMessage
 import me.rerere.stapp.data.settings.UserProfileStore
 import me.rerere.stapp.ui.chat.AIMsg
 import me.rerere.stapp.ui.chat.UserMsg
+import me.rerere.stapp.ui.components.AppTopBar
 
 private data class ScalePreset(val labelResId: Int, val scale: Float)
 
@@ -71,22 +68,7 @@ fun FontSizeScreen(onBack: () -> Unit, currentScale: Float = 1.0f) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Box(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-                    .statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Icon(
-                    Lucide.CircleChevronLeft, stringResource(R.string.back), Modifier.size(24.dp).clickable { onBack() },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    stringResource(R.string.font_size), style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
-                )
-            }
-        }
+        topBar = { AppTopBar(stringResource(R.string.font_size), onBack) }
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding),

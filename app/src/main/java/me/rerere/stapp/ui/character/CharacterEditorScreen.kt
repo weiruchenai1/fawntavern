@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,14 +49,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.RadioButton
 import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.CircleChevronLeft
 import com.composables.icons.lucide.ImagePlus
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
@@ -72,14 +69,15 @@ import me.rerere.stapp.data.character.CharacterCard
 import me.rerere.stapp.data.character.CharacterRepository
 import me.rerere.stapp.data.preset.PresetRepository
 import me.rerere.stapp.data.worldbook.WorldBookRepository
+import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.ConfirmDeleteDialog
+import me.rerere.stapp.ui.components.Space4
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space12
+import me.rerere.stapp.ui.components.Space16
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-
-private val Space4 = 4.dp
-private val Space8 = 8.dp
-private val Space12 = 12.dp
-private val Space16 = 16.dp
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -275,38 +273,24 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     }
 
     deletingGreetingIdx?.let { idx ->
-        AlertDialog(
-            onDismissRequest = { deletingGreetingIdx = null },
-            title = { Text(stringResource(R.string.delete_greeting)) },
-            text = { Text(stringResource(R.string.delete_greeting_msg)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (idx < greetings.size) greetings = greetings.toMutableList().also { it.removeAt(idx) }
-                    deletingGreetingIdx = null
-                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.delete_greeting),
+            text = stringResource(R.string.delete_greeting_msg),
+            onConfirm = {
+                if (idx < greetings.size) greetings = greetings.toMutableList().also { it.removeAt(idx) }
+                deletingGreetingIdx = null
             },
-            dismissButton = {
-                TextButton(onClick = { deletingGreetingIdx = null }) { Text(stringResource(R.string.cancel)) }
-            }
+            onDismiss = { deletingGreetingIdx = null },
         )
     }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-                    .statusBarsPadding().padding(horizontal = 16.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Lucide.CircleChevronLeft, stringResource(R.string.back), Modifier.size(24.dp).clickable { saveAndBack() },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(if (card.name.isBlank()) stringResource(R.string.new_character) else stringResource(R.string.edit_character),
-                    style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.size(24.dp))
-            }
+            AppTopBar(
+                if (card.name.isBlank()) stringResource(R.string.new_character) else stringResource(R.string.edit_character),
+                onBack = { saveAndBack() },
+            )
         }
     ) { padding ->
         Column(

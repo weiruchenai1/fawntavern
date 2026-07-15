@@ -55,10 +55,9 @@ import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.X
 import me.rerere.stapp.R
 import me.rerere.stapp.ui.api.ProviderIcon
-
-private val Space8 = 8.dp
-private val Space12 = 12.dp
-private val Space16 = 16.dp
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space12
+import me.rerere.stapp.ui.components.Space16
 
 internal data class Attachment(val uri: Uri, val isImage: Boolean)
 

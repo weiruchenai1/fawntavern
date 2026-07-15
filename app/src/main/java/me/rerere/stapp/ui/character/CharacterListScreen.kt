@@ -8,7 +8,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -21,14 +20,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
@@ -36,7 +33,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,12 +51,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.CircleChevronLeft
 import com.composables.icons.lucide.FilePlus
 import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.GripVertical
@@ -75,11 +69,14 @@ import kotlinx.coroutines.withContext
 import me.rerere.stapp.R
 import me.rerere.stapp.data.character.CharacterCard
 import me.rerere.stapp.data.character.CharacterRepository
-
-private val Space4 = 4.dp
-private val Space8 = 8.dp
-private val Space12 = 12.dp
-private val Space16 = 16.dp
+import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.ConfirmDeleteDialog
+import me.rerere.stapp.ui.components.EmptyState
+import me.rerere.stapp.ui.components.LoadingState
+import me.rerere.stapp.ui.components.Space4
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space12
+import me.rerere.stapp.ui.components.Space16
 
 @Composable
 fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = {}) {
@@ -153,21 +150,18 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     ) { uri -> writeExport(uri) { CharacterRepository.exportJsonBytes(context, exportTarget) } }
 
     showDeleteDialog?.let { name ->
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            title = { Text(stringResource(R.string.delete_character_title)) },
-            text = { Text(stringResource(R.string.delete_character_msg_fmt, name)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        CharacterRepository.delete(context, name)
-                        Toast.makeText(context, context.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
-                        refresh()
-                    }
-                    showDeleteDialog = null
-                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.delete_character_title),
+            text = stringResource(R.string.delete_character_msg_fmt, name),
+            onConfirm = {
+                scope.launch {
+                    CharacterRepository.delete(context, name)
+                    Toast.makeText(context, context.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
+                    refresh()
+                }
+                showDeleteDialog = null
             },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = null }) { Text(stringResource(R.string.cancel)) } }
+            onDismiss = { showDeleteDialog = null },
         )
     }
 
@@ -187,21 +181,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-                    .statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Lucide.CircleChevronLeft, stringResource(R.string.back), Modifier.size(24.dp).clickable { onBack() },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(stringResource(R.string.characters), style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.size(24.dp))
-            }
-        },
+        topBar = { AppTopBar(stringResource(R.string.characters), onBack) },
         floatingActionButton = {
             FloatingActionButton(onClick = { importLauncher.launch("*/*") }) {
                 Icon(Lucide.FilePlus, stringResource(R.string.import_label), Modifier.size(24.dp))
@@ -209,23 +189,10 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
         }
     ) { padding ->
         if (loading) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.char_loading), style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            LoadingState(Modifier.padding(padding))
         } else if (names.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(Space8)) {
-                    Icon(Lucide.FileJson, null, Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(stringResource(R.string.no_characters_title), style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(stringResource(R.string.no_characters_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            EmptyState(Lucide.FileJson, stringResource(R.string.no_characters_title),
+                stringResource(R.string.no_characters_desc), Modifier.padding(padding))
         } else {
             // 长按 grip 手柄拖动排序（与 API 配置页同款）；draggingName 标记正在拖动的卡
             val listState = rememberLazyListState()

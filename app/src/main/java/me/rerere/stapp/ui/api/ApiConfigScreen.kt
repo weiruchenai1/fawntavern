@@ -35,11 +35,12 @@ import me.rerere.stapp.data.api.ApiConfigStore
 import me.rerere.stapp.data.api.ApiProvider
 import me.rerere.stapp.data.api.ModelApi
 import kotlinx.coroutines.launch
-
-private val Space4 = 4.dp
-private val Space8 = 8.dp
-private val Space12 = 12.dp
-private val Space16 = 16.dp
+import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.ConfirmDeleteDialog
+import me.rerere.stapp.ui.components.Space4
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space12
+import me.rerere.stapp.ui.components.Space16
 
 val API_TYPES = listOf("openai" to "OpenAI", "google" to "Google", "claude" to "Claude")
 
@@ -94,21 +95,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-                    .statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Lucide.CircleChevronLeft, stringResource(R.string.back), Modifier.size(24.dp).clickable { onBack() },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(stringResource(R.string.api_config), style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.size(24.dp))
-            }
-        },
+        topBar = { AppTopBar(stringResource(R.string.api_config), onBack) },
         floatingActionButton = {
             FloatingActionButton(onClick = { adding = true }) {
                 Icon(Lucide.Plus, stringResource(R.string.add_provider), Modifier.size(24.dp))
@@ -439,16 +426,11 @@ private fun ProviderConfigTab(
         }
 
         if (showDeleteConfirm) {
-            AlertDialog(
-                onDismissRequest = { showDeleteConfirm = false },
-                title = { Text(stringResource(R.string.delete_provider_title)) },
-                text = { Text(stringResource(R.string.delete_provider_msg_fmt, currentProv.name)) },
-                confirmButton = {
-                    TextButton(onClick = { showDeleteConfirm = false; onDelete() }) {
-                        Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
-                    }
-                },
-                dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.cancel)) } }
+            ConfirmDeleteDialog(
+                title = stringResource(R.string.delete_provider_title),
+                text = stringResource(R.string.delete_provider_msg_fmt, currentProv.name),
+                onConfirm = { showDeleteConfirm = false; onDelete() },
+                onDismiss = { showDeleteConfirm = false },
             )
         }
 

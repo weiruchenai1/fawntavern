@@ -5,7 +5,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,12 +42,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ArrowDownToLine
 import com.composables.icons.lucide.ArrowUpToLine
 import com.composables.icons.lucide.SquareLibrary
-import com.composables.icons.lucide.CircleChevronLeft
 import com.composables.icons.lucide.Database
 import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.Lucide
@@ -68,14 +64,14 @@ import me.rerere.stapp.data.character.CharacterRepository
 import me.rerere.stapp.data.chat.ChatRepository
 import me.rerere.stapp.data.preset.PresetRepository
 import me.rerere.stapp.data.worldbook.WorldBookRepository
+import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.Space4
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space12
+import me.rerere.stapp.ui.components.Space16
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-
-private val Space4 = 4.dp
-private val Space8 = 8.dp
-private val Space12 = 12.dp
-private val Space16 = 16.dp
 
 @Composable
 private fun DataCategory.label(): String = stringResource(labelResId)
@@ -324,22 +320,7 @@ fun DataManagementScreen(onBack: () -> Unit) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Box(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-                    .statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Icon(
-                    Lucide.CircleChevronLeft, stringResource(R.string.back), Modifier.size(24.dp).clickable { onBack() },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    stringResource(R.string.data_management), style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
-                )
-            }
-        }
+        topBar = { AppTopBar(stringResource(R.string.data_management), onBack) }
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())

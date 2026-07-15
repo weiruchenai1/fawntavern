@@ -64,11 +64,10 @@ import me.rerere.stapp.data.chat.ChatSession
 import me.rerere.stapp.data.settings.UserProfileStore
 import java.io.File
 import java.io.FileOutputStream
-
-private val Space4 = 4.dp
-private val Space8 = 8.dp
-private val Space12 = 12.dp
-private val Space16 = 16.dp
+import me.rerere.stapp.ui.components.Space4
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space12
+import me.rerere.stapp.ui.components.Space16
 
 /** 根据当前小时返回对应的问候语字符串资源 ID */
 private fun greetingResId(): Int {

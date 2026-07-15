@@ -77,9 +77,8 @@ import me.rerere.stapp.ui.settings.FontSizeScreen
 import me.rerere.stapp.ui.settings.SettingsScreen
 import me.rerere.stapp.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.stapp.ui.worldbook.WorldBookListScreen
-
-private val Space8 = 8.dp
-private val Space16 = 16.dp
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space16
 
 /** 聊天之上的全屏页面，以返回栈方式叠放（栈顶显示，返回键弹出） */
 private enum class Screen {

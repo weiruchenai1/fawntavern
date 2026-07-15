@@ -51,9 +51,8 @@ import me.rerere.stapp.data.chat.ChatMessage
 import me.rerere.stapp.data.chat.MsgFile
 import me.rerere.stapp.data.character.CharRegex
 import me.rerere.stapp.ui.api.ProviderIcon
-
-private val Space8 = 8.dp
-private val Space12 = 12.dp
+import me.rerere.stapp.ui.components.Space8
+import me.rerere.stapp.ui.components.Space12
 
 /** 把内容的最大宽度限制为父约束的 [fraction]（用户气泡不超过行宽的 ~80%） */
 private fun Modifier.maxWidthFraction(fraction: Float): Modifier = layout { measurable, constraints ->
