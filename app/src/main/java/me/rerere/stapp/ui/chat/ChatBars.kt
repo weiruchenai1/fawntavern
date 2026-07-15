@@ -51,7 +51,6 @@ import com.composables.icons.lucide.MessageCirclePlus
 import com.composables.icons.lucide.Package
 import com.composables.icons.lucide.Paperclip
 import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.X
 import me.rerere.stapp.R
@@ -193,7 +192,6 @@ internal fun ChatBottomArea(
                                 Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    Icon(Lucide.Search, "Search", Modifier.padding(vertical = Space12, horizontal = Space8).size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Space8), verticalAlignment = Alignment.CenterVertically) {
                     Icon(

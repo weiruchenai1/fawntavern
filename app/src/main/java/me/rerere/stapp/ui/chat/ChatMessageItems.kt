@@ -40,7 +40,6 @@ import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.EllipsisVertical
-import com.composables.icons.lucide.Languages
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Paperclip
 import com.composables.icons.lucide.RotateCcw
@@ -251,10 +250,6 @@ internal fun AIMsg(
                     Icon(Lucide.RotateCcw, stringResource(R.string.regenerate),
                         Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onRegenerate() }
                             .padding(horizontal = s8, vertical = s8).size(iconSz),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    // 翻译功能未接线，先占位插槽
-                    Icon(Lucide.Languages, stringResource(R.string.translate),
-                        Modifier.padding(horizontal = s8, vertical = s8).size(iconSz),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Icon(Lucide.EllipsisVertical, stringResource(R.string.more),
                         Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onMore() }
