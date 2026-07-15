@@ -38,7 +38,7 @@ ST App — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3）�
 
 **SillyTavern 兼容性**是数据层的核心：`CharacterRepository.import` 可以从纯 JSON 文件、或从 PNG 的 `tEXt`/`zTXt` 块（关键字为 `chara`/`ccv3`，base64/zlib 编码）中提取角色 JSON，并自动将内嵌的 `character_book` 提取为独立的世界书文件。导入/导出格式需保持与 SillyTavern 兼容。正则脚本有两个来源：角色卡内嵌（`extensions.regex_scripts` → `CharacterCard.regexScripts`）与独立导入（`regex/` 目录，`RegexScript.toCharRegex()` 转成统一类型），统一由 `data/character/RegexEngine` 套用（对齐 ST 的 JS `/pattern/flags` 字面量与 `$1`/`{{match}}` 替换语法）——**显示侧** `applyForDisplay`（`ChatMessageContent` 按消息深度用 `depthKey` 做 remember 缓存，避免新消息到达时重算旧消息）与**发送侧** `applyForPrompt`（`PromptBuilder.assemble` 构建请求时逐条历史套用）互补：`promptOnly` 只在发送侧生效、`markdownOnly` 只在显示侧生效、两个标志都为 false 的两侧都生效。
 
-**尚未接线的功能**：消息操作栏的翻译按钮只是占位；世界书激活已对齐 ST 的单轮扫描（constant、正则/普通关键词、次级关键词 selectiveLogic、probability 掷骰、条目级 scanDepth/caseSensitive/matchWholeWords 覆盖，默认扫描深度同 ST 为 2 条消息），但**递归激活、minActivations、token 预算、inclusion group、sticky/cooldown 时效**未实现；预设的 `personaDescription` marker 无内容可填（应用没有 persona 描述字段）；`ChatRepository.messagesPaged`（Paging 3）未接入 UI。
+**尚未接线的功能**：消息操作栏的翻译按钮只是占位；世界书激活已对齐 ST 的单轮扫描（constant、正则/普通关键词、次级关键词 selectiveLogic、probability 掷骰、条目级 scanDepth/caseSensitive/matchWholeWords 覆盖，默认扫描深度同 ST 为 2 条消息），但**递归激活、minActivations、token 预算、inclusion group、sticky/cooldown 时效**未实现；`ChatRepository.messagesPaged`（Paging 3）未接入 UI。
 
 ## 约定
 

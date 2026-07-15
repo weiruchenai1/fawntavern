@@ -51,6 +51,7 @@ internal object PromptBuilder {
     fun build(
         card: CharacterCard?,
         userName: String,
+        userDescription: String = "",
         worldBooks: List<WorldBook> = emptyList(),
         preset: StPreset? = null,
         history: List<ChatMessage> = emptyList(),
@@ -67,7 +68,7 @@ internal object PromptBuilder {
             ?.let { po -> po.firstOrNull { it.characterId == 100001 } ?: po.firstOrNull() }
             ?.order
         val assembled = if (preset != null && !orderToggles.isNullOrEmpty()) {
-            buildWithPreset(preset, orderToggles, card, wiBefore, wiAfter)
+            buildWithPreset(preset, orderToggles, card, wiBefore, wiAfter, userDescription)
         } else {
             buildDefault(card, wiBefore, wiAfter)
         }
@@ -174,6 +175,7 @@ internal object PromptBuilder {
         card: CharacterCard?,
         wiBefore: List<String>,
         wiAfter: List<String>,
+        userDescription: String = "",
     ): Assembled {
         val prompts = preset.prompts.associateBy { it.identifier }
         val pre = mutableListOf<Piece>()
@@ -193,7 +195,8 @@ internal object PromptBuilder {
                     "dialogueExamples" -> card?.mesExample?.takeIf { it.isNotBlank() }?.let { target += Piece("system", it) }
                     "worldInfoBefore" -> wiBefore.forEach { target += Piece("system", it) }
                     "worldInfoAfter" -> wiAfter.forEach { target += Piece("system", it) }
-                    // personaDescription：应用暂无 persona 描述，跳过；未知 marker 一并跳过
+                    "personaDescription" -> userDescription.takeIf { it.isNotBlank() }?.let { target += Piece("system", it) }
+                    // 未知 marker 跳过
                 }
                 continue
             }

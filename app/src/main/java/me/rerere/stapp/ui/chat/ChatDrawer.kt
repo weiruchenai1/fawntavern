@@ -101,6 +101,7 @@ fun ChatDrawerContent(
     val scope = rememberCoroutineScope()
 
     var userName by remember { mutableStateOf(UserProfileStore.getName(context)) }
+    var personaDescription by remember { mutableStateOf(UserProfileStore.getDescription(context)) }
     var avatarColor by remember {
         mutableStateOf(Color(UserProfileStore.getAvatarColor(context).toULong()))
     }
@@ -195,17 +196,31 @@ fun ChatDrawerContent(
 
     if (showNameDialog) {
         var editName by remember { mutableStateOf(userName) }
+        var editDesc by remember { mutableStateOf(personaDescription) }
         AlertDialog(
             onDismissRequest = { showNameDialog = false },
             title = { Text(stringResource(R.string.edit_username)) },
             text = {
-                OutlinedTextField(
-                    value = editName,
-                    onValueChange = { editName = it },
-                    label = { Text(stringResource(R.string.edit_username)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column(
+                    Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(Space12),
+                ) {
+                    OutlinedTextField(
+                        value = editName,
+                        onValueChange = { editName = it },
+                        label = { Text(stringResource(R.string.edit_username)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = editDesc,
+                        onValueChange = { editDesc = it },
+                        label = { Text(stringResource(R.string.persona_description_label)) },
+                        minLines = 3,
+                        maxLines = 8,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -214,6 +229,8 @@ fun ChatDrawerContent(
                         userName = trimmed
                         UserProfileStore.setName(context, trimmed)
                     }
+                    personaDescription = editDesc.trim()
+                    UserProfileStore.setDescription(context, personaDescription)
                     showNameDialog = false
                 }) { Text(stringResource(R.string.confirm)) }
             },

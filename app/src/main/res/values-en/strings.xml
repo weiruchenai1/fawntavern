@@ -47,6 +47,7 @@
     <string name="character_avatar">Character avatar</string>
     <string name="edit_avatar">Change Avatar</string>
     <string name="edit_username">Change Username</string>
+    <string name="persona_description_label">Persona Description</string>
     <string name="pick_from_gallery">Pick from Gallery</string>
     <string name="remove_avatar">Remove Custom Avatar</string>
     <string name="or_pick_color">Or pick a color</string>

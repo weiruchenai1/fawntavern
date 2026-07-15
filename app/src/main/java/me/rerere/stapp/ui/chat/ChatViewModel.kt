@@ -303,6 +303,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val built = PromptBuilder.build(
                 card = currentCard,
                 userName = userName,
+                userDescription = UserProfileStore.getDescription(ctx),
                 worldBooks = activeWorldBooks,
                 preset = activePreset,
                 history = base.messages,

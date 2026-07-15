@@ -47,6 +47,7 @@
     <string name="character_avatar">角色头像</string>
     <string name="edit_avatar">修改头像</string>
     <string name="edit_username">修改用户名</string>
+    <string name="persona_description_label">人设描述</string>
     <string name="pick_from_gallery">从相册选择图片</string>
     <string name="remove_avatar">移除自定义头像</string>
     <string name="or_pick_color">或选择颜色</string>

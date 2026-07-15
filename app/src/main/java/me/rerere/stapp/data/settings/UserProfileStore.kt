@@ -9,6 +9,7 @@ object UserProfileStore {
     private const val KEY_NAME = "name"
     private const val KEY_AVATAR_COLOR = "avatar_color"
     private const val KEY_AVATAR_PATH = "avatar_path"
+    private const val KEY_DESCRIPTION = "description"
 
     private val DEFAULT_AVATAR_COLOR = Color(0xFF34A853)
 
@@ -37,5 +38,14 @@ object UserProfileStore {
     fun setAvatarPath(context: Context, path: String?) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_AVATAR_PATH, path).apply()
+    }
+
+    fun getDescription(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_DESCRIPTION, null) ?: ""
+
+    fun setDescription(context: Context, description: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_DESCRIPTION, description.trim()).apply()
     }
 }
