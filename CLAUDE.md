@@ -42,7 +42,7 @@ ST App — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3）�
 
 ## 约定
 
-- **公共 UI 组件**：`ui/components/` 存放跨页面复用的 composable —— `AppTopBar`（返回键 + 居中标题页头）、`ConfirmDeleteDialog`/`RenameDialog`、`LoadingState`/`EmptyState`（列表页加载/空态）、`ImportableListScreen`（可导入条目的通用列表页，预设/世界书列表即其薄壳；角色列表因拖拽排序/导出菜单差异未套用）、`Spacing.kt`（`Space4/8/12/16` 间距常量）。新页面一律复用这些组件，不要在页面文件里重新手写同款页头/对话框/间距常量。
+- **公共 UI 组件**：`ui/components/` 存放跨页面复用的 composable —— `AppTopBar`（返回键 + 居中标题页头）、`ConfirmDeleteDialog`/`RenameDialog`、`LoadingState`/`EmptyState`（列表页加载/空态）、`ImportableListScreen`（可导入条目的通用列表页，预设/世界书列表即其薄壳；角色列表因拖拽排序/导出菜单差异未套用）、`rememberReorderableList`（长按拖拽排序状态，封装 sh.calvin.reorderable，按 key 反查下标换位以避开头部项下标错位）、`Spacing.kt`（`Space4/8/12/16` 间距常量）。新页面一律复用这些组件，不要在页面文件里重新手写同款页头/对话框/间距常量。
 - **国际化**：默认字符串（`values/strings.xml`）为中文；英文在 `values-en/strings.xml`。每个面向用户的字符串都必须同时添加到两处。应用内语言切换由 `data/settings/LanguageStore` + `MainActivity` 中的 `AppCompatDelegate` 处理（切换语言会重启 Activity，并通过 `LanguageStore.consumePendingChange` 重新打开设置页）。
 - **图标**：使用 Lucide 图标（`com.composables.icons.lucide`），不要使用 Material 图标 — UI 遵循基于 Lucide 的 Figma 设计稿。
 - **Markdown**：消息正文用 mikepenz `multiplatform-markdown-renderer-m3`（纯 Compose）渲染。

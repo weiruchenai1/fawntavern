@@ -3,12 +3,9 @@ package me.rerere.stapp.ui.api
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -17,25 +14,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.isSystemInDarkTheme
 import me.rerere.stapp.R
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import com.composables.icons.lucide.*
 import me.rerere.stapp.data.api.ApiConfigStore
 import me.rerere.stapp.data.api.ApiProvider
 import me.rerere.stapp.data.api.ModelApi
 import kotlinx.coroutines.launch
 import me.rerere.stapp.ui.components.AppTopBar
+import sh.calvin.reorderable.ReorderableItem
+import me.rerere.stapp.ui.components.rememberReorderableList
 import me.rerere.stapp.ui.components.ConfirmDeleteDialog
 import me.rerere.stapp.ui.components.Space4
 import me.rerere.stapp.ui.components.Space8
@@ -107,64 +104,28 @@ fun ApiConfigScreen(onBack: () -> Unit) {
                 Text(stringResource(R.string.no_api_providers), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            // 长按 grip 手柄拖动排序；draggingId 标记正在拖动的提供商
-            val listState = rememberLazyListState()
-            var draggingId by remember { mutableStateOf<String?>(null) }
-            var dragOffset by remember { mutableFloatStateOf(0f) }
-            var pointerY by remember { mutableFloatStateOf(0f) }
-
-            fun listIndexOf(id: String) = config.providers.indexOfFirst { it.id == id }.let { if (it < 0) -1 else it + 1 }
+            // 长按 grip 手柄拖动排序，靠近边缘自动滚动（sh.calvin.reorderable）
+            val (listState, reorderState) = rememberReorderableList(
+                items = config.providers,
+                keyOf = { it.id },
+            ) { list ->
+                config = config.copy(providers = list)
+                save()
+            }
 
             LazyColumn(
-                Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+                Modifier.fillMaxSize().padding(padding),
                 state = listState,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(Space12),
             ) {
-                item { Spacer(Modifier.height(4.dp)) }
-                itemsIndexed(config.providers, key = { _, p -> p.id }) { idx, prov ->
-                    val dragging = draggingId == prov.id
-                    Box(
-                        Modifier
-                            .then(if (dragging) Modifier else Modifier.animateItem())
-                            .zIndex(if (dragging) 1f else 0f)
-                            .graphicsLayer {
-                                translationY = if (dragging) dragOffset else 0f
-                                if (dragging) { scaleX = 0.95f; scaleY = 0.95f }
-                            }
-                    ) {
+                itemsIndexed(config.providers, key = { _, p -> p.id }) { _, prov ->
+                    ReorderableItem(reorderState, key = prov.id) { dragging ->
                         ProviderCard(
                             prov = prov,
                             onClick = { editingId = prov.id },
-                            onDragStart = {
-                                val li = idx + 1
-                                val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == li }
-                                pointerY = if (item != null) item.offset + item.size / 2f else 0f
-                                draggingId = prov.id
-                                dragOffset = 0f
-                            },
-                            onDrag = { dy ->
-                                val id = draggingId ?: return@ProviderCard
-                                pointerY += dy
-                                dragOffset += dy
-                                val li = listIndexOf(id)
-                                val info = listState.layoutInfo.visibleItemsInfo
-                                val cur = info.firstOrNull { it.index == li }
-                                val hovered = info.firstOrNull {
-                                    it.index != li && it.index in 1..config.providers.size &&
-                                        pointerY >= it.offset && pointerY <= it.offset + it.size
-                                }
-                                if (cur != null && hovered != null) {
-                                    val from = li - 1
-                                    val to = hovered.index - 1
-                                    config = config.copy(providers = config.providers.toMutableList()
-                                        .also { it.add(to, it.removeAt(from)) })
-                                    dragOffset -= (hovered.offset - cur.offset)
-                                }
-                            },
-                            onDragEnd = {
-                                if (draggingId != null) save()
-                                draggingId = null; dragOffset = 0f
-                            },
+                            dragging = dragging,
+                            handleModifier = Modifier.longPressDraggableHandle(),
                         )
                     }
                 }
@@ -179,12 +140,12 @@ fun ApiConfigScreen(onBack: () -> Unit) {
 private fun ProviderCard(
     prov: ApiProvider,
     onClick: () -> Unit,
-    onDragStart: () -> Unit = {},
-    onDrag: (Float) -> Unit = {},
-    onDragEnd: () -> Unit = {},
+    dragging: Boolean = false,
+    handleModifier: Modifier = Modifier,
 ) {
     Row(
         Modifier.fillMaxWidth()
+            .scale(if (dragging) 0.95f else 1f)
             .clip(RoundedCornerShape(16.dp))
             .background(if (prov.enabled) MaterialTheme.colorScheme.surfaceContainer
                         else MaterialTheme.colorScheme.errorContainer)
@@ -217,14 +178,7 @@ private fun ProviderCard(
         // 拖动手柄：长按后上下拖拽排序
         Icon(
             Lucide.GripVertical, stringResource(R.string.reorder),
-            Modifier.size(24.dp).pointerInput(Unit) {
-                detectDragGesturesAfterLongPress(
-                    onDragStart = { onDragStart() },
-                    onDrag = { change, amount -> change.consume(); onDrag(amount.y) },
-                    onDragEnd = { onDragEnd() },
-                    onDragCancel = { onDragEnd() },
-                )
-            },
+            Modifier.size(24.dp).then(handleModifier),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
