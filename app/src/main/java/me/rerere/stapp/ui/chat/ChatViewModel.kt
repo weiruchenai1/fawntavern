@@ -53,6 +53,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 当前角色卡的图片（无图为 null，UI 回退到占位图标） */
     var charImageBitmap by mutableStateOf<Bitmap?>(null); private set
     var generating by mutableStateOf(false); private set
+    /** 当前/最近一次生成的目标消息下标（重答非末条消息时指向中间的消息），-1 = 尚未生成过 */
+    var generatingIdx by mutableStateOf(-1); private set
     var userName by mutableStateOf(UserProfileStore.getName(app)); private set
     var userAvatarBitmap by mutableStateOf<Bitmap?>(null); private set
     // 当前角色关联的世界书/预设（随角色卡切换加载，生成时进入 Prompt 拼装）
@@ -268,16 +270,14 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         generation.stop()
     }
 
-    /** AI 消息重答：保留旧版本，新回复作为新版本（可左右切换）；其后的消息收纳进旧版本的分支下文 */
+    /** AI 消息重答：保留旧版本，新回复作为新版本（可左右切换）；其后的消息保留，由所有版本共享 */
     fun regenerateAi(idx: Int): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
         val s = session ?: return SendOutcome.SKIPPED
         if (s.messages.getOrNull(idx)?.role != "assistant") return SendOutcome.SKIPPED
         if (s.messages.take(idx).none { it.role == "user" }) return SendOutcome.SKIPPED  // 开场白不可重答
         val (prov, modelId) = currentProviderAndModel() ?: return SendOutcome.NO_MODEL
-        val base = ConversationOps.truncateForRegenerate(s, idx)
-        session = base
-        startGenerate(base, prov, modelId, variantOfLast = true)
+        startGenerate(s, prov, modelId, regenIdx = idx)
         return SendOutcome.STARTED
     }
 
@@ -297,16 +297,18 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return SendOutcome.STARTED
     }
 
-    private fun startGenerate(base: ChatSession, prov: ApiProvider, modelId: String, variantOfLast: Boolean = false) {
+    private fun startGenerate(base: ChatSession, prov: ApiProvider, modelId: String, regenIdx: Int? = null) {
         viewModelScope.launch {
             generating = true
+            generatingIdx = regenIdx ?: base.messages.size
             val built = PromptBuilder.build(
                 card = currentCard,
                 userName = userName,
                 userDescription = UserProfileStore.getDescription(ctx),
                 worldBooks = activeWorldBooks,
                 preset = activePreset,
-                history = base.messages,
+                // 重答中间消息时世界书扫描只看该消息及之前的历史，与旧行为（截断后扫描）一致
+                history = if (regenIdx != null) base.messages.subList(0, regenIdx + 1) else base.messages,
                 promptRegex = (currentCard?.regexScripts ?: emptyList()) + globalRegex,
             )
             val final = generation.run(
@@ -316,7 +318,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 built = built,
                 filesDir = ctx.filesDir,
                 streaming = currentCard?.streaming ?: true,
-                variantOfLast = variantOfLast,
+                regenIdx = regenIdx,
                 errorText = { e -> ctx.getString(R.string.chat_error_fmt, e.message ?: "") },
                 onUpdate = { session = it },
             )
@@ -336,7 +338,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    /** 删除消息：多分支时只删当前显示的分支，单分支删除整条 */
+    /** 删除消息：多版本时只删当前显示的版本（下文不受影响），单版本删除整条 */
     fun deleteMessage(idx: Int) {
         if (generating) return
         val s = session ?: return

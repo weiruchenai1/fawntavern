@@ -8,10 +8,9 @@ import me.rerere.stapp.data.api.ApiProvider
 import me.rerere.stapp.data.api.ChatApi
 import me.rerere.stapp.data.chat.ChatSession
 import me.rerere.stapp.data.chat.ChatMessage
-import me.rerere.stapp.data.chat.MsgAlt
 
 /**
- * 一次流式生成的执行器：在 base 会话上追加（或在末条 assistant 上开新版本）AI 回复，
+ * 一次流式生成的执行器：在 base 会话上追加（或在 regenIdx 指定的 assistant 消息上开新版本）AI 回复，
  * 流式期间以约 60ms 一帧的节流频率通过 onUpdate 发布中间会话，返回最终会话。
  * 不做 IO 落盘、不持有 UI 状态 —— 调用方负责保存与 generating 标志。
  */
@@ -31,23 +30,14 @@ internal class GenerationController {
         built: PromptBuilder.Built,
         filesDir: java.io.File?,
         streaming: Boolean,
-        variantOfLast: Boolean,
+        regenIdx: Int?,
         errorText: (Exception) -> String,
         onUpdate: (ChatSession) -> Unit,
     ): ChatSession = coroutineScope {
         stopFlag.set(false)
-        // variantOfLast: 在最后一条 assistant 消息上新增一个版本；否则追加新消息
-        var cur = if (variantOfLast) {
-            val list = base.messages.toMutableList()
-            val last = list.last()
-            val alts = last.alts.ifEmpty {
-                listOf(MsgAlt(last.content, last.reasoning, last.model, last.reasoningMs))
-            } + MsgAlt(model = modelId)
-            list[list.lastIndex] = last.copy(
-                content = "", reasoning = "", model = modelId, reasoningMs = 0,
-                alts = alts, altIdx = alts.lastIndex,
-            )
-            base.copy(messages = list, updatedAt = System.currentTimeMillis())
+        // regenIdx != null：在该下标的 assistant 消息上开新版本重答（其后的消息保留）；否则追加新消息
+        var cur = if (regenIdx != null) {
+            ConversationOps.startVariant(base, regenIdx, modelId)
         } else {
             base.copy(
                 messages = base.messages + ChatMessage(
@@ -55,7 +45,7 @@ internal class GenerationController {
                 updatedAt = System.currentTimeMillis(),
             )
         }
-        val idx = cur.messages.lastIndex
+        val idx = regenIdx ?: cur.messages.lastIndex
         onUpdate(cur)
         var reasoningStart = 0L
         var reasoningEnd = 0L  // 正文首个 token 到达时定格思考耗时，避免"思考了 xx 秒"在正文输出期间持续增长
@@ -114,7 +104,6 @@ internal class GenerationController {
             val m = list[idx]
             if (m.alts.isNotEmpty()) {
                 val alts = m.alts.toMutableList()
-                // copy 而非重建：保留该版本可能携带的分支下文 tail
                 alts[m.altIdx] = alts[m.altIdx].copy(
                     content = m.content, reasoning = m.reasoning,
                     model = m.model, reasoningMs = m.reasoningMs)

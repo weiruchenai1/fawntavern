@@ -116,10 +116,11 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
         Toast.makeText(ctx, ctx.getString(R.string.copied), Toast.LENGTH_SHORT).show()
     }
 
-    // 发送/重答的统一善后：成功则钉到底部；未选模型则提示并打开模型选择面板
-    fun handleOutcome(outcome: ChatViewModel.SendOutcome) {
+    // 发送/重答的统一善后：成功则钉到底部（重答中间消息时不滚动，原地生成）；
+    // 未选模型则提示并打开模型选择面板
+    fun handleOutcome(outcome: ChatViewModel.SendOutcome, scroll: Boolean = true) {
         when (outcome) {
-            ChatViewModel.SendOutcome.STARTED -> scrollToBottomTrigger++
+            ChatViewModel.SendOutcome.STARTED -> if (scroll) scrollToBottomTrigger++
             ChatViewModel.SendOutcome.NO_MODEL -> {
                 Toast.makeText(ctx, ctx.getString(R.string.select_model_first), Toast.LENGTH_SHORT).show()
                 showModelPicker = true
@@ -303,8 +304,9 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                 val msgs = vm.session?.messages ?: emptyList()
                 val listState = rememberLazyListState()
                 val followScope = rememberCoroutineScope()
-                // 长生命周期跟随协程读取的最新值（协程不随这些值重启）
-                val generatingNow by rememberUpdatedState(vm.generating)
+                // 长生命周期跟随协程读取的最新值（协程不随这些值重启）。
+                // 只有生成目标是末条消息时才自动跟随钉底；重答中间消息时原地生成，视口不动
+                val generatingAtEndNow by rememberUpdatedState(vm.generating && vm.generatingIdx == msgs.lastIndex)
                 val lastUserIdxNow by rememberUpdatedState(msgs.indexOfLast { it.role == "user" })
                 // 末条消息正文是否还是空的 = 纯思考阶段（思考内容默认折叠，屏上没有可读的正文）
                 val lastMsgContentBlankNow by rememberUpdatedState(msgs.lastOrNull()?.content.isNullOrBlank())
@@ -353,7 +355,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                 LaunchedEffect(listState) {
                     snapshotFlow { listState.layoutInfo.visibleItemsInfo }.collect {
                         // 手势永远优先：拖拽/惯性滚动期间绝不钉底
-                        if (!generatingNow || !autoFollow || listState.isScrollInProgress) return@collect
+                        if (!generatingAtEndNow || !autoFollow || listState.isScrollInProgress) return@collect
                         // 停跟的意义是"从头阅读正在输出的正文"。思考阶段（正文为空）没有可读内容，
                         // 不允许停跟——否则发送时键盘还开着、视口被压小，提问顶部很容易越过小视口
                         // 顶线而误触发停跟，之后思考行/正文出现就再也没人钉底了。
@@ -400,7 +402,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                     (listState.firstVisibleItemIndex == dragStartIdx &&
                                         listState.firstVisibleItemScrollOffset > dragStartOff)
                                 if (scrolledDown && isAtBottom()) {
-                                    if (generatingNow) { autoFollow = true; userRequestedFollow = true }
+                                    if (generatingAtEndNow) { autoFollow = true; userRequestedFollow = true }
                                 } else {
                                     autoFollow = false
                                     userRequestedFollow = false
@@ -420,7 +422,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                         // dragging 需与 isScrollInProgress 同真才让位：零位移拖拽不经历
                         // isScrollInProgress 翻转，settle 收集器不清除，悬挂的 dragging
                         // 会让这里静默不钉（表现为切分支后落点随机）
-                        if ((dragging && listState.isScrollInProgress) || (generatingNow && !autoFollow)) return
+                        if ((dragging && listState.isScrollInProgress) || (generatingAtEndNow && !autoFollow)) return
                         val info = listState.layoutInfo
                         val last = info.visibleItemsInfo.lastOrNull()
                         val atBottomNow = last != null && last.index == info.totalItemsCount - 1 &&
@@ -448,9 +450,10 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     autoFollow = true; userRequestedFollow = false
                     if (msgs.isNotEmpty()) pinToBottom()
                 }
-                // 生成结束：仍在跟随则钉住底部（正文切 Markdown、工具栏出现会改高度）
+                // 生成结束：仍在跟随且生成目标是末条消息则钉住底部（正文切 Markdown、工具栏出现会改高度）
                 LaunchedEffect(vm.generating) {
-                    if (!vm.generating && msgs.isNotEmpty() && autoFollow) pinToBottom()
+                    if (!vm.generating && msgs.isNotEmpty() && autoFollow &&
+                        vm.generatingIdx == msgs.lastIndex) pinToBottom()
                 }
                 // 键盘弹出只在贴底时跟随上移；在上方读历史时视口保持不动
                 ImeLazyListAutoScroller(lazyListState = listState, shouldFollow = ::isAtBottom)
@@ -488,7 +491,11 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                         images = msg.images,
                                         files = msg.files,
                                         onCopy = { copyText(msg.content) },
-                                        onRegenerate = { handleOutcome(vm.regenerateAfterUser(i)) },
+                                        onRegenerate = {
+                                            // 其后紧跟的 AI 回复在中间时原地重答，不滚到底部
+                                            val midRegen = i + 1 < msgs.lastIndex && msgs[i + 1].role == "assistant"
+                                            handleOutcome(vm.regenerateAfterUser(i), scroll = !midRegen)
+                                        },
                                         onMore = { menuTargetIdx = i },
                                         scale = fontScale,
                                         avatarBitmap = vm.userAvatarBitmap,
@@ -530,9 +537,9 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                     }
                                     AIMsg(
                                         msg = msg,
-                                        isStreaming = vm.generating && i == msgs.lastIndex,
+                                        isStreaming = vm.generating && i == vm.generatingIdx,
                                         onCopy = { copyText(msg.content) },
-                                        onRegenerate = { handleOutcome(vm.regenerateAi(i)) },
+                                        onRegenerate = { handleOutcome(vm.regenerateAi(i), scroll = i == msgs.lastIndex) },
                                         onMore = { menuTargetIdx = i },
                                         onPrevAlt = { switchAltAnchored(-1) },
                                         onNextAlt = { switchAltAnchored(+1) },
@@ -562,9 +569,9 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                                 .clickable {
-                                    // 点击向下按钮：钉到底部（按钮随贴底自动消失）；生成中则恢复持续跟随
+                                    // 点击向下按钮：钉到底部（按钮随贴底自动消失）；末条生成中则恢复持续跟随
                                     followScope.launch { pinToBottom() }
-                                    if (vm.generating) { autoFollow = true; userRequestedFollow = true }
+                                    if (generatingAtEndNow) { autoFollow = true; userRequestedFollow = true }
                                 },
                             contentAlignment = Alignment.Center,
                         ) {

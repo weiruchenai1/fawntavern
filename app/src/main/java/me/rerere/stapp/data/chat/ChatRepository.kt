@@ -15,9 +15,7 @@ import kotlinx.serialization.json.Json
 /** 聊天会话存储：Room 数据库（sessions + messages 两张表），写入后 Flow 自动重发 */
 object ChatRepository {
 
-    // encodeDefaults：alts 里嵌套的 ChatMessage.ts 默认值是 System.currentTimeMillis()，
-    // 不强制编码时若恰逢同毫秒会被当作默认值省略，读回来 ts 就变了（ts 是消息主键/列表 key）
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val json = Json { ignoreUnknownKeys = true }
 
     private fun dao(context: Context): ChatDao = ChatDatabase.get(context).dao()
 

@@ -3,10 +3,9 @@ package me.rerere.stapp.data.chat
 import kotlinx.serialization.Serializable
 
 /**
- * 消息的一个版本（重新生成的历史版本 / 备选开场白），同时是分支点：
- * [tail] 持有该版本名下的分支下文（本消息之后的整条时间线），切换版本时随之换入换出。
- * 不变式：当前显示版本（alts[altIdx]）的 tail 恒为空 —— 它的下文就是会话
- * messages 里本消息之后的部分；只有非当前版本才在 tail 里保存自己的下文。
+ * 消息的一个版本（重新生成的历史版本 / 备选开场白）。
+ * 版本只是同一位置消息的不同内容：切换版本仅改变 ChatMessage.altIdx 与镜像字段，
+ * 本消息之后的时间线由所有版本共享，不随版本切换变化。
  */
 @Serializable
 data class MsgAlt(
@@ -14,7 +13,6 @@ data class MsgAlt(
     val reasoning: String = "",
     val model: String = "",
     val reasoningMs: Long = 0,
-    val tail: List<ChatMessage> = emptyList(),
 )
 
 /** 非图片附件：name 为原始文件名（显示用），path 为 filesDir 相对路径 */

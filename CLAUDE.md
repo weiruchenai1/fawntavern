@@ -25,7 +25,7 @@ ST App — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3）�
 
 **聊天状态在 `ui/chat/ChatViewModel.kt`**（唯一的 ViewModel，`AndroidViewModel` + Compose `mutableStateOf` 状态），它只持有状态、调度协程和落盘；业务逻辑在 `domain/` 层（均为无 Android UI 依赖的普通 Kotlin）：
 - `domain/PromptBuilder` — Prompt 拼装，两步走：`build`（角色卡 + 已加载的世界书/预设 → `Built`：历史前后的提示块、深度注入块、发送侧正则、采样参数；世界书条目按 constant/关键词扫描激活，预设按 `promptOrder` 编排、marker 映射角色卡字段，角色卡 `system_prompt`/`post_history_instructions` 优先于预设 main/jailbreak）；`assemble`（每次请求把 `Built` 与聊天历史合成完整 `ApiMessage` 数组：历史逐条套发送侧正则、文件附件内联为 `<file>` 文本块、图片读盘编码 base64、深度注入按位插入）。`{{char}}`/`{{user}}` 宏也在此替换。
-- `domain/ConversationOps` — 会话/消息的纯变换（新建会话含开场白、追加消息、alts 多版本切换/删除/编辑、`nextTs`）。输入旧会话返回新会话，不做 IO。**alts 即分支**：每个版本（`MsgAlt`）在 `tail` 里携带自己的下文时间线，切换/删除版本时整条下文换入换出；当前显示版本的 `tail` 恒为空（它的下文就在 `messages` 里）。重答非末条消息前由 `truncateForRegenerate` 把被截断的下文收纳进当前版本。
+- `domain/ConversationOps` — 会话/消息的纯变换（新建会话含开场白、追加消息、alts 多版本切换/删除/编辑、重答开新版本 `startVariant`、`nextTs`）。输入旧会话返回新会话，不做 IO。**alts 即同位置多版本**（对齐 RikkaHub 的 MessageNode/selectIndex 模型）：每条消息的多个版本（`MsgAlt`）只是不同的内容，`altIdx` 指向当前显示版本，`content` 等镜像字段始终同步 `alts[altIdx]`；本消息之后的时间线由所有版本共享，切换/删除版本、重答任意 assistant 消息（原位开新版本，下文保留）都不改动其后的消息。
 - `domain/GenerationController` — 流式生成执行器（含 60ms 节流刷新、停止标志；角色卡 `streaming = false` 时不起节流协程，结束时一次性刷新），通过 `onUpdate` 回调发布中间会话，返回最终会话。
 
 生成协程运行在 `viewModelScope`，Activity 重建（深色模式/语言切换）不中断。发送时用户消息立即落盘，生成结束后再存完整会话。注意：同一会话内消息 `ts` 必须严格递增（`ConversationOps.nextTs`），它是消息列表的 LazyColumn key。

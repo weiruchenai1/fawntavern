@@ -51,72 +51,60 @@ internal object ConversationOps {
         updatedAt = System.currentTimeMillis(),
     )
 
-    /** 左右切换消息版本 = 切换分支：本消息之后的时间线随版本一起换入换出；无实际切换返回 null */
+    /** 左右切换消息版本：只换本消息显示的内容（下文由所有版本共享，不随切换变化）；无实际切换返回 null */
     fun switchAlt(s: ChatSession, idx: Int, dir: Int): ChatSession? {
         val m = s.messages.getOrNull(idx) ?: return null
         if (m.alts.size < 2) return null
         val ni = (m.altIdx + dir).coerceIn(0, m.alts.lastIndex)
         if (ni == m.altIdx) return null
-        val target = m.alts[ni]
         val newAlts = m.alts.toMutableList()
-        // 换出：当前分支的下文存回当前版本（顺带同步镜像字段，编辑过的内容切走再切回不丢）
+        // 镜像字段先写回当前版本：编辑过的内容切走再切回不丢
         newAlts[m.altIdx] = newAlts[m.altIdx].copy(
-            content = m.content, reasoning = m.reasoning, model = m.model,
-            reasoningMs = m.reasoningMs, tail = s.messages.drop(idx + 1),
-        )
-        // 换入：目标版本的下文回到消息列表；其存储的 tail 清空（当前分支的下文以 messages 为准）
-        newAlts[ni] = target.copy(tail = emptyList())
-        val updated = m.copy(content = target.content, reasoning = target.reasoning,
+            content = m.content, reasoning = m.reasoning, model = m.model, reasoningMs = m.reasoningMs)
+        val target = newAlts[ni]
+        val list = s.messages.toMutableList()
+        list[idx] = m.copy(content = target.content, reasoning = target.reasoning,
             model = target.model, reasoningMs = target.reasoningMs, alts = newAlts, altIdx = ni)
-        return s.copy(
-            messages = s.messages.take(idx) + updated + target.tail,
-            updatedAt = System.currentTimeMillis(),
-        )
+        return s.copy(messages = list, updatedAt = System.currentTimeMillis())
     }
 
     /**
-     * 重答前的准备：截断 idx 之后的消息，并把它们作为当前版本的分支下文存进 alts[altIdx].tail
-     * （之后 GenerationController 以 variantOfLast 在该消息上开新版本；切换版本时下文随之恢复）。
+     * 重答准备：在 idx 消息上开一个空白新版本并切换过去（由 GenerationController 流式填充）。
+     * 下文保留在 messages 里，由所有版本共享 —— 重答非末条消息不再截断其后的时间线。
      */
-    fun truncateForRegenerate(s: ChatSession, idx: Int): ChatSession {
+    fun startVariant(s: ChatSession, idx: Int, modelId: String): ChatSession {
         val m = s.messages[idx]
-        // 单版本消息先物化为 alts，分支下文才有归属
-        val alts = m.alts.ifEmpty { listOf(MsgAlt(m.content, m.reasoning, m.model, m.reasoningMs)) }
+        // 单版本消息先物化为 alts；镜像字段写回当前版本，切回旧版本时内容不丢
+        val alts = m.alts.ifEmpty { listOf(MsgAlt()) }.toMutableList()
         val ai = m.altIdx.coerceIn(0, alts.lastIndex)
-        val newAlts = alts.toMutableList().also {
-            it[ai] = it[ai].copy(content = m.content, reasoning = m.reasoning, model = m.model,
-                reasoningMs = m.reasoningMs, tail = s.messages.drop(idx + 1))
-        }
-        return s.copy(
-            messages = s.messages.take(idx) + m.copy(alts = newAlts, altIdx = ai),
-            updatedAt = System.currentTimeMillis(),
-        )
+        alts[ai] = alts[ai].copy(content = m.content, reasoning = m.reasoning,
+            model = m.model, reasoningMs = m.reasoningMs)
+        alts += MsgAlt(model = modelId)
+        val list = s.messages.toMutableList()
+        list[idx] = m.copy(content = "", reasoning = "", model = modelId, reasoningMs = 0,
+            alts = alts, altIdx = alts.lastIndex)
+        return s.copy(messages = list, updatedAt = System.currentTimeMillis())
     }
 
-    /** 删除消息：多分支时删当前分支（含其下文），换入相邻分支及其下文；单分支删除整条消息 */
+    /** 删除消息：多版本时删当前版本、就近切换相邻版本（下文共享，不受影响）；单版本删除整条消息 */
     fun deleteMessage(s: ChatSession, idx: Int): ChatSession? {
         val m = s.messages.getOrNull(idx) ?: return null
-        return if (m.alts.size > 1) {
+        val list = s.messages.toMutableList()
+        if (m.alts.size > 1) {
             val newAlts = m.alts.toMutableList().also { it.removeAt(m.altIdx) }
             val newIdx = m.altIdx.coerceAtMost(newAlts.lastIndex)
             val cur = newAlts[newIdx]
             val single = newAlts.size == 1
-            newAlts[newIdx] = cur.copy(tail = emptyList())
-            val list = s.messages.take(idx).toMutableList()
-            list += m.copy(
+            list[idx] = m.copy(
                 content = cur.content, reasoning = cur.reasoning,
                 model = cur.model, reasoningMs = cur.reasoningMs,
                 alts = if (single) emptyList() else newAlts,
                 altIdx = if (single) 0 else newIdx,
             )
-            list += cur.tail
-            s.copy(messages = list, updatedAt = System.currentTimeMillis())
         } else {
-            s.copy(
-                messages = s.messages.toMutableList().also { it.removeAt(idx) },
-                updatedAt = System.currentTimeMillis(),
-            )
+            list.removeAt(idx)
         }
+        return s.copy(messages = list, updatedAt = System.currentTimeMillis())
     }
 
     fun editMessage(s: ChatSession, idx: Int, content: String): ChatSession? {
