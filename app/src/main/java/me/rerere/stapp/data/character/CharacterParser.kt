@@ -50,9 +50,17 @@ object CharacterParser {
                             comment = entry.optString("comment", "").trim(),
                             content = entry.optString("content", "").trim(),
                             enabled = entry.optBoolean("enabled", true),
-                            position = entry.optString("position", "after_char"),
+                            // 顶层 position 为数字才权威；粗粒度串/缺失时取 extensions.position（v3 详细枚举）
+                            position = me.rerere.stapp.data.worldbook.WorldBookPos.normalize(run {
+                                val top = entry.opt("position")
+                                if (top is Number || (top is String && top.toIntOrNull() != null)) top
+                                else ext?.opt("position")?.takeIf { it != org.json.JSONObject.NULL } ?: top
+                            }),
                             insertionOrder = entry.optInt("insertion_order", 100),
                             constant = entry.optBoolean("constant", false),
+                            vectorized = entry.optBoolean("vectorized", ext?.optBoolean("vectorized", false) ?: false),
+                            depth = ext?.optInt("depth", 4) ?: 4,
+                            role = (ext?.optInt("role", 0) ?: 0).coerceIn(0, 2),
                             keySecondary = secondary,
                             selectiveLogic = ext?.optInt("selectiveLogic", 0) ?: 0,
                             probability = probability,
@@ -117,6 +125,17 @@ object CharacterParser {
             }
         }
 
+        // 角色注入提示 extensions.depth_prompt {prompt, depth, role}
+        val depthPrompt = d.optJSONObject("extensions")?.optJSONObject("depth_prompt")?.let { dp ->
+            val prompt = dp.optString("prompt", "").trim()
+            if (prompt.isBlank()) null
+            else DepthPrompt(
+                prompt = prompt,
+                depth = dp.optInt("depth", 4),
+                role = dp.optString("role", "system").ifBlank { "system" },
+            )
+        }
+
         return CharacterCard(
             name = name,
             description = d.optString("description", "").trim(),
@@ -138,6 +157,7 @@ object CharacterParser {
             linkedPreset = d.optString("linked_preset", "").trim(),
             streaming = d.optBoolean("streaming", true),
             regexScripts = regexScripts,
+            depthPrompt = depthPrompt,
         )
     }
 }

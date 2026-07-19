@@ -26,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.RadioButton
 import com.composables.icons.lucide.BookOpen
+import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.ImagePlus
 import com.composables.icons.lucide.Lucide
@@ -86,6 +89,15 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(card.name) }
     var description by remember { mutableStateOf(card.description) }
+    var personality by remember { mutableStateOf(card.personality) }
+    var scenario by remember { mutableStateOf(card.scenario) }
+    var systemPrompt by remember { mutableStateOf(card.systemPrompt) }
+    var postHistory by remember { mutableStateOf(card.postHistoryInstructions) }
+    var mesExample by remember { mutableStateOf(card.mesExample) }
+    var creatorNotes by remember { mutableStateOf(card.creatorNotes) }
+    var depthPromptText by remember { mutableStateOf(card.depthPrompt?.prompt ?: "") }
+    var depthPromptDepth by remember { mutableStateOf((card.depthPrompt?.depth ?: 4).toString()) }
+    var depthPromptRole by remember { mutableStateOf(card.depthPrompt?.role ?: "system") }
     var tags by remember { mutableStateOf(card.tags) }
     var enabledWb by remember { mutableStateOf(card.enabledWorldBooks) }
     var linkedPreset by remember { mutableStateOf(card.linkedPreset) }
@@ -103,6 +115,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     var showGreetingDialog by remember { mutableStateOf(false) }
     var editingGreetingIdx by remember { mutableStateOf<Int?>(null) }
     var deletingGreetingIdx by remember { mutableStateOf<Int?>(null) }
+    var advancedExpanded by remember { mutableStateOf(false) }
 
     // 角色卡图片：导入 PNG 时保留、可在弹窗里更换/移除；更换后主界面/抽屉头像随之更新
     val imageFile = remember(cardFileName) { CharacterRepository.imageFile(context, cardFileName) }
@@ -204,12 +217,28 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
             patchCard { d ->
                 d.put("name", name.trim())
                 d.put("description", description)
+                d.put("personality", personality)
+                d.put("scenario", scenario)
+                d.put("system_prompt", systemPrompt)
+                d.put("post_history_instructions", postHistory)
+                d.put("mes_example", mesExample)
+                d.put("creator_notes", creatorNotes)
                 d.put("tags", JSONArray(tags))
                 d.put("first_mes", greetings.firstOrNull() ?: "")
                 d.put("alternate_greetings", JSONArray(greetings.drop(1)))
                 d.put("enabled_world_books", JSONArray(enabledWb))
                 d.put("linked_preset", linkedPreset)
                 d.put("streaming", streaming)
+                // 角色注入提示写回 extensions.depth_prompt（空则移除）
+                val ext = d.optJSONObject("extensions") ?: JSONObject().also { d.put("extensions", it) }
+                if (depthPromptText.isBlank()) {
+                    ext.remove("depth_prompt")
+                } else {
+                    ext.put("depth_prompt", JSONObject()
+                        .put("prompt", depthPromptText)
+                        .put("depth", depthPromptDepth.toIntOrNull() ?: 4)
+                        .put("role", depthPromptRole))
+                }
             }
             onBack()
         }
@@ -388,6 +417,79 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 600.dp),
             )
 
+            // 高级定义（Advanced Definitions）：默认折叠，避免冲淡基础编辑
+            Row(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .clickable { advancedExpanded = !advancedExpanded }
+                    .padding(horizontal = Space12, vertical = Space12),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {
+                    Text(stringResource(R.string.advanced_definitions),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.advanced_definitions_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Icon(if (advancedExpanded) Lucide.ChevronDown else Lucide.ChevronRight, null,
+                    Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            if (advancedExpanded) {
+                OutlinedTextField(
+                    value = personality, onValueChange = { personality = it },
+                    label = { Text(stringResource(R.string.char_personality_label)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 300.dp),
+                )
+                OutlinedTextField(
+                    value = scenario, onValueChange = { scenario = it },
+                    label = { Text(stringResource(R.string.char_scenario_label)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 300.dp),
+                )
+                OutlinedTextField(
+                    value = systemPrompt, onValueChange = { systemPrompt = it },
+                    label = { Text(stringResource(R.string.char_system_prompt_label)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 300.dp),
+                )
+                OutlinedTextField(
+                    value = postHistory, onValueChange = { postHistory = it },
+                    label = { Text(stringResource(R.string.char_post_history_label)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 300.dp),
+                )
+                OutlinedTextField(
+                    value = mesExample, onValueChange = { mesExample = it },
+                    label = { Text(stringResource(R.string.char_mes_example_label)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 300.dp),
+                )
+                OutlinedTextField(
+                    value = creatorNotes, onValueChange = { creatorNotes = it },
+                    label = { Text(stringResource(R.string.char_creator_notes_label)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+                )
+                // 角色注入提示（Character's Note）：正文 + 注入深度 + 角色（始终显示）
+                OutlinedTextField(
+                    value = depthPromptText, onValueChange = { depthPromptText = it },
+                    label = { Text(stringResource(R.string.char_depth_prompt_label)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space12),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = depthPromptDepth, onValueChange = { depthPromptDepth = it.filter { c -> c.isDigit() } },
+                        label = { Text(stringResource(R.string.char_depth_prompt_depth)) },
+                        singleLine = true, modifier = Modifier.weight(1f),
+                    )
+                    RoleDropdown(
+                        label = stringResource(R.string.char_depth_prompt_role),
+                        current = depthPromptRole,
+                        modifier = Modifier.weight(1f),
+                    ) { depthPromptRole = it }
+                }
+            }
+
             Row(
                 Modifier.fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
@@ -483,13 +585,11 @@ private fun WorldBookSelector(
     onToggle: (String) -> Unit,
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var bookNames by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         bookNames = withContext(Dispatchers.IO) { WorldBookRepository.listNames(context) }
     }
-
 
     if (bookNames.isEmpty()) return
 
@@ -519,6 +619,37 @@ private fun WorldBookSelector(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+private val ROLE_OPTIONS = listOf("system", "user", "assistant")
+
+@Composable
+private fun roleLabel(role: String): String = when (role) {
+    "user" -> stringResource(R.string.role_user)
+    "assistant" -> stringResource(R.string.role_assistant)
+    else -> stringResource(R.string.role_system)
+}
+
+/** 注入角色下拉（system/user/assistant）：readOnly 输入框 + 透明覆盖层接管点击 */
+@Composable
+private fun RoleDropdown(
+    label: String, current: String, modifier: Modifier = Modifier, onChange: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier) {
+        OutlinedTextField(
+            value = roleLabel(current), onValueChange = {}, readOnly = true, singleLine = true,
+            label = { Text(label) },
+            trailingIcon = { Icon(Lucide.ChevronDown, null, Modifier.size(20.dp)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Box(Modifier.matchParentSize().clickable { expanded = true })
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ROLE_OPTIONS.forEach { r ->
+                DropdownMenuItem(text = { Text(roleLabel(r)) }, onClick = { onChange(r); expanded = false })
             }
         }
     }

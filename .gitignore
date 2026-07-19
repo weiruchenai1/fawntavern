@@ -25,3 +25,6 @@ Thumbs.db
 
 # Claude Code (local permissions, not for sharing)
 .claude/
+
+# 设计文档
+docs/

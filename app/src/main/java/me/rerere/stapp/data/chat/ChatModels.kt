@@ -45,4 +45,5 @@ data class ChatSession(
     val messages: List<ChatMessage> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
+    val timedWi: Map<String, Int> = emptyMap(),  // 世界书定时效果状态（sticky/cooldown 跨轮持久化）
 )

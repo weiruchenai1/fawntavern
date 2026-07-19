@@ -1,6 +1,8 @@
 package me.rerere.stapp.ui.preset
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,10 +43,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -54,18 +58,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import me.rerere.stapp.R
+import me.rerere.stapp.data.preset.PresetRepository
 import me.rerere.stapp.data.preset.PromptItem
+import me.rerere.stapp.data.preset.RegexScript
 import me.rerere.stapp.data.preset.StPreset
 import me.rerere.stapp.ui.components.AppTopBar
 import me.rerere.stapp.ui.components.ConfirmDeleteDialog
+import me.rerere.stapp.ui.components.rememberReorderableList
+import sh.calvin.reorderable.ReorderableItem
 import me.rerere.stapp.ui.components.Space4
 import me.rerere.stapp.ui.components.Space8
 import me.rerere.stapp.ui.components.Space12
 import me.rerere.stapp.ui.components.Space16
+import kotlinx.coroutines.launch
 
 val SOURCES = listOf("openai", "claude", "makersuite", "custom", "openrouter", "google")
 val ROLES = listOf("system", "user", "assistant")
@@ -77,11 +87,23 @@ fun PresetEditorScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var editable by remember { mutableStateOf(preset) }
     var editingPrompt by remember { mutableStateOf<PromptItem?>(null) }
+    // 正则编辑/删除目标：按下标定位 editable.regexScripts 中的条目
+    var editingRegexIdx by remember { mutableStateOf<Int?>(null) }
+    var deleteRegexIdx by remember { mutableStateOf<Int?>(null) }
 
-    // 系统返回键：先关闭弹窗，再执行返回导航
-    BackHandler(enabled = editingPrompt == null, onBack = onBack)
+    // 退出即落盘：保存当前编辑结果后再执行返回导航
+    fun saveAndBack() {
+        scope.launch {
+            runCatching { PresetRepository.save(context, editable) }
+            onBack()
+        }
+    }
+
+    // 系统返回键：编辑弹窗打开时不拦截（交给弹窗自身），否则保存并返回
+    BackHandler(enabled = editingPrompt == null && editingRegexIdx == null) { saveAndBack() }
     var tab by remember { mutableIntStateOf(0) }
     val tabs = listOf(stringResource(R.string.basic_params), stringResource(R.string.prompts), stringResource(R.string.regex_tab))
 
@@ -91,7 +113,7 @@ fun PresetEditorScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Column {
-                AppTopBar(preset.name, onBack)
+                AppTopBar(preset.name, onBack = { saveAndBack() })
                 PrimaryScrollableTabRow(
                     selectedTabIndex = tab,
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -101,7 +123,7 @@ fun PresetEditorScreen(
                     tabs.forEachIndexed { i, title ->
                         val count = when (i) {
                             1 -> editable.prompts.size
-                            2 -> 0
+                            2 -> editable.regexScripts.size
                             else -> null
                         }
                         Tab(i == tab, { tab = i }) {
@@ -128,6 +150,7 @@ fun PresetEditorScreen(
                         })
                     },
                     onDeleteRequest = { idx -> deleteConfirmIdx = idx },
+                    onReorder = { reordered -> editable = editable.copy(prompts = reordered) },
                     onAdd = {
                         // 只打开编辑框，保存时才真正加入列表
                         editingPrompt = PromptItem(
@@ -136,7 +159,19 @@ fun PresetEditorScreen(
                         )
                     }
                 )
-                2 -> RegexTab()
+                2 -> RegexTab(
+                    scripts = editable.regexScripts,
+                    onEdit = { idx -> editingRegexIdx = idx },
+                    onToggle = { idx ->
+                        editable = editable.copy(regexScripts = editable.regexScripts.toMutableList().also {
+                            it[idx] = it[idx].copy(disabled = !it[idx].disabled)
+                        })
+                    },
+                    onDeleteRequest = { idx -> deleteRegexIdx = idx },
+                    onImport = { script ->
+                        editable = editable.copy(regexScripts = editable.regexScripts + script)
+                    },
+                )
             }
         }
     }
@@ -169,6 +204,36 @@ fun PresetEditorScreen(
             }
         )
     }
+
+    deleteRegexIdx?.let { idx ->
+        val name = editable.regexScripts.getOrNull(idx)?.scriptName?.ifBlank { stringResource(R.string.unnamed_prompt) } ?: stringResource(R.string.unnamed_prompt)
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.delete_regex_title),
+            text = stringResource(R.string.delete_prompt_msg_fmt, name),
+            onConfirm = {
+                editable = editable.copy(
+                    regexScripts = editable.regexScripts.toMutableList().also { it.removeAt(idx) }
+                )
+                deleteRegexIdx = null
+            },
+            onDismiss = { deleteRegexIdx = null },
+        )
+    }
+
+    editingRegexIdx?.let { idx ->
+        editable.regexScripts.getOrNull(idx)?.let { script ->
+            RegexEditDialog(
+                script = script,
+                onDismiss = { editingRegexIdx = null },
+                onSave = { updated ->
+                    editable = editable.copy(regexScripts = editable.regexScripts.toMutableList().also {
+                        it[idx] = updated
+                    })
+                    editingRegexIdx = null
+                }
+            )
+        } ?: run { editingRegexIdx = null }
+    }
 }
 
 @Composable
@@ -184,12 +249,12 @@ private fun BasicParamsTab(p: StPreset, onUpdate: (StPreset) -> Unit) {
             stringResource(R.string.help_top_p)) { onUpdate(p.copy(topP = it)) }
         SliderField("Top K", p.topK.toFloat(), 0f, 200f,
             stringResource(R.string.help_top_k)) { onUpdate(p.copy(topK = it.toInt())) }
-        NumberField("Frequency Penalty", p.frequencyPenalty,
+        SliderField("Frequency Penalty", p.frequencyPenalty, -2f, 2f,
             stringResource(R.string.help_frequency_penalty)) { onUpdate(p.copy(frequencyPenalty = it)) }
-        NumberField("Presence Penalty", p.presencePenalty,
+        SliderField("Presence Penalty", p.presencePenalty, -2f, 2f,
             stringResource(R.string.help_presence_penalty)) { onUpdate(p.copy(presencePenalty = it)) }
-        NumberField("Repetition Penalty", p.repetitionPenalty,
-            stringResource(R.string.help_repetition_penalty)) { onUpdate(p.copy(repetitionPenalty = it)) }
+        NumberField("Seed", p.seed.toFloat(),
+            stringResource(R.string.help_seed)) { onUpdate(p.copy(seed = it.toInt())) }
 
         SectionHeader(stringResource(R.string.context_params))
         NumberField("Max Context", p.maxContext.toFloat(),
@@ -205,20 +270,32 @@ private fun PromptsTab(
     onEdit: (PromptItem) -> Unit,
     onToggle: (Int) -> Unit,
     onDeleteRequest: (Int) -> Unit,
+    onReorder: (List<PromptItem>) -> Unit,
     onAdd: () -> Unit,
 ) {
+    // 长按 grip 手柄拖动排序，落定后回调整份新顺序（退出时 saveAndBack 落盘 → 回写 prompt_order）
+    val (listState, reorderState) = rememberReorderableList(
+        items = prompts,
+        keyOf = { it.identifier },
+        onReorder = onReorder,
+    )
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = Space16),
+        state = listState,
         verticalArrangement = Arrangement.spacedBy(Space8),
     ) {
         item { Spacer(Modifier.height(Space4)) }
         itemsIndexed(prompts, key = { _, p -> p.identifier }) { idx, item ->
-            PromptRow(
-                item = item,
-                onEdit = { onEdit(item) },
-                onToggle = { onToggle(idx) },
-                onDelete = { onDeleteRequest(idx) },
-            )
+            ReorderableItem(reorderState, key = item.identifier) { dragging ->
+                PromptRow(
+                    item = item,
+                    dragging = dragging,
+                    onEdit = { onEdit(item) },
+                    onToggle = { onToggle(idx) },
+                    onDelete = { onDeleteRequest(idx) },
+                    handleModifier = Modifier.longPressDraggableHandle(),
+                )
+            }
         }
         item {
             Row(
@@ -241,16 +318,25 @@ private fun PromptRow(
     onEdit: () -> Unit,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
+    dragging: Boolean = false,
+    handleModifier: Modifier = Modifier,
 ) {
     Row(
         Modifier.fillMaxWidth()
+            .scale(if (dragging) 0.97f else 1f)
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .clickable { onEdit() }
             .padding(horizontal = Space12, vertical = Space12),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Space12),
+        horizontalArrangement = Arrangement.spacedBy(Space8),
     ) {
+        // 拖动手柄：长按后上下拖拽排序
+        Icon(
+            Lucide.GripVertical, stringResource(R.string.reorder),
+            Modifier.size(20.dp).then(handleModifier),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {
             Text(item.name.ifBlank { stringResource(R.string.unnamed_prompt) },
                 style = MaterialTheme.typography.bodyMedium,
@@ -271,14 +357,199 @@ private fun PromptRow(
 }
 
 @Composable
-private fun RegexTab() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Space8)) {
-            Text(stringResource(R.string.regex_tab), style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface)
-            Text(stringResource(R.string.regex_coming_soon), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun RegexTab(
+    scripts: List<RegexScript>,
+    onEdit: (Int) -> Unit,
+    onToggle: (Int) -> Unit,
+    onDeleteRequest: (Int) -> Unit,
+    onImport: (RegexScript) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    // 导入：解析文件为内存对象后交给上层追加进 editable.regexScripts（退出随预设落盘）
+    val importer = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) scope.launch {
+            runCatching { PresetRepository.parseRegexUri(context, uri) }.getOrNull()?.let { onImport(it) }
+        }
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize().padding(horizontal = Space16),
+        verticalArrangement = Arrangement.spacedBy(Space8),
+    ) {
+        item { Spacer(Modifier.height(Space4)) }
+        itemsIndexed(scripts, key = { i, s -> "${s.id}#$i" }) { idx, s ->
+            RegexRow(
+                title = s.scriptName.ifBlank { stringResource(R.string.unnamed_prompt) },
+                preview = "${s.findRegex.take(24)} → ${s.replaceString.take(24)}",
+                enabled = !s.disabled,
+                onEdit = { onEdit(idx) },
+                onToggle = { onToggle(idx) },
+                onDelete = { onDeleteRequest(idx) },
+            )
+        }
+        item {
+            Row(
+                Modifier.fillMaxWidth().clickable { importer.launch("application/json") }.padding(Space16),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Plus, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(Space8))
+                Text(stringResource(R.string.regex_import), color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        item { Spacer(Modifier.height(Space8)) }
+    }
+}
+
+@Composable
+private fun RegexRow(
+    title: String, preview: String, enabled: Boolean,
+    onEdit: () -> Unit, onToggle: () -> Unit, onDelete: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable { onEdit() }
+            .padding(horizontal = Space12, vertical = Space12),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Space12),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (preview.isNotBlank()) {
+                Text(preview.replace("\n", " "), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Switch(checked = enabled, onCheckedChange = { onToggle() })
+        Icon(Lucide.Trash2, stringResource(R.string.delete), Modifier.size(18.dp).clickable { onDelete() },
+            tint = MaterialTheme.colorScheme.error)
+    }
+}
+
+@Composable
+private fun RegexEditDialog(
+    script: RegexScript,
+    onDismiss: () -> Unit,
+    onSave: (RegexScript) -> Unit,
+) {
+    var name by remember { mutableStateOf(script.scriptName) }
+    var find by remember { mutableStateOf(script.findRegex) }
+    var replace by remember { mutableStateOf(script.replaceString) }
+    var onUser by remember { mutableStateOf(1 in script.placement) }
+    var onAi by remember { mutableStateOf(2 in script.placement || script.placement.isEmpty()) }
+    var markdownOnly by remember { mutableStateOf(script.markdownOnly) }
+    var promptOnly by remember { mutableStateOf(script.promptOnly) }
+    var minDepth by remember { mutableStateOf(script.minDepth?.toString() ?: "") }
+    var maxDepth by remember { mutableStateOf(script.maxDepth?.toString() ?: "") }
+    var advancedOpen by remember { mutableStateOf(false) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            Scaffold(
+                topBar = {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .statusBarsPadding()
+                            .padding(horizontal = 4.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                        Text(
+                            stringResource(R.string.edit_regex), style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
+                        )
+                        Button(onClick = {
+                            val placement = buildList {
+                                if (onUser) add(1)
+                                if (onAi) add(2)
+                            }
+                            onSave(script.copy(
+                                scriptName = name, findRegex = find, replaceString = replace,
+                                placement = placement,
+                                markdownOnly = markdownOnly, promptOnly = promptOnly,
+                                minDepth = minDepth.toIntOrNull()?.takeIf { it >= 0 },
+                                maxDepth = maxDepth.toIntOrNull()?.takeIf { it >= 0 },
+                            ))
+                        }) { Text(stringResource(R.string.save)) }
+                    }
+                }
+            ) { padding ->
+                Column(
+                    Modifier.fillMaxSize().padding(padding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(Space16),
+                    verticalArrangement = Arrangement.spacedBy(Space16),
+                ) {
+                    OutlinedTextField(
+                        value = name, onValueChange = { name = it },
+                        label = { Text(stringResource(R.string.prompt_name)) },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = find, onValueChange = { find = it },
+                        label = { Text(stringResource(R.string.find_regex_label)) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+                    )
+                    OutlinedTextField(
+                        value = replace, onValueChange = { replace = it },
+                        label = { Text(stringResource(R.string.replace_string_label)) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+                    )
+
+                    // 高级设置默认折叠
+                    Row(
+                        Modifier.fillMaxWidth().clickable { advancedOpen = !advancedOpen }
+                            .padding(vertical = Space4),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(stringResource(R.string.entry_advanced),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            Lucide.ChevronDown, null,
+                            Modifier.size(20.dp).scale(1f, if (advancedOpen) -1f else 1f),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (advancedOpen) {
+                        SwitchField(stringResource(R.string.placement_user), onUser) { onUser = it }
+                        SwitchField(stringResource(R.string.placement_ai), onAi) { onAi = it }
+                        SwitchField(stringResource(R.string.regex_markdown_only), markdownOnly) { markdownOnly = it }
+                        SwitchField(stringResource(R.string.regex_prompt_only), promptOnly) { promptOnly = it }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space12)) {
+                            OutlinedTextField(
+                                value = minDepth, onValueChange = { minDepth = it },
+                                label = { Text(stringResource(R.string.regex_min_depth)) }, singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            )
+                            OutlinedTextField(
+                                value = maxDepth, onValueChange = { maxDepth = it },
+                                label = { Text(stringResource(R.string.regex_max_depth)) }, singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

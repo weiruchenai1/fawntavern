@@ -16,9 +16,15 @@ object WorldBookParser {
                 return (0 until arr.length()).mapNotNull { i -> arr.optString(i, "").trim().takeIf { it.isNotBlank() } }
             }
             val eId = e.optInt("id", e.optInt("uid", fallbackId))
-            // ST 的 useProbability = false 表示不掷骰（等效 100%）
-            val probability = if (!e.optBoolean("useProbability", true)) 100
-                              else e.optInt("probability", 100).coerceIn(0, 100)
+            // character_book 把私有字段放在 extensions.* 下；native 世界书文件放顶层。两处都认
+            val ext = e.optJSONObject("extensions")
+            fun bool(name: String, def: Boolean = false) =
+                if (e.has(name)) e.optBoolean(name, def) else ext?.optBoolean(name, def) ?: def
+            fun int(name: String, def: Int) =
+                if (e.has(name) && !e.isNull(name)) e.optInt(name, def)
+                else if (ext?.has(name) == true && !ext.isNull(name)) ext.optInt(name, def) else def
+            fun str(name: String) =
+                (if (e.has(name)) e.optString(name, "") else ext?.optString(name, "") ?: "").trim()
             entries[eId] = WorldBookEntry(
                 id = eId,
                 // ST 世界书文件用 key/keysecondary，character_book 用 keys/secondary_keys，都认
@@ -28,21 +34,46 @@ object WorldBookParser {
                 // ST 世界书文件用 disable（反义），character_book 用 enabled
                 enabled = if (e.has("disable")) !e.optBoolean("disable", false)
                           else e.optBoolean("enabled", true),
-                position = normalizePosition(e.opt("position")),
+                // 顶层 position 为数字 → 权威（native / 本 App 保存）；为粗粒度串（before/after_char）或缺失
+                // → 取 extensions.position（character_book v3 的详细枚举 0-7），避免所有条目被误判为 after_char
+                position = WorldBookPos.normalize(run {
+                    val top = e.opt("position")
+                    if (top is Number || (top is String && top.toIntOrNull() != null)) top
+                    else ext?.opt("position")?.takeIf { it != JSONObject.NULL } ?: top
+                }),
                 insertionOrder = e.optInt("insertion_order", e.optInt("order", 100)),
                 constant = e.optBoolean("constant", false),
-                depth = e.optInt("depth", 4),
+                vectorized = bool("vectorized"),
+                depth = int("depth", 4),
+                role = int("role", 0).coerceIn(0, 2),
+                outletName = str("outletName"),
                 keySecondary = strList("keysecondary", "secondary_keys"),
-                selectiveLogic = e.optInt("selectiveLogic", 0),
-                probability = probability,
-                scanDepth = if (e.isNull("scanDepth")) null else e.optInt("scanDepth").takeIf { it > 0 },
+                selectiveLogic = int("selectiveLogic", 0),
+                // useProbability=false 表示不掷骰（等效 100%）；两字段 character_book 在 extensions 下、native 在顶层
+                probability = if (!bool("useProbability", true)) 100 else int("probability", 100).coerceIn(0, 100),
+                scanDepth = if (e.isNull("scanDepth")) null else e.optInt("scanDepth").takeIf { it > 0 }
+                    ?: ext?.optInt("scan_depth", -1)?.takeIf { it > 0 },
                 caseSensitive = when {
                     e.has("caseSensitive") && !e.isNull("caseSensitive") -> e.optBoolean("caseSensitive")
                     e.has("case_sensitive") && !e.isNull("case_sensitive") -> e.optBoolean("case_sensitive")
+                    ext?.has("case_sensitive") == true && !ext.isNull("case_sensitive") -> ext.optBoolean("case_sensitive")
                     else -> null
                 },
-                matchWholeWords = if (e.has("matchWholeWords") && !e.isNull("matchWholeWords"))
-                    e.optBoolean("matchWholeWords") else null,
+                matchWholeWords = when {
+                    e.has("matchWholeWords") && !e.isNull("matchWholeWords") -> e.optBoolean("matchWholeWords")
+                    ext?.has("match_whole_words") == true && !ext.isNull("match_whole_words") -> ext.optBoolean("match_whole_words")
+                    else -> null
+                },
+                excludeRecursion = bool("excludeRecursion") || bool("exclude_recursion"),
+                preventRecursion = bool("preventRecursion") || bool("prevent_recursion"),
+                delayUntilRecursion = bool("delayUntilRecursion") || bool("delay_until_recursion"),
+                group = str("group"),
+                groupOverride = bool("groupOverride") || bool("group_override"),
+                groupWeight = int("groupWeight", int("group_weight", 100)),
+                useGroupScoring = bool("useGroupScoring") || bool("use_group_scoring"),
+                sticky = int("sticky", 0).coerceAtLeast(0),
+                cooldown = int("cooldown", 0).coerceAtLeast(0),
+                delay = int("delay", 0).coerceAtLeast(0),
             )
         }
 
@@ -59,25 +90,5 @@ object WorldBookParser {
             }
         }
         return WorldBook(name = name, entries = entries)
-    }
-
-    /**
-     * 归一化条目位置。ST 世界书文件的 position 是数字
-     * （0=角色定义前 1=角色定义后 2/3=作者注释前后 4=@Depth 5/6=示例对话前后），
-     * character_book 是字符串（before_char / after_char）。
-     * 简化为三类：before_char / after_char / at_depth。
-     */
-    private fun normalizePosition(raw: Any?): String = when (raw) {
-        is Number -> when (raw.toInt()) {
-            0 -> "before_char"
-            4 -> "at_depth"
-            else -> "after_char"
-        }
-        is String -> when (raw) {
-            "before_char", "0" -> "before_char"
-            "at_depth", "4" -> "at_depth"
-            else -> "after_char"
-        }
-        else -> "after_char"
     }
 }

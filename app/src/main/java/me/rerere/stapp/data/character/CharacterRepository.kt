@@ -212,17 +212,25 @@ object CharacterRepository {
         embedCharaChunk(base, jsonStr)
     }
 
-    /** 在 PNG 的 IEND 块前插入 tEXt 块（chara\0base64(json)），并剥离已有的 chara/ccv3 块 */
+    /** 在 PNG 的 IEND 块前插入 chara(V2)+ccv3(V3) 两个 tEXt 块，并剥离已有的 chara/ccv3 块（对齐 ST 双写） */
     private fun embedCharaChunk(png: ByteArray, json: String): ByteArray {
-        val text = "chara".toByteArray() + byteArrayOf(0) + Base64.encode(json.toByteArray(), Base64.NO_WRAP)
-        val out = ByteArrayOutputStream(png.size + text.size + 12)
+        val charaText = "chara".toByteArray() + byteArrayOf(0) + Base64.encode(json.toByteArray(), Base64.NO_WRAP)
+        // 派生 ccv3：spec 改为 chara_card_v3 / 3.0（解析失败则跳过 ccv3，仅写 chara）
+        val ccv3Text = try {
+            val v3 = JSONObject(json).put("spec", "chara_card_v3").put("spec_version", "3.0")
+            "ccv3".toByteArray() + byteArrayOf(0) + Base64.encode(v3.toString().toByteArray(), Base64.NO_WRAP)
+        } catch (_: Exception) { null }
+        val out = ByteArrayOutputStream(png.size + charaText.size + (ccv3Text?.size ?: 0) + 24)
         out.write(png, 0, 8)  // PNG 签名
         var pos = 8
         while (pos + 12 <= png.size) {
             val len = readInt32BE(png, pos)
             val type = String(png, pos + 4, 4)
             val stale = (type == "tEXt" || type == "zTXt") && isCharaChunk(png, pos + 8, len)
-            if (type == "IEND") writeChunk(out, "tEXt", text)
+            if (type == "IEND") {
+                writeChunk(out, "tEXt", charaText)
+                ccv3Text?.let { writeChunk(out, "tEXt", it) }
+            }
             if (!stale) out.write(png, pos, 12 + len)
             pos += 12 + len
         }

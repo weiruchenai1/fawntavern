@@ -28,6 +28,7 @@ internal data class SessionEntity(
     val charName: String,
     val createdAt: Long,
     val updatedAt: Long,
+    @ColumnInfo(defaultValue = "") val timedWiJson: String = "",  // 世界书定时效果状态 JSON
 )
 
 /** (sessionId, ts) 为主键：ts 在会话内严格递增，天然唯一且保序 */
@@ -104,7 +105,7 @@ internal interface ChatDao {
     fun messagesPaged(id: String): PagingSource<Int, MessageEntity>
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 2, exportSchema = false)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 3, exportSchema = false)
 internal abstract class ChatDatabase : RoomDatabase() {
 
     abstract fun dao(): ChatDao
@@ -120,11 +121,18 @@ internal abstract class ChatDatabase : RoomDatabase() {
             }
         }
 
+        /** v3：会话表增加世界书定时效果状态列 */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE sessions ADD COLUMN timedWiJson TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile private var instance: ChatDatabase? = null
 
         fun get(context: Context): ChatDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, ChatDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { instance = it }
         }
     }

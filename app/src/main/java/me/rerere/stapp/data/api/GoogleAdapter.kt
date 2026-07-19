@@ -27,6 +27,9 @@ internal object GoogleAdapter : ProviderAdapter {
                 p.topP?.let { cfg.put("topP", it.toDouble()) }
                 p.topK?.takeIf { it > 0 }?.let { cfg.put("topK", it) }
                 p.maxTokens?.let { cfg.put("maxOutputTokens", it) }
+                p.frequencyPenalty?.let { cfg.put("frequencyPenalty", it.toDouble()) }
+                p.presencePenalty?.let { cfg.put("presencePenalty", it.toDouble()) }
+                p.seed?.let { cfg.put("seed", it) }
                 if (cfg.length() > 0) put("generationConfig", cfg)
             }
             put("contents", JSONArray().apply {

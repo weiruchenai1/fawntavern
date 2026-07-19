@@ -37,10 +37,25 @@
     <string name="about">关于</string>
     <string name="check_update">检查更新</string>
 
+    <!-- Prompt 调试日志 -->
+    <string name="debug_log">Prompt 日志</string>
+    <string name="debug_log_desc">记录每次发送给 AI 的完整 prompt，用于核对角色卡 / 世界书 / 预设是否已正确插入组装。仅存于内存，重启即清空。</string>
+    <string name="debug_log_enable">启用日志记录</string>
+    <string name="debug_log_empty">暂无日志。启用后发送一条消息，即可在此查看本次组装的完整 prompt。</string>
+    <string name="debug_log_clear">清空</string>
+    <string name="debug_log_messages">最终消息</string>
+    <string name="debug_log_entry_count">共 %1$d 条记录</string>
+    <string name="debug_log_no_preset">无预设</string>
+    <string name="debug_log_wi_count">世界书 %1$d 条</string>
+    <string name="debug_log_msg_count">消息 %1$d 条</string>
+    <string name="debug_log_tokens">≈%1$d tokens</string>
+    <string name="debug_log_images">%1$d 张图片</string>
+
     <!-- Chat -->
     <string name="new_chat">新聊天</string>
     <string name="input_hint">输入消息与AI聊天</string>
     <string name="select_model">选择模型</string>
+    <string name="select_model_hint">点击选择模型</string>
     <string name="select_character">选择角色卡</string>
     <string name="no_characters">暂无角色卡</string>
     <string name="default_character">默认角色</string>
@@ -160,6 +175,20 @@
     <string name="char_name_label">角色名</string>
     <string name="greetings_label">开场白</string>
     <string name="char_definition_label">角色定义</string>
+    <string name="advanced_definitions">高级定义</string>
+    <string name="advanced_definitions_desc">性格、场景、主提示词、对话示例等（可选）</string>
+    <string name="char_personality_label">性格</string>
+    <string name="char_scenario_label">场景</string>
+    <string name="char_system_prompt_label">主提示词 (System Prompt)</string>
+    <string name="char_post_history_label">历史后指令 (Jailbreak)</string>
+    <string name="char_mes_example_label">对话示例</string>
+    <string name="char_creator_notes_label">创作者备注</string>
+    <string name="char_depth_prompt_label">角色注入提示 (Character\'s Note)</string>
+    <string name="char_depth_prompt_depth">注入深度</string>
+    <string name="char_depth_prompt_role">角色</string>
+    <string name="role_system">系统</string>
+    <string name="role_user">用户</string>
+    <string name="role_assistant">助手</string>
     <string name="assoc_worldbooks">关联世界书</string>
     <string name="assoc_preset">关联预设（可选）</string>
     <string name="stream_output_label">流式输出</string>
@@ -177,6 +206,17 @@
     <string name="basic_params">基础参数</string>
     <string name="prompts">提示词</string>
     <string name="regex_tab">正则</string>
+    <string name="regex_import">导入正则脚本</string>
+    <string name="edit_regex">编辑正则</string>
+    <string name="delete_regex_title">删除正则脚本</string>
+    <string name="find_regex_label">查找（正则）</string>
+    <string name="replace_string_label">替换为</string>
+    <string name="placement_user">作用于用户消息</string>
+    <string name="placement_ai">作用于 AI 消息</string>
+    <string name="regex_markdown_only">仅影响显示</string>
+    <string name="regex_prompt_only">仅影响发送</string>
+    <string name="regex_min_depth">最小深度</string>
+    <string name="regex_max_depth">最大深度</string>
     <string name="sampling_params">采样参数</string>
     <string name="context_params">上下文</string>
     <string name="add_prompt">添加提示词</string>
@@ -200,6 +240,7 @@
     <string name="help_frequency_penalty">惩罚已出现过的词以降低重复。正值=减少重复</string>
     <string name="help_presence_penalty">惩罚出现过的词，鼓励引入新话题。正值=更多样</string>
     <string name="help_repetition_penalty">直接惩罚重复。>1=减少重复，1.0=不施加</string>
+    <string name="help_seed">随机种子，固定后相同输入尽量复现同一结果。-1=每次随机</string>
     <string name="help_max_context">发送给 AI 的最大上下文长度（token）</string>
     <string name="help_max_tokens">AI 回复的最大生成长度（token）</string>
 
@@ -212,9 +253,76 @@
     <string name="entry_keys_label">触发词 (逗号分隔)</string>
     <string name="entry_content_label">内容</string>
     <string name="entry_enabled">启用</string>
+    <string name="entry_constant">常驻（始终注入）</string>
+    <string name="entry_position">位置</string>
+    <string name="entry_order">顺序</string>
+    <string name="entry_depth">深度</string>
+    <string name="entry_probability">概率</string>
+    <string name="entry_secondary_keys">次级关键词 (逗号分隔)</string>
+    <string name="entry_selective_logic">次级逻辑</string>
+    <string name="pos_before_char">角色定义之前</string>
+    <string name="pos_after_char">角色定义之后</string>
+    <string name="pos_at_depth">按深度注入</string>
+    <string name="pos_em_top">示例消息之前</string>
+    <string name="pos_em_bottom">示例消息之后</string>
+    <string name="pos_an_top">作者注释之前</string>
+    <string name="pos_an_bottom">作者注释之后</string>
+    <string name="pos_at_depth_system">@D 系统在深度</string>
+    <string name="pos_at_depth_user">@D 用户在深度</string>
+    <string name="pos_at_depth_assistant">@D AI 在深度</string>
+    <string name="pos_outlet">具名插槽 (outlet)</string>
+    <string name="logic_and_any">任一命中</string>
+    <string name="logic_not_all">非全部命中</string>
+    <string name="logic_not_any">无一命中</string>
+    <string name="logic_and_all">全部命中</string>
     <string name="enabled_status_on">开</string>
     <string name="enabled_status_off">关</string>
     <string name="edit_entry">编辑条目</string>
+
+    <!-- World Info entry — 状态与高级字段 -->
+    <string name="entry_status">状态</string>
+    <string name="status_constant">永久</string>
+    <string name="status_keyword">关键词</string>
+    <string name="status_vectorized">向量化</string>
+    <string name="status_vectorized_note">向量化需 embedding 后端，当前仅保留状态、不参与激活</string>
+    <string name="entry_scan_depth">扫描深度</string>
+    <string name="entry_case_sensitive">区分大小写</string>
+    <string name="entry_match_whole_words">匹配整词</string>
+    <string name="entry_outlet_name">插槽名</string>
+    <string name="entry_advanced">高级设置</string>
+    <string name="entry_recursion">递归</string>
+    <string name="entry_exclude_recursion">不被递归触发</string>
+    <string name="entry_prevent_recursion">激活后不触发递归</string>
+    <string name="entry_delay_until_recursion">仅递归轮激活</string>
+    <string name="entry_group">包含组（组名，逗号分隔）</string>
+    <string name="entry_group_weight">组权重</string>
+    <string name="entry_group_override">组内优先</string>
+    <string name="entry_use_group_scoring">组内按命中评分</string>
+    <string name="entry_timed">定时效果（按消息数）</string>
+    <string name="entry_sticky">保持</string>
+    <string name="entry_cooldown">冷却</string>
+    <string name="entry_delay">延迟</string>
+    <string name="tri_follow_global">跟随全局</string>
+    <string name="tri_on">开</string>
+    <string name="tri_off">关</string>
+
+    <!-- World Info 全局激活设置 -->
+    <string name="wi_activation_settings">世界书激活设置</string>
+    <string name="wi_scan_depth">扫描深度</string>
+    <string name="wi_context_percent">上下文百分比</string>
+    <string name="wi_budget_cap">Token 预算上限</string>
+    <string name="wi_min_activations">最小激活数</string>
+    <string name="wi_min_act_depth_max">最大深度</string>
+    <string name="wi_max_recursion">最大递归深度</string>
+    <string name="wi_include_names">包括名称</string>
+    <string name="wi_recursive">递归扫描</string>
+    <string name="wi_case_sensitive">区分大小写</string>
+    <string name="wi_match_whole_words">匹配整个单词</string>
+    <string name="wi_use_group_scoring">使用群组评分</string>
+    <string name="wi_overflow_alert">溢出警报</string>
+    <string name="wi_settings_scan_budget">扫描与预算</string>
+    <string name="wi_settings_matching">匹配选项</string>
+    <string name="wi_zero_unlimited">0 = 不限制</string>
 
     <!-- API Config -->
     <string name="no_api_providers">暂无 API 提供商</string>
@@ -277,4 +385,10 @@
     <string name="balance_label">获取账户余额</string>
     <string name="balance_api_path">余额 API 路径</string>
     <string name="balance_json_key">结果 JSON 键</string>
+    <string name="saved">已保存</string>
+    <string name="test_non_streaming">非流式</string>
+    <string name="test_streaming">流式</string>
+    <string name="test_tool_call">工具调用</string>
+    <string name="test_tool_called_fmt">调用 %1$s，入参 %2$s</string>
+    <string name="test_tool_not_called_fmt">未调用工具，回复：%s</string>
 </resources>

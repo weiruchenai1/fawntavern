@@ -43,36 +43,60 @@ object WorldBookRepository {
     suspend fun rename(context: Context, oldName: String, newName: String): Boolean =
         JsonFileDir.rename(context, WORLD_DIR, oldName, newName)
 
-    /** 保存条目（回写原文件的 entries，保留其它字段）。字段名按 ST 世界书文件格式写，保证导出后 ST 还能导入 */
+    /** 保存条目（就地 patch 原文件条目，只覆盖编辑过的键，保留 ST 私有/扩展字段）。 */
     suspend fun saveEntries(context: Context, name: String, entries: List<WorldBookEntry>) = withContext(Dispatchers.IO) {
         val file = JsonFileDir.file(context, WORLD_DIR, name)
         if (!file.exists()) return@withContext
         val json = JSONObject(file.readText())
         val entriesObj = json.optJSONObject("entries") ?: JSONObject()
         entries.forEach { entry ->
-            entriesObj.put(entry.id.toString(), JSONObject().apply {
-                put("uid", entry.id)
-                put("id", entry.id)
-                put("comment", entry.comment)
-                put("content", entry.content)
-                put("disable", !entry.enabled)
-                put("position", when (entry.position) {
-                    "before_char" -> 0
-                    "at_depth" -> 4
-                    else -> 1
-                })
-                put("order", entry.insertionOrder)
-                put("key", JSONArray(entry.keys))
-                put("keysecondary", JSONArray(entry.keySecondary))
-                put("selectiveLogic", entry.selectiveLogic)
-                put("constant", entry.constant)
-                put("depth", entry.depth)
-                put("probability", entry.probability)
-                put("useProbability", true)
-                entry.scanDepth?.let { put("scanDepth", it) }
-                entry.caseSensitive?.let { put("caseSensitive", it) }
-                entry.matchWholeWords?.let { put("matchWholeWords", it) }
-            })
+            val key = entry.id.toString()
+            // 就地取原条目对象（可能以 id 为键，或与 uid 不一致）；缺失才新建，避免丢失原有私有字段
+            val obj = entriesObj.optJSONObject(key)
+                ?: entriesObj.keys().asSequence()
+                    .mapNotNull { entriesObj.optJSONObject(it) }
+                    .firstOrNull { it.optInt("uid", it.optInt("id", Int.MIN_VALUE)) == entry.id }
+                ?: JSONObject().also {
+                    it.put("uid", entry.id); it.put("id", entry.id)
+                    entriesObj.put(key, it)
+                }
+            // 只覆盖模型承载的字段；未知字段（automationId/triggers/角色过滤/extensions…）原样保留
+            obj.put("comment", entry.comment)
+            obj.put("content", entry.content)
+            obj.put("disable", !entry.enabled)
+            obj.put("position", WorldBookPos.toStId(entry.position))
+            obj.put("order", entry.insertionOrder)
+            obj.put("key", JSONArray(entry.keys))
+            obj.put("keysecondary", JSONArray(entry.keySecondary))
+            obj.put("selectiveLogic", entry.selectiveLogic)
+            obj.put("constant", entry.constant)
+            obj.put("vectorized", entry.vectorized)
+            obj.put("depth", entry.depth)
+            obj.put("role", entry.role)
+            obj.put("outletName", entry.outletName)
+            obj.put("probability", entry.probability)
+            // <100 需掷骰才生效：确保 ST 重新导入时不会因 useProbability=false 而忽略概率
+            if (entry.probability < 100) obj.put("useProbability", true)
+            entry.scanDepth?.let { obj.put("scanDepth", it) }
+            entry.caseSensitive?.let { obj.put("caseSensitive", it) }
+            entry.matchWholeWords?.let { obj.put("matchWholeWords", it) }
+            // 递归 / 包含组 / 定时效果：过去仅在原文件已存在时保留，现随编辑一并落盘
+            obj.put("excludeRecursion", entry.excludeRecursion)
+            obj.put("preventRecursion", entry.preventRecursion)
+            obj.put("delayUntilRecursion", entry.delayUntilRecursion)
+            obj.put("group", entry.group)
+            obj.put("groupOverride", entry.groupOverride)
+            obj.put("groupWeight", entry.groupWeight)
+            obj.put("useGroupScoring", entry.useGroupScoring)
+            obj.put("sticky", entry.sticky)
+            obj.put("cooldown", entry.cooldown)
+            obj.put("delay", entry.delay)
+        }
+        // 删除：原文件里存在、但本次条目列表已不含的条目
+        val keepIds = entries.mapTo(HashSet()) { it.id.toString() }
+        entriesObj.keys().asSequence().toList().forEach { k ->
+            val uid = entriesObj.optJSONObject(k)?.let { it.optInt("uid", it.optInt("id", Int.MIN_VALUE)).toString() }
+            if (k !in keepIds && uid !in keepIds) entriesObj.remove(k)
         }
         json.put("entries", entriesObj)
         file.writeText(json.toString(2))

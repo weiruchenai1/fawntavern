@@ -20,6 +20,14 @@ data class CharacterCard(
     val linkedPreset: String = "",  // 关联的预设名（可选）
     val streaming: Boolean = true,  // 流式输出开关
     val regexScripts: List<CharRegex> = emptyList(),  // 内嵌正则（extensions.regex_scripts）
+    val depthPrompt: DepthPrompt? = null,  // 角色注入提示（extensions.depth_prompt / Character's Note）
+)
+
+/** 角色注入提示（SillyTavern extensions.depth_prompt）：按深度插入聊天历史。 */
+data class DepthPrompt(
+    val prompt: String = "",
+    val depth: Int = 4,
+    val role: String = "system",  // system / user / assistant
 )
 
 /** 角色卡内嵌的显示用正则（SillyTavern extensions.regex_scripts 子集）。 */
@@ -43,9 +51,12 @@ data class WorldBookEntry(
     val comment: String,       // 条目名称
     val content: String,       // 注入的文本
     val enabled: Boolean,
-    val position: String,      // "after_char"、"before_char" 等
+    val position: String,      // "after_char"、"before_char" 等（见 data.worldbook.WorldBookPos）
     val insertionOrder: Int,
     val constant: Boolean = false,  // 常驻条目：不做关键词扫描，始终注入
+    val vectorized: Boolean = false, // 向量化激活状态（保真用；当前不做语义激活）
+    val depth: Int = 4,             // position = at_depth 时的注入深度
+    val role: Int = 0,              // position = at_depth 时的角色：0=System 1=User 2=Assistant
     val keySecondary: List<String> = emptyList(),  // 次级关键词（selective 为 true 时参与判定）
     val selectiveLogic: Int = 0,    // 同 ST：0=AND_ANY 1=NOT_ALL 2=NOT_ANY 3=AND_ALL
     val probability: Int = 100,     // 激活概率 %

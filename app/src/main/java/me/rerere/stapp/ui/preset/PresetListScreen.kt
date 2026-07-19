@@ -41,7 +41,6 @@ fun PresetListScreen(onBack: () -> Unit) {
     var selectedPreset by remember { mutableStateOf<StPreset?>(null) }
 
     if (selectedPreset != null) {
-        BackHandler { selectedPreset = null }
         PresetEditorScreen(preset = selectedPreset!!, onBack = { selectedPreset = null })
         return
     }

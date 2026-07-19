@@ -76,10 +76,13 @@ internal class GenerationController {
             }
         } else null
         try {
+            val apiMessages = PromptBuilder.assemble(built, cur.messages.subList(0, idx), filesDir)
+            // 记录本次组装出的完整 prompt（日志开关关闭时为空操作）
+            PromptLog.record(built, provider, modelId, apiMessages)
             ChatApi.streamChat(
                 provider = provider,
                 modelId = modelId,
-                messages = PromptBuilder.assemble(built, cur.messages.subList(0, idx), filesDir),
+                messages = apiMessages,
                 params = built.genParams,
                 isCancelled = { stopFlag.get() },
             ) { c, r ->

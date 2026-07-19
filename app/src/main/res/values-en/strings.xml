@@ -37,10 +37,25 @@
     <string name="about">About</string>
     <string name="check_update">Check Update</string>
 
+    <!-- Prompt debug log -->
+    <string name="debug_log">Prompt Log</string>
+    <string name="debug_log_desc">Records the full prompt sent to the AI each time, to verify that character cards / world books / presets are inserted and assembled correctly. Kept in memory only; cleared on restart.</string>
+    <string name="debug_log_enable">Enable logging</string>
+    <string name="debug_log_empty">No logs yet. Enable logging and send a message to inspect the full assembled prompt here.</string>
+    <string name="debug_log_clear">Clear</string>
+    <string name="debug_log_messages">Final messages</string>
+    <string name="debug_log_entry_count">%1$d entries</string>
+    <string name="debug_log_no_preset">No preset</string>
+    <string name="debug_log_wi_count">%1$d world info</string>
+    <string name="debug_log_msg_count">%1$d messages</string>
+    <string name="debug_log_tokens">≈%1$d tokens</string>
+    <string name="debug_log_images">%1$d image(s)</string>
+
     <!-- Chat -->
     <string name="new_chat">New Chat</string>
     <string name="input_hint">Type a message…</string>
     <string name="select_model">Select Model</string>
+    <string name="select_model_hint">Tap to select a model</string>
     <string name="select_character">Select Character</string>
     <string name="no_characters">No characters</string>
     <string name="default_character">Default Character</string>
@@ -160,6 +175,20 @@
     <string name="char_name_label">Name</string>
     <string name="greetings_label">Greetings</string>
     <string name="char_definition_label">Character Definition</string>
+    <string name="advanced_definitions">Advanced Definitions</string>
+    <string name="advanced_definitions_desc">Personality, scenario, main prompt, example dialogue, etc. (optional)</string>
+    <string name="char_personality_label">Personality</string>
+    <string name="char_scenario_label">Scenario</string>
+    <string name="char_system_prompt_label">Main Prompt (System Prompt)</string>
+    <string name="char_post_history_label">Post-History Instructions (Jailbreak)</string>
+    <string name="char_mes_example_label">Example Dialogue</string>
+    <string name="char_creator_notes_label">Creator\'s Notes</string>
+    <string name="char_depth_prompt_label">Character\'s Note (depth prompt)</string>
+    <string name="char_depth_prompt_depth">Injection depth</string>
+    <string name="char_depth_prompt_role">Role</string>
+    <string name="role_system">System</string>
+    <string name="role_user">User</string>
+    <string name="role_assistant">Assistant</string>
     <string name="assoc_worldbooks">Associated World Books</string>
     <string name="assoc_preset">Linked Preset (optional)</string>
     <string name="stream_output_label">Streaming output</string>
@@ -177,6 +206,17 @@
     <string name="basic_params">Parameters</string>
     <string name="prompts">Prompts</string>
     <string name="regex_tab">Regex</string>
+    <string name="regex_import">Import regex script</string>
+    <string name="edit_regex">Edit Regex</string>
+    <string name="delete_regex_title">Delete Regex Script</string>
+    <string name="find_regex_label">Find (Regex)</string>
+    <string name="replace_string_label">Replace With</string>
+    <string name="placement_user">Apply to user messages</string>
+    <string name="placement_ai">Apply to AI messages</string>
+    <string name="regex_markdown_only">Display only</string>
+    <string name="regex_prompt_only">Prompt only</string>
+    <string name="regex_min_depth">Min depth</string>
+    <string name="regex_max_depth">Max depth</string>
     <string name="sampling_params">Sampling</string>
     <string name="context_params">Context</string>
     <string name="add_prompt">Add Prompt</string>
@@ -200,6 +240,7 @@
     <string name="help_frequency_penalty">Penalizes repeated tokens. Positive=less repetition</string>
     <string name="help_presence_penalty">Penalizes tokens already present to encourage new topics. Positive=more diverse</string>
     <string name="help_repetition_penalty">Direct repetition penalty. >1=less repetition, 1.0=off</string>
+    <string name="help_seed">Random seed; a fixed value reproduces the same result for identical input. -1=random each time</string>
     <string name="help_max_context">Maximum context length sent to AI (tokens)</string>
     <string name="help_max_tokens">Maximum generation length for AI response (tokens)</string>
 
@@ -212,9 +253,76 @@
     <string name="entry_keys_label">Trigger words (comma separated)</string>
     <string name="entry_content_label">Content</string>
     <string name="entry_enabled">Enabled</string>
+    <string name="entry_constant">Constant (always inject)</string>
+    <string name="entry_position">Position</string>
+    <string name="entry_order">Order</string>
+    <string name="entry_depth">Depth</string>
+    <string name="entry_probability">Probability</string>
+    <string name="entry_secondary_keys">Secondary keys (comma separated)</string>
+    <string name="entry_selective_logic">Secondary logic</string>
+    <string name="pos_before_char">Before character</string>
+    <string name="pos_after_char">After character</string>
+    <string name="pos_at_depth">At depth</string>
+    <string name="pos_em_top">Before examples</string>
+    <string name="pos_em_bottom">After examples</string>
+    <string name="pos_an_top">Before author\'s note</string>
+    <string name="pos_an_bottom">After author\'s note</string>
+    <string name="pos_at_depth_system">@D System at depth</string>
+    <string name="pos_at_depth_user">@D User at depth</string>
+    <string name="pos_at_depth_assistant">@D AI at depth</string>
+    <string name="pos_outlet">Outlet (named)</string>
+    <string name="logic_and_any">Any hits</string>
+    <string name="logic_not_all">Not all hit</string>
+    <string name="logic_not_any">None hit</string>
+    <string name="logic_and_all">All hit</string>
     <string name="enabled_status_on">On</string>
     <string name="enabled_status_off">Off</string>
     <string name="edit_entry">Edit Entry</string>
+
+    <!-- World Info entry — status & advanced fields -->
+    <string name="entry_status">Status</string>
+    <string name="status_constant">Constant</string>
+    <string name="status_keyword">Keyword</string>
+    <string name="status_vectorized">Vectorized</string>
+    <string name="status_vectorized_note">Vectorized needs an embedding backend; state is kept but not activated yet</string>
+    <string name="entry_scan_depth">Scan depth</string>
+    <string name="entry_case_sensitive">Case sensitive</string>
+    <string name="entry_match_whole_words">Match whole words</string>
+    <string name="entry_outlet_name">Outlet name</string>
+    <string name="entry_advanced">Advanced</string>
+    <string name="entry_recursion">Recursion</string>
+    <string name="entry_exclude_recursion">Non-recursable (excluded)</string>
+    <string name="entry_prevent_recursion">Prevent further recursion</string>
+    <string name="entry_delay_until_recursion">Delay until recursion</string>
+    <string name="entry_group">Inclusion group (comma-separated)</string>
+    <string name="entry_group_weight">Group weight</string>
+    <string name="entry_group_override">Group priority</string>
+    <string name="entry_use_group_scoring">Group scoring</string>
+    <string name="entry_timed">Timed effects (by message count)</string>
+    <string name="entry_sticky">Sticky</string>
+    <string name="entry_cooldown">Cooldown</string>
+    <string name="entry_delay">Delay</string>
+    <string name="tri_follow_global">Follow global</string>
+    <string name="tri_on">On</string>
+    <string name="tri_off">Off</string>
+
+    <!-- World Info global activation settings -->
+    <string name="wi_activation_settings">World Info Activation</string>
+    <string name="wi_scan_depth">Scan depth</string>
+    <string name="wi_context_percent">Context percent</string>
+    <string name="wi_budget_cap">Token budget cap</string>
+    <string name="wi_min_activations">Min activations</string>
+    <string name="wi_min_act_depth_max">Max depth</string>
+    <string name="wi_max_recursion">Max recursion depth</string>
+    <string name="wi_include_names">Include names</string>
+    <string name="wi_recursive">Recursive scan</string>
+    <string name="wi_case_sensitive">Case sensitive</string>
+    <string name="wi_match_whole_words">Match whole words</string>
+    <string name="wi_use_group_scoring">Use group scoring</string>
+    <string name="wi_overflow_alert">Overflow alert</string>
+    <string name="wi_settings_scan_budget">Scan &amp; budget</string>
+    <string name="wi_settings_matching">Matching options</string>
+    <string name="wi_zero_unlimited">0 = unlimited</string>
 
     <!-- API Config -->
     <string name="no_api_providers">No API providers</string>
@@ -277,4 +385,10 @@
     <string name="balance_label">Check Balance</string>
     <string name="balance_api_path">Balance API Path</string>
     <string name="balance_json_key">Result JSON Key</string>
+    <string name="saved">Saved</string>
+    <string name="test_non_streaming">Non-streaming</string>
+    <string name="test_streaming">Streaming</string>
+    <string name="test_tool_call">Tool Call</string>
+    <string name="test_tool_called_fmt">Called %1$s, args %2$s</string>
+    <string name="test_tool_not_called_fmt">No tool call, response: %s</string>
 </resources>

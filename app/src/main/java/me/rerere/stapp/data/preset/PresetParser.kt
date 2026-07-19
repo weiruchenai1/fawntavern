@@ -1,5 +1,6 @@
 package me.rerere.stapp.data.preset
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -57,6 +58,14 @@ object PresetParser {
             }
         }
 
+        // 预设私有正则脚本（自定义字段 regex_scripts，ST 原生预设无此字段，纯附加）
+        val regexScripts = mutableListOf<RegexScript>()
+        json.optJSONArray("regex_scripts")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                arr.optJSONObject(i)?.let { regexScripts.add(parseRegexScript(it)) }
+            }
+        }
+
         // 根据对应的 source 字段推导当前使用的模型名
         val source = json.optString("chat_completion_source", "openai")
         val modelName = when (source) {
@@ -91,9 +100,39 @@ object PresetParser {
             streamOpenai = json.optBoolean("stream_openai", true),
             bypassStatusCheck = json.optBoolean("bypass_status_check", false),
             functionCalling = json.optBoolean("function_calling", false),
-            prompts = prompts,
+            prompts = orderPromptsBy(prompts, promptOrder),
             promptOrder = promptOrder,
+            regexScripts = regexScripts,
         )
+    }
+
+    /**
+     * 依 prompt_order 重排内容池。ST 里「顺序 + 是否启用」的权威来源是 prompt_order，
+     * prompts[] 只是无序内容池、且本身不带 enabled（详见预设设计文档 3.1 关键陷阱）。
+     * 选主排序组（characterId==100001 优先，否则首组，与 [me.rerere.stapp.domain.PromptBuilder] 一致），
+     * 按其顺序排列 prompts 并把每条 toggle 的 enabled 合并进 [PromptItem]；
+     * order 未包含的 prompt 视为未启用、按原相对顺序附于末尾。prompt_order 缺失时原样返回。
+     */
+    private fun orderPromptsBy(
+        prompts: List<PromptItem>,
+        promptOrder: List<PromptOrderEntry>,
+    ): List<PromptItem> {
+        val main = promptOrder.firstOrNull { it.characterId == 100001 }
+            ?: promptOrder.firstOrNull()
+        if (main == null || main.order.isEmpty()) return prompts
+        val byId = prompts.associateBy { it.identifier }
+        val seen = LinkedHashSet<String>()
+        val result = mutableListOf<PromptItem>()
+        for (t in main.order) {
+            val p = byId[t.identifier] ?: continue
+            if (!seen.add(t.identifier)) continue
+            result.add(p.copy(enabled = t.enabled))
+        }
+        for (p in prompts) {
+            if (!seen.add(p.identifier)) continue
+            result.add(p.copy(enabled = false))
+        }
+        return result
     }
 
     /** 解析 ST 正则脚本 JSON 文件。 */
@@ -127,5 +166,22 @@ object PresetParser {
             trimStrings = trimStrings,
             substituteRegex = substituteRegex,
         )
+    }
+
+    /** 将正则脚本序列化回 ST 兼容 JSON（用于写入预设的 regex_scripts）。 */
+    fun serializeRegexScript(s: RegexScript): JSONObject = JSONObject().apply {
+        put("id", s.id)
+        put("scriptName", s.scriptName)
+        put("findRegex", s.findRegex)
+        put("replaceString", s.replaceString)
+        put("disabled", s.disabled)
+        put("placement", JSONArray().also { s.placement.forEach { p -> it.put(p) } })
+        put("markdownOnly", s.markdownOnly)
+        put("promptOnly", s.promptOnly)
+        put("runOnEdit", s.runOnEdit)
+        put("minDepth", s.minDepth ?: JSONObject.NULL)
+        put("maxDepth", s.maxDepth ?: JSONObject.NULL)
+        put("trimStrings", JSONArray().also { s.trimStrings.forEach { t -> it.put(t) } })
+        put("substituteRegex", s.substituteRegex)
     }
 }

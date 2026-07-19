@@ -28,6 +28,8 @@ data class StPreset(
     val functionCalling: Boolean = false,
     val prompts: List<PromptItem> = emptyList(),
     val promptOrder: List<PromptOrderEntry> = emptyList(),
+    // 预设私有的正则脚本（存进预设 JSON 的 regex_scripts）——只在关联该预设的聊天里生效
+    val regexScripts: List<RegexScript> = emptyList(),
 )
 
 data class PromptItem(

@@ -32,6 +32,7 @@ object ChatRepository {
             s = SessionEntity(
                 id = session.id, charFile = session.charFile, charName = session.charName,
                 createdAt = session.createdAt, updatedAt = session.updatedAt,
+                timedWiJson = if (session.timedWi.isEmpty()) "" else json.encodeToString(session.timedWi),
             ),
             ms = session.messages.map { it.toEntity(session.id) },
         )
@@ -71,6 +72,8 @@ object ChatRepository {
         messages = messages.sortedBy { it.ts }.map { it.toModel() },
         createdAt = session.createdAt,
         updatedAt = session.updatedAt,
+        timedWi = if (session.timedWiJson.isBlank()) emptyMap()
+                  else try { json.decodeFromString<Map<String, Int>>(session.timedWiJson) } catch (_: Exception) { emptyMap() },
     )
 
     private fun MessageEntity.toModel() = ChatMessage(

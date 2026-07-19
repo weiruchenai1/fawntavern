@@ -27,11 +27,14 @@ import me.rerere.stapp.data.preset.PresetRepository
 import me.rerere.stapp.data.preset.StPreset
 import me.rerere.stapp.data.preset.toCharRegex
 import me.rerere.stapp.data.settings.UserProfileStore
+import me.rerere.stapp.data.settings.PromptLogStore
+import me.rerere.stapp.data.settings.WorldInfoSettingsStore
 import me.rerere.stapp.data.worldbook.WorldBook
 import me.rerere.stapp.data.worldbook.WorldBookRepository
 import me.rerere.stapp.domain.ConversationOps
 import me.rerere.stapp.domain.GenerationController
 import me.rerere.stapp.domain.PromptBuilder
+import me.rerere.stapp.domain.PromptLog
 
 /**
  * 聊天状态容器：只负责持有 UI 状态、调度协程和落盘。
@@ -60,20 +63,24 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // 当前角色关联的世界书/预设（随角色卡切换加载，生成时进入 Prompt 拼装）
     var activeWorldBooks by mutableStateOf<List<WorldBook>>(emptyList()); private set
     var activePreset by mutableStateOf<StPreset?>(null); private set
-    // 独立导入的正则脚本（regex/ 目录），与角色卡内嵌正则一起作用于显示与发送
-    var globalRegex by mutableStateOf<List<CharRegex>>(emptyList()); private set
     // 输入草稿放这里，Activity 重建后不丢
     var inputText by mutableStateOf("")
     var attachments by mutableStateOf(listOf<Attachment>())
 
-    /** 显示侧正则：角色卡内嵌 + 独立导入 */
+    /** 当前预设私有的正则（关联该预设的聊天才生效），转成引擎统一类型 */
+    private val presetRegex: List<CharRegex>
+        get() = activePreset?.regexScripts?.map { it.toCharRegex() } ?: emptyList()
+
+    /** 显示侧正则：角色卡内嵌 + 当前预设私有 */
     val displayRegexScripts: List<CharRegex>
-        get() = (currentCard?.regexScripts ?: emptyList()) + globalRegex
+        get() = (currentCard?.regexScripts ?: emptyList()) + presetRegex
 
     private val generation = GenerationController()
     private val ctx: Application get() = getApplication()
 
     init {
+        // Prompt 调试日志开关：把持久化设置同步到内存 sink（关闭时生成不记录）
+        PromptLog.enabled = PromptLogStore.isEnabled(app)
         // 会话列表来自 Repository 的 Flow：任何 save/delete/clear 后自动刷新
         viewModelScope.launch {
             // 每次启动兜底：确保内置"默认角色"卡存在（可编辑、不可删除），并把无角色卡
@@ -97,7 +104,6 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 loadPromptData()
             }
         }
-        viewModelScope.launch { reloadGlobalRegex() }
         reloadUserProfile()
     }
 
@@ -132,11 +138,10 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 从世界书/预设页返回或数据管理后刷新：关联内容与独立正则可能已被增删改 */
+    /** 从世界书/预设页返回或数据管理后刷新：关联内容与预设私有正则可能已被增删改 */
     fun reloadPromptData() {
         viewModelScope.launch {
             loadPromptData()
-            reloadGlobalRegex()
         }
     }
 
@@ -149,12 +154,6 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         activePreset = card?.linkedPreset?.takeIf { it.isNotBlank() }
             ?.let { name -> try { PresetRepository.load(ctx, name) } catch (_: Exception) { null } }
-    }
-
-    private suspend fun reloadGlobalRegex() {
-        globalRegex = PresetRepository.listRegexNames(ctx).mapNotNull { name ->
-            try { PresetRepository.loadRegex(ctx, name).toCharRegex() } catch (_: Exception) { null }
-        }
     }
 
     fun currentProviderAndModel(): Pair<ApiProvider, String>? {
@@ -233,9 +232,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         ConversationOps.newSession(currentCard, defName, defName, userName)
                     }
             }
-            // 世界书/预设/独立正则也可能被清空
+            // 世界书/预设（含预设私有正则）也可能被清空
             loadPromptData()
-            reloadGlobalRegex()
         }
     }
 
@@ -309,7 +307,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 preset = activePreset,
                 // 重答中间消息时世界书扫描只看该消息及之前的历史，与旧行为（截断后扫描）一致
                 history = if (regenIdx != null) base.messages.subList(0, regenIdx + 1) else base.messages,
-                promptRegex = (currentCard?.regexScripts ?: emptyList()) + globalRegex,
+                promptRegex = (currentCard?.regexScripts ?: emptyList()) + presetRegex,
+                timedWi = base.timedWi,
+                // 重答历史消息不回写定时状态，避免污染 sticky/cooldown 窗口
+                updateTimed = regenIdx == null,
+                wiSettings = WorldInfoSettingsStore.get(ctx),
             )
             val final = generation.run(
                 base = base,
@@ -322,7 +324,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 errorText = { e -> ctx.getString(R.string.chat_error_fmt, e.message ?: "") },
                 onUpdate = { session = it },
             )
-            ChatRepository.save(ctx, final)
+            ChatRepository.save(ctx, final.copy(timedWi = built.timedWi))
             generating = false
         }
     }

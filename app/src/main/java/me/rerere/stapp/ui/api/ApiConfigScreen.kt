@@ -1,5 +1,6 @@
 package me.rerere.stapp.ui.api
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,16 +29,19 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.*
 import me.rerere.stapp.data.api.ApiConfigStore
 import me.rerere.stapp.data.api.ApiProvider
+import me.rerere.stapp.data.api.ConnectionTester
 import me.rerere.stapp.data.api.ModelApi
 import kotlinx.coroutines.launch
 import me.rerere.stapp.ui.components.AppTopBar
 import sh.calvin.reorderable.ReorderableItem
 import me.rerere.stapp.ui.components.rememberReorderableList
 import me.rerere.stapp.ui.components.ConfirmDeleteDialog
+import me.rerere.stapp.ui.components.ModelPickerList
 import me.rerere.stapp.ui.components.Space4
 import me.rerere.stapp.ui.components.Space8
 import me.rerere.stapp.ui.components.Space12
 import me.rerere.stapp.ui.components.Space16
+import me.rerere.stapp.ui.chat.ModelPickerSheet
 
 val API_TYPES = listOf("openai" to "OpenAI", "google" to "Google", "claude" to "Claude")
 
@@ -59,7 +63,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
             onSave = { updated ->
                 config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
                 save()
-                editingId = null
+                Toast.makeText(context, context.getString(R.string.saved), Toast.LENGTH_SHORT).show()
             },
             onDelete = {
                 config = config.copy(providers = config.providers.filter { it.id != prov.id })
@@ -81,7 +85,10 @@ fun ApiConfigScreen(onBack: () -> Unit) {
             onSave = { newProv ->
                 config = config.copy(providers = config.providers + newProv)
                 save()
+                Toast.makeText(context, context.getString(R.string.saved), Toast.LENGTH_SHORT).show()
+                // 保存后原地转入编辑态：留在详情页，后续保存走更新而非重复新增
                 adding = false
+                editingId = newProv.id
             },
             onDelete = { adding = false }
         )
@@ -235,7 +242,8 @@ private fun ProviderDetailScreen(
         }
     ) { padding ->
         when (tab) {
-            0 -> ProviderConfigTab(prov, { prov = it; onChange(it) }, onSave, onDelete, isNew, Modifier.padding(padding))
+            // 配置项仅改动草稿（prov），点“保存”才落盘；模型页无保存按钮，改动即时落盘
+            0 -> ProviderConfigTab(prov, { prov = it }, onSave, onDelete, isNew, Modifier.padding(padding))
             1 -> ProviderModelTab(prov, { prov = it; onChange(it) }, Modifier.padding(padding))
         }
     }
@@ -318,11 +326,7 @@ private fun ProviderConfigTab(
             Switch(responseApi, { responseApi = it })
         }
 
-        Row(Modifier.fillMaxWidth().clickable {
-                balanceEnabled = !balanceEnabled
-                update(currentProv.copy(balanceEnabled = balanceEnabled))
-            }.padding(vertical = Space4),
-            verticalAlignment = Alignment.CenterVertically,
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween) {
             Text(stringResource(R.string.balance_label), style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -344,39 +348,8 @@ private fun ProviderConfigTab(
         Spacer(Modifier.height(Space8))
 
         if (showTestDialog) {
-            val context = LocalContext.current
-            val scope = rememberCoroutineScope()
-            var testResult by remember { mutableStateOf("") }
-            var testing by remember { mutableStateOf(false) }
-            AlertDialog(
-                onDismissRequest = { showTestDialog = false },
-                title = { Text(stringResource(R.string.test_connection)) },
-                text = {
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space8)) {
-                        OutlinedButton(onClick = {
-                            testing = true; testResult = ""
-                            scope.launch {
-                                testResult = try {
-                                    val models = ModelApi.listModels(currentProv)
-                                    context.getString(R.string.test_success_fmt, models.size)
-                                } catch (e: Exception) {
-                                    context.getString(R.string.test_failed_fmt, e.message ?: "")
-                                }
-                                testing = false
-                            }
-                        }, enabled = !testing, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (testing) stringResource(R.string.testing) else stringResource(R.string.start_test))
-                        }
-                        if (testResult.isNotBlank()) {
-                            Text(testResult, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showTestDialog = false }) { Text(stringResource(R.string.close)) }
-                },
-            )
+            // 用当前编辑中的配置（含未保存改动）测试，模型取自 currentProv.models
+            ConnectionTestDialog(prov = currentProv, onDismiss = { showTestDialog = false })
         }
 
         if (showDeleteConfirm) {
@@ -539,9 +512,10 @@ private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, m
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val available = loadResult?.getOrNull()?.size ?: 0
-                BadgedBox(badge = {
-                    if (available > 0) Badge { Text(available.toString()) }
-                }) {
+                BadgedBox(
+                    modifier = Modifier.padding(end = Space8),
+                    badge = { if (available > 0) Badge { Text(available.toString()) } },
+                ) {
                     IconButton(onClick = { showPicker = true }) {
                         Icon(Lucide.Package, stringResource(R.string.available_models),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -672,3 +646,151 @@ private fun ModelPickerSheet(
         }
     }
 }
+
+/** 单项连接测试的状态 */
+private sealed interface TestState {
+    data object Idle : TestState
+    data object Loading : TestState
+    data class Ok(val text: String) : TestState
+    data class Err(val message: String) : TestState
+}
+
+/**
+ * 连接测试对话框：选一个模型，对其并发跑 非流式 / 流式 / 工具调用 三项测试，
+ * 各自独立显示进度与结果（成功显示回复文本，失败显示错误信息）。
+ * 模型选择通过底部面板（[ModelPickerSheet]）完成。
+ */
+@Composable
+private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var selectedModel by remember(prov.id) { mutableStateOf(prov.models.firstOrNull() ?: "") }
+    var showModelPicker by remember { mutableStateOf(false) }
+    var nonStreaming by remember { mutableStateOf<TestState>(TestState.Idle) }
+    var streaming by remember { mutableStateOf<TestState>(TestState.Idle) }
+    var streamingText by remember { mutableStateOf("") }
+    var toolCall by remember { mutableStateOf<TestState>(TestState.Idle) }
+
+    val running = nonStreaming is TestState.Loading ||
+        streaming is TestState.Loading || toolCall is TestState.Loading
+
+    fun runTests() {
+        if (selectedModel.isBlank()) return
+        nonStreaming = TestState.Loading
+        streaming = TestState.Loading
+        streamingText = ""
+        toolCall = TestState.Loading
+        scope.launch {
+            nonStreaming = runCatching { TestState.Ok(ConnectionTester.testNonStreaming(prov, selectedModel)) }
+                .getOrElse { TestState.Err(it.message ?: it.toString()) }
+        }
+        scope.launch {
+            streaming = runCatching {
+                ConnectionTester.testStreaming(prov, selectedModel) { streamingText += it }
+                TestState.Ok(streamingText)
+            }.getOrElse { TestState.Err(it.message ?: it.toString()) }
+        }
+        scope.launch {
+            toolCall = runCatching {
+                val r = ConnectionTester.testToolCall(prov, selectedModel)
+                TestState.Ok(
+                    if (r.toolName.isNotBlank())
+                        context.getString(R.string.test_tool_called_fmt, r.toolName, r.args)
+                    else context.getString(R.string.test_tool_not_called_fmt, r.text)
+                )
+            }.getOrElse { TestState.Err(it.message ?: it.toString()) }
+        }
+    }
+
+    // 模型选择底板：从屏幕底部滑出，点击模型后自动关闭并把选中模型带回弹窗
+    if (showModelPicker) {
+        ModelPickerSheet(
+            providers = listOf(prov),
+            currentModel = "${prov.id}::$selectedModel",
+            onSelect = { _, modelId -> selectedModel = modelId; showModelPicker = false },
+            onDismiss = { showModelPicker = false },
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.test_connection)) },
+        text = {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space12)) {
+                // 已选模型：点击可重新打开底板换模型
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .clickable { showModelPicker = true }
+                        .padding(horizontal = Space12, vertical = Space8),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Space8),
+                ) {
+                    ProviderIcon(selectedModel.ifBlank { prov.name }, size = 24.dp)
+                    Text(
+                        text = selectedModel.ifBlank { stringResource(R.string.select_model_hint) },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (selectedModel.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Icon(Lucide.ChevronDown, null, Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TestResultRow(stringResource(R.string.test_non_streaming), nonStreaming)
+                TestResultRow(stringResource(R.string.test_streaming), streaming, liveText = streamingText)
+                TestResultRow(stringResource(R.string.test_tool_call), toolCall)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { runTests() }, enabled = !running && selectedModel.isNotBlank()) {
+                Text(if (running) stringResource(R.string.testing) else stringResource(R.string.start_test))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+        },
+    )
+}
+
+@Composable
+private fun TestResultRow(label: String, state: TestState, liveText: String = "") {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(Space8),
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp))
+        when (state) {
+            TestState.Idle -> Text("—", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TestState.Loading -> Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (liveText.isNotBlank()) {
+                    Text(liveText, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            is TestState.Ok -> Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {
+                Text("✓", style = MaterialTheme.typography.titleMedium, color = successGreen())
+                val shown = liveText.ifBlank { state.text }
+                if (shown.isNotBlank()) {
+                    Text(shown, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            is TestState.Err -> Text(state.message, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f),
+                maxLines = 4, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun successGreen(): Color =
+    if (isSystemInDarkTheme()) Color(0xFF86EFAC) else Color(0xFF166534)

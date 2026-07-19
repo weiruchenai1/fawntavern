@@ -48,7 +48,9 @@ import com.composables.icons.lucide.Monitor
 import com.composables.icons.lucide.Moon
 import com.composables.icons.lucide.Package
 import com.composables.icons.lucide.Route
+import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.Smile
+import com.composables.icons.lucide.SlidersHorizontal
 import com.composables.icons.lucide.SquareLibrary
 import com.composables.icons.lucide.Sun
 import me.rerere.stapp.data.settings.LanguageStore
@@ -65,9 +67,11 @@ fun SettingsScreen(
     onNavigateToPresets: () -> Unit = {},
     onNavigateToCharacters: () -> Unit = {},
     onNavigateToWorldBooks: () -> Unit = {},
+    onNavigateToWiSettings: () -> Unit = {},
     onNavigateToApiConfig: () -> Unit = {},
     onNavigateToDataManagement: () -> Unit = {},
     onNavigateToFontSize: () -> Unit = {},
+    onNavigateToPromptLog: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var currentLang by remember { mutableStateOf(LanguageStore.getLanguage(context)) }
@@ -209,6 +213,10 @@ fun SettingsScreen(
                     { Icon(Lucide.ALargeSmall, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     stringResource(R.string.font_size), onClick = onNavigateToFontSize)
+                SettingsRow(
+                    { Icon(Lucide.ScrollText, null, Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    stringResource(R.string.debug_log), onClick = onNavigateToPromptLog)
             }
             SettingsSection(stringResource(R.string.workspace)) {
                 SettingsRow(
@@ -223,6 +231,10 @@ fun SettingsScreen(
                     { Icon(Lucide.SquareLibrary, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     stringResource(R.string.world_books), onClick = onNavigateToWorldBooks)
+                SettingsRow(
+                    { Icon(Lucide.SlidersHorizontal, null, Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    stringResource(R.string.wi_activation_settings), onClick = onNavigateToWiSettings)
                 SettingsRow(
                     { Icon(Lucide.Package, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },

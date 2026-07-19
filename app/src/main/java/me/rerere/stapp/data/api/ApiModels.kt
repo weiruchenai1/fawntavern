@@ -22,6 +22,9 @@ data class GenParams(
     val topP: Float? = null,
     val topK: Int? = null,
     val maxTokens: Int? = null,
+    val frequencyPenalty: Float? = null,
+    val presencePenalty: Float? = null,
+    val seed: Int? = null,
 )
 
 /** 合并相邻同角色消息（Claude/Gemini 要求 user/assistant 交替出现） */

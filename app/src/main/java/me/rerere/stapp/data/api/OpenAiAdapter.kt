@@ -19,6 +19,9 @@ internal object OpenAiAdapter : ProviderAdapter {
             params?.temperature?.let { put("temperature", it.toDouble()) }
             params?.topP?.let { put("top_p", it.toDouble()) }
             params?.maxTokens?.let { put("max_tokens", it) }
+            params?.frequencyPenalty?.let { put("frequency_penalty", it.toDouble()) }
+            params?.presencePenalty?.let { put("presence_penalty", it.toDouble()) }
+            params?.seed?.let { put("seed", it) }
             put("messages", JSONArray().apply {
                 messages.forEach { m -> put(encodeMessage(m)) }
             })
