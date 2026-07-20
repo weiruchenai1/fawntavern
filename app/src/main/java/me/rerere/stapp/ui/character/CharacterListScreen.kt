@@ -8,7 +8,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,9 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -68,6 +65,8 @@ import me.rerere.stapp.data.character.CharacterRepository
 import sh.calvin.reorderable.ReorderableItem
 import me.rerere.stapp.ui.components.rememberReorderableList
 import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.appClickable
+import me.rerere.stapp.ui.components.draggableLiftScale
 import me.rerere.stapp.ui.components.ConfirmDeleteDialog
 import me.rerere.stapp.ui.components.EmptyState
 import me.rerere.stapp.ui.components.LoadingState
@@ -275,7 +274,7 @@ private fun CharCard(
     }
     Row(
         Modifier.fillMaxWidth()
-            .scale(if (dragging) 0.95f else 1f)
+            .draggableLiftScale(dragging)
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .padding(end = Space16),
@@ -285,7 +284,7 @@ private fun CharCard(
         // 点按/长按只在内容区生效：长按 grip 只触发拖拽，不会同时弹出导出/删除菜单
         Row(
             Modifier.weight(1f)
-                .pointerInput(Unit) { detectTapGestures(onTap = { onClick() }, onLongPress = { onLongPress() }) }
+                .appClickable(onClick = onClick, onLongClick = onLongPress)
                 .padding(start = Space16, top = Space16, bottom = Space16),
             horizontalArrangement = Arrangement.spacedBy(Space12),
             verticalAlignment = Alignment.CenterVertically,

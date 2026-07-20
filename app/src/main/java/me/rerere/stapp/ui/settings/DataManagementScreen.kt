@@ -51,7 +51,7 @@ import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircle
 import com.composables.icons.lucide.Package
-import com.composables.icons.lucide.Route
+import com.composables.icons.lucide.SlidersHorizontal
 import com.composables.icons.lucide.Smile
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.TriangleAlert
@@ -114,7 +114,7 @@ fun DataManagementScreen(onBack: () -> Unit) {
                 key = "presets",
                 labelResId = R.string.presets,
                 icon = {
-                    Icon(Lucide.Route, null, Modifier.size(24.dp),
+                    Icon(Lucide.SlidersHorizontal, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
                 itemCount = { PresetRepository.listNames(context).size },

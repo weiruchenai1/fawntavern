@@ -2,7 +2,6 @@ package me.rerere.stapp.ui.preset
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,6 +32,7 @@ import me.rerere.stapp.data.preset.PresetRepository
 import me.rerere.stapp.data.preset.StPreset
 import me.rerere.stapp.ui.components.ImportableListScreen
 import me.rerere.stapp.ui.components.Space16
+import me.rerere.stapp.ui.components.appClickable
 
 @Composable
 fun PresetListScreen(onBack: () -> Unit) {
@@ -87,12 +86,7 @@ private fun PresetCard(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { onClick() },
-                    onLongPress = { onLongPress() },
-                )
-            }
+            .appClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(Space16),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -62,6 +62,7 @@ import me.rerere.stapp.data.worldbook.WorldBookEntry
 import me.rerere.stapp.data.worldbook.WorldBookPos
 import me.rerere.stapp.data.worldbook.WorldBookRepository
 import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.AppIconButton
 import me.rerere.stapp.ui.components.ConfirmDeleteDialog
 import me.rerere.stapp.ui.components.Space4
 import me.rerere.stapp.ui.components.Space8
@@ -183,11 +184,21 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (entry.enabled) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.onSurfaceVariant)
-                            Icon(Lucide.Pencil, stringResource(R.string.edit), Modifier.size(16.dp).clickable { editingEntry = entry },
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.width(Space8))
-                            Icon(Lucide.Trash2, stringResource(R.string.delete), Modifier.size(16.dp).clickable { deletingEntry = entry },
-                                tint = MaterialTheme.colorScheme.error)
+                            AppIconButton(
+                                icon = Lucide.Pencil,
+                                contentDescription = stringResource(R.string.edit),
+                                onClick = { editingEntry = entry },
+                                size = 32.dp,
+                                iconSize = 16.dp,
+                            )
+                            AppIconButton(
+                                icon = Lucide.Trash2,
+                                contentDescription = stringResource(R.string.delete),
+                                onClick = { deletingEntry = entry },
+                                tint = MaterialTheme.colorScheme.error,
+                                size = 32.dp,
+                                iconSize = 16.dp,
+                            )
                         }
                         if (expanded) {
                             Text(entry.content, style = MaterialTheme.typography.bodySmall,
@@ -313,11 +324,11 @@ private fun EntryEditDialog(entry: WorldBookEntry, onDismiss: () -> Unit, onSave
                 // ── 高级（默认折叠） ──
                 Row(Modifier.fillMaxWidth().clickable { showAdvanced = !showAdvanced },
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Space4)) {
-                    Icon(if (showAdvanced) Lucide.ChevronDown else Lucide.ChevronRight, null,
-                        Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(stringResource(R.string.entry_advanced), style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium)
+                    Icon(if (showAdvanced) Lucide.ChevronDown else Lucide.ChevronRight, null,
+                        Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (showAdvanced) {
                     OutlinedTextField(eScanDepth, { eScanDepth = it.filter { c -> c.isDigit() } },

@@ -68,6 +68,8 @@ import me.rerere.stapp.data.preset.PromptItem
 import me.rerere.stapp.data.preset.RegexScript
 import me.rerere.stapp.data.preset.StPreset
 import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.AppIconButton
+import me.rerere.stapp.ui.components.draggableLiftScale
 import me.rerere.stapp.ui.components.ConfirmDeleteDialog
 import me.rerere.stapp.ui.components.rememberReorderableList
 import sh.calvin.reorderable.ReorderableItem
@@ -323,7 +325,7 @@ private fun PromptRow(
 ) {
     Row(
         Modifier.fillMaxWidth()
-            .scale(if (dragging) 0.97f else 1f)
+            .draggableLiftScale(dragging)
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .clickable { onEdit() }
@@ -351,8 +353,14 @@ private fun PromptRow(
             }
         }
         Switch(checked = item.enabled, onCheckedChange = { onToggle() })
-        Icon(Lucide.Trash2, stringResource(R.string.delete), Modifier.size(18.dp).clickable { onDelete() },
-            tint = MaterialTheme.colorScheme.error)
+        AppIconButton(
+            icon = Lucide.Trash2,
+            contentDescription = stringResource(R.string.delete),
+            onClick = onDelete,
+            tint = MaterialTheme.colorScheme.error,
+            size = 32.dp,
+            iconSize = 18.dp,
+        )
     }
 }
 
@@ -429,8 +437,14 @@ private fun RegexRow(
             }
         }
         Switch(checked = enabled, onCheckedChange = { onToggle() })
-        Icon(Lucide.Trash2, stringResource(R.string.delete), Modifier.size(18.dp).clickable { onDelete() },
-            tint = MaterialTheme.colorScheme.error)
+        AppIconButton(
+            icon = Lucide.Trash2,
+            contentDescription = stringResource(R.string.delete),
+            onClick = onDelete,
+            tint = MaterialTheme.colorScheme.error,
+            size = 32.dp,
+            iconSize = 18.dp,
+        )
     }
 }
 

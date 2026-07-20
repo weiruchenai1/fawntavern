@@ -62,6 +62,7 @@ fun <T : Any> ImportableListScreen(
     deleteItem: suspend (String) -> Unit,
     onOpen: (T) -> Unit,
     itemCard: @Composable (name: String, item: T, onClick: () -> Unit, onLongPress: () -> Unit) -> Unit,
+    actions: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -139,7 +140,7 @@ fun <T : Any> ImportableListScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(stringResource(titleRes), onBack) },
+        topBar = { AppTopBar(stringResource(titleRes), onBack, actions) },
         floatingActionButton = {
             FloatingActionButton(onClick = { importLauncher.launch(importMimeType) }) {
                 Icon(Lucide.FilePlus, stringResource(R.string.import_label), Modifier.size(24.dp))

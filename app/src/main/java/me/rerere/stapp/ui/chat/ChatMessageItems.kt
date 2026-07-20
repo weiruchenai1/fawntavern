@@ -2,8 +2,6 @@ package me.rerere.stapp.ui.chat
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +51,7 @@ import me.rerere.stapp.data.character.CharRegex
 import me.rerere.stapp.ui.api.ProviderIcon
 import me.rerere.stapp.ui.components.Space8
 import me.rerere.stapp.ui.components.Space12
+import me.rerere.stapp.ui.components.noRippleClickable
 
 /** 把内容的最大宽度限制为父约束的 [fraction]（用户气泡不超过行宽的 ~80%） */
 private fun Modifier.maxWidthFraction(fraction: Float): Modifier = layout { measurable, constraints ->
@@ -155,16 +154,16 @@ internal fun UserMsg(
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Lucide.Copy, stringResource(R.string.copy),
-                Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onCopy() }
+                Modifier.noRippleClickable { onCopy() }
                     .padding(horizontal = s8, vertical = s8).size(iconSz),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Icon(Lucide.RotateCcw, stringResource(R.string.regenerate),
-                Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onRegenerate() }
+                Modifier.noRippleClickable { onRegenerate() }
                     .padding(horizontal = s8, vertical = s8).size(iconSz),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
             // 末位插槽不带 end padding，让图形与气泡右缘对齐
             Icon(Lucide.EllipsisVertical, stringResource(R.string.more),
-                Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onMore() }
+                Modifier.noRippleClickable { onMore() }
                     .padding(start = s8, top = s8, bottom = s8).size(iconSz),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -208,7 +207,7 @@ internal fun AIMsg(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(s8),
-                modifier = Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { expanded = !expanded },
+                modifier = Modifier.noRippleClickable { expanded = !expanded },
             ) {
                 Text(
                     stringResource(R.string.thinking_took_fmt, msg.reasoningMs / 1000.0f),
@@ -243,15 +242,15 @@ internal fun AIMsg(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // 首位插槽不带 start padding，让图形与消息内容左缘对齐
                     Icon(Lucide.Copy, stringResource(R.string.copy),
-                        Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onCopy() }
+                        Modifier.noRippleClickable { onCopy() }
                             .padding(top = s8, bottom = s8, end = s8).size(iconSz),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Icon(Lucide.RotateCcw, stringResource(R.string.regenerate),
-                        Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onRegenerate() }
+                        Modifier.noRippleClickable { onRegenerate() }
                             .padding(horizontal = s8, vertical = s8).size(iconSz),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Icon(Lucide.EllipsisVertical, stringResource(R.string.more),
-                        Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onMore() }
+                        Modifier.noRippleClickable { onMore() }
                             .padding(horizontal = s8, vertical = s8).size(iconSz),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -262,7 +261,7 @@ internal fun AIMsg(
                         val canPrev = msg.altIdx > 0
                         val canNext = msg.altIdx < msg.alts.lastIndex
                         Icon(Lucide.ChevronLeft, null,
-                            Modifier.clickable(enabled = canPrev, indication = null, interactionSource = remember { MutableInteractionSource() }) { onPrevAlt() }
+                            Modifier.noRippleClickable(enabled = canPrev) { onPrevAlt() }
                                 .padding(horizontal = s8, vertical = s8).size(iconSz),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (canPrev) 1f else 0.35f))
                         Text("${msg.altIdx + 1}/${msg.alts.size}",
@@ -270,7 +269,7 @@ internal fun AIMsg(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         // 末位插槽不带 end padding，让图形与右缘对齐
                         Icon(Lucide.ChevronRight, null,
-                            Modifier.clickable(enabled = canNext, indication = null, interactionSource = remember { MutableInteractionSource() }) { onNextAlt() }
+                            Modifier.noRippleClickable(enabled = canNext) { onNextAlt() }
                                 .padding(start = s8, top = s8, bottom = s8).size(iconSz),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (canNext) 1f else 0.35f))
                     }

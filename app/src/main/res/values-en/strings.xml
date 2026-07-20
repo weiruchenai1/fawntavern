@@ -307,7 +307,7 @@
     <string name="tri_off">Off</string>
 
     <!-- World Info global activation settings -->
-    <string name="wi_activation_settings">World Info Activation</string>
+    <string name="wi_activation_settings">Global Activation Settings</string>
     <string name="wi_scan_depth">Scan depth</string>
     <string name="wi_context_percent">Context percent</string>
     <string name="wi_budget_cap">Token budget cap</string>

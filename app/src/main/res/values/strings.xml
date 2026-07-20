@@ -307,7 +307,7 @@
     <string name="tri_off">关</string>
 
     <!-- World Info 全局激活设置 -->
-    <string name="wi_activation_settings">世界书激活设置</string>
+    <string name="wi_activation_settings">全局激活设置</string>
     <string name="wi_scan_depth">扫描深度</string>
     <string name="wi_context_percent">上下文百分比</string>
     <string name="wi_budget_cap">Token 预算上限</string>

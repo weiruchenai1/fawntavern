@@ -153,11 +153,13 @@ private fun LogEntryCard(entry: PromptLogEntry) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable { expanded = !expanded }
             .padding(Space12),
         verticalArrangement = Arrangement.spacedBy(Space8),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().clickable { expanded = !expanded },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Column(Modifier.weight(1f)) {
                 Text(
                     formatTime(entry.time),
@@ -220,11 +222,11 @@ private fun MessageRow(msg: LoggedMessage) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .clickable { expanded = !expanded }
             .padding(Space8),
         verticalArrangement = Arrangement.spacedBy(Space4),
     ) {
         Row(
+            Modifier.fillMaxWidth().clickable { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Space8),
         ) {

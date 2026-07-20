@@ -7,7 +7,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +57,7 @@ import me.rerere.stapp.ui.api.ProviderIcon
 import me.rerere.stapp.ui.components.Space8
 import me.rerere.stapp.ui.components.Space12
 import me.rerere.stapp.ui.components.Space16
+import me.rerere.stapp.ui.components.noRippleClickable
 
 internal data class Attachment(val uri: Uri, val isImage: Boolean)
 
@@ -69,7 +69,7 @@ internal fun ChatTopBar(title: String, subtitle: String, onDrawer: () -> Unit, o
     ) {
         Icon(
             Lucide.AlignLeft, "Menu",
-            Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onDrawer() }
+            Modifier.noRippleClickable { onDrawer() }
                 .padding(start = Space16, top = Space12, bottom = Space12, end = Space12).size(24.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -81,7 +81,7 @@ internal fun ChatTopBar(title: String, subtitle: String, onDrawer: () -> Unit, o
         }
         Icon(
             Lucide.MessageCirclePlus, "New Chat",
-            Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onNewChat() }
+            Modifier.noRippleClickable { onNewChat() }
                 .padding(start = Space12, top = Space12, bottom = Space12, end = Space16).size(24.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -180,7 +180,7 @@ internal fun ChatBottomArea(
                     // 模型选择器：只显示提供商图标（随所选模型变化）。
                     // 该插槽不带 start padding：让这组图标的左缘与输入框文本的 12dp 内边距对齐
                     Box(
-                        Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onSelectModel() }
+                        Modifier.noRippleClickable { onSelectModel() }
                             .padding(top = Space12, bottom = Space12, end = Space8).size(24.dp),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -195,7 +195,7 @@ internal fun ChatBottomArea(
                 Row(horizontalArrangement = Arrangement.spacedBy(Space8), verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         if (showAttachment) Lucide.X else Lucide.Plus, if (showAttachment) "Close" else "Add",
-                        Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onToggleAttachment() }
+                        Modifier.noRippleClickable { onToggleAttachment() }
                             .padding(vertical = Space12, horizontal = Space8).size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )

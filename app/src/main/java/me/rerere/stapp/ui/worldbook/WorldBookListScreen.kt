@@ -2,7 +2,6 @@ package me.rerere.stapp.ui.worldbook
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,21 +30,31 @@ import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.SlidersHorizontal
 import me.rerere.stapp.R
 import me.rerere.stapp.data.worldbook.WorldBook
 import me.rerere.stapp.data.worldbook.WorldBookRepository
+import me.rerere.stapp.ui.components.AppIconButton
 import me.rerere.stapp.ui.components.ImportableListScreen
 import me.rerere.stapp.ui.components.Space12
 import me.rerere.stapp.ui.components.Space16
+import me.rerere.stapp.ui.components.appClickable
 
 @Composable
 fun WorldBookListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var selectedBook by remember { mutableStateOf<WorldBook?>(null) }
+    var showWiSettings by remember { mutableStateOf(false) }
 
     if (selectedBook != null) {
         BackHandler { selectedBook = null }
         WorldBookViewScreen(book = selectedBook!!, onBack = { selectedBook = null })
+        return
+    }
+
+    if (showWiSettings) {
+        BackHandler { showWiSettings = false }
+        WorldInfoSettingsScreen(onBack = { showWiSettings = false })
         return
     }
 
@@ -68,6 +76,15 @@ fun WorldBookListScreen(onBack: () -> Unit) {
         renameItem = { old, new -> WorldBookRepository.rename(context, old, new) },
         deleteItem = { WorldBookRepository.delete(context, it) },
         onOpen = { selectedBook = it },
+        actions = {
+            AppIconButton(
+                icon = Lucide.SlidersHorizontal,
+                contentDescription = stringResource(R.string.wi_activation_settings),
+                onClick = { showWiSettings = true },
+                size = 32.dp,
+                iconSize = 24.dp,
+            )
+        },
         itemCard = { _, book, onClick, onLongPress ->
             BookCard(book, onClick = onClick, onLongPress = onLongPress)
         },
@@ -80,7 +97,7 @@ private fun BookCard(book: WorldBook, onClick: () -> Unit, onLongPress: () -> Un
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .pointerInput(Unit) { detectTapGestures(onTap = { onClick() }, onLongPress = { onLongPress() }) }
+            .appClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(Space16),
         verticalAlignment = Alignment.CenterVertically,
     ) {

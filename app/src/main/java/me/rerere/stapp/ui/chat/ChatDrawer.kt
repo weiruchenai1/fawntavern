@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -42,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -68,6 +66,8 @@ import me.rerere.stapp.ui.components.Space4
 import me.rerere.stapp.ui.components.Space8
 import me.rerere.stapp.ui.components.Space12
 import me.rerere.stapp.ui.components.Space16
+import me.rerere.stapp.ui.components.AppIconButton
+import me.rerere.stapp.ui.components.appClickable
 
 /** 根据当前小时返回对应的问候语字符串资源 ID */
 private fun greetingResId(): Int {
@@ -252,7 +252,7 @@ fun ChatDrawerContent(
             horizontalArrangement = Arrangement.spacedBy(Space8),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(40.dp).clickable { showAvatarDialog = true }) {
+            Box(Modifier.size(40.dp).clip(CircleShape).clickable { showAvatarDialog = true }) {
                 AvatarCircle(bitmap = avatarBitmap, color = avatarColor,
                     icon = Lucide.UserPen, size = 40.dp)
             }
@@ -265,9 +265,13 @@ fun ChatDrawerContent(
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f, fill = false),
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Icon(Lucide.PencilLine, stringResource(R.string.edit),
-                        Modifier.size(16.dp).clickable { showNameDialog = true },
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AppIconButton(
+                        icon = Lucide.PencilLine,
+                        contentDescription = stringResource(R.string.edit),
+                        onClick = { showNameDialog = true },
+                        size = 32.dp,
+                        iconSize = 16.dp,
+                    )
                 }
                 Text(stringResource(greetingResId()),
                     style = MaterialTheme.typography.labelSmall,
@@ -322,12 +326,10 @@ fun ChatDrawerContent(
                             if (selected) MaterialTheme.colorScheme.secondaryContainer
                             else Color.Transparent
                         )
-                        .pointerInput(s.id) {
-                            detectTapGestures(
-                                onTap = { onOpenSession(s.id) },
-                                onLongPress = { onDeleteSession(s.id) },
-                            )
-                        }
+                        .appClickable(
+                            onClick = { onOpenSession(s.id) },
+                            onLongClick = { onDeleteSession(s.id) },
+                        )
                         .padding(horizontal = Space8, vertical = 8.dp),
                 ) {
                     Text(title, style = MaterialTheme.typography.bodyMedium,
@@ -371,12 +373,19 @@ fun ChatDrawerContent(
         Row(Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically) {
-            Icon(Lucide.Smile, stringResource(R.string.characters),
-                Modifier.size(24.dp).clickable { onCharList() },
-                tint = MaterialTheme.colorScheme.primary)
-            Icon(Lucide.Bolt, stringResource(R.string.settings),
-                Modifier.size(24.dp).clickable { onSettings() },
-                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            AppIconButton(
+                icon = Lucide.Smile,
+                contentDescription = stringResource(R.string.characters),
+                onClick = onCharList,
+                tint = MaterialTheme.colorScheme.primary,
+                container = MaterialTheme.colorScheme.surfaceContainerHighest,
+            )
+            AppIconButton(
+                icon = Lucide.Bolt,
+                contentDescription = stringResource(R.string.settings),
+                onClick = onSettings,
+                container = MaterialTheme.colorScheme.surfaceContainerHighest,
+            )
         }
     }
 }

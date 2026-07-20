@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -73,6 +74,7 @@ import me.rerere.stapp.data.character.CharacterRepository
 import me.rerere.stapp.data.preset.PresetRepository
 import me.rerere.stapp.data.worldbook.WorldBookRepository
 import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.AppIconButton
 import me.rerere.stapp.ui.components.ConfirmDeleteDialog
 import me.rerere.stapp.ui.components.Space4
 import me.rerere.stapp.ui.components.Space8
@@ -367,7 +369,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                             selected = false, onClick = {},
                             label = { Text(tag) },
                             trailingIcon = {
-                                Icon(Lucide.X, stringResource(R.string.delete), Modifier.size(16.dp).clickable {
+                                Icon(Lucide.X, stringResource(R.string.delete), Modifier.size(16.dp).clip(CircleShape).clickable {
                                     tags = tags - tag
                                 })
                             },
@@ -397,9 +399,13 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f),
                             maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Icon(Lucide.Trash2, stringResource(R.string.delete), Modifier.size(16.dp).clickable {
-                            deletingGreetingIdx = idx
-                        }, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        AppIconButton(
+                            icon = Lucide.Trash2,
+                            contentDescription = stringResource(R.string.delete),
+                            onClick = { deletingGreetingIdx = idx },
+                            size = 32.dp,
+                            iconSize = 16.dp,
+                        )
                     }
                 }
                 Row(Modifier.fillMaxWidth().clickable { showGreetingDialog = true }.padding(Space8),

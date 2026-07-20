@@ -47,7 +47,6 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Monitor
 import com.composables.icons.lucide.Moon
 import com.composables.icons.lucide.Package
-import com.composables.icons.lucide.Route
 import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.Smile
 import com.composables.icons.lucide.SlidersHorizontal
@@ -67,7 +66,6 @@ fun SettingsScreen(
     onNavigateToPresets: () -> Unit = {},
     onNavigateToCharacters: () -> Unit = {},
     onNavigateToWorldBooks: () -> Unit = {},
-    onNavigateToWiSettings: () -> Unit = {},
     onNavigateToApiConfig: () -> Unit = {},
     onNavigateToDataManagement: () -> Unit = {},
     onNavigateToFontSize: () -> Unit = {},
@@ -224,17 +222,13 @@ fun SettingsScreen(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     stringResource(R.string.characters), onClick = onNavigateToCharacters)
                 SettingsRow(
-                    { Icon(Lucide.Route, null, Modifier.size(24.dp),
+                    { Icon(Lucide.SlidersHorizontal, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     stringResource(R.string.presets), onClick = onNavigateToPresets)
                 SettingsRow(
                     { Icon(Lucide.SquareLibrary, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     stringResource(R.string.world_books), onClick = onNavigateToWorldBooks)
-                SettingsRow(
-                    { Icon(Lucide.SlidersHorizontal, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.wi_activation_settings), onClick = onNavigateToWiSettings)
                 SettingsRow(
                     { Icon(Lucide.Package, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },

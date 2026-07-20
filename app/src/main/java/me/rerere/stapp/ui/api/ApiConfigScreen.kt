@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.isSystemInDarkTheme
 import me.rerere.stapp.R
@@ -33,6 +32,8 @@ import me.rerere.stapp.data.api.ConnectionTester
 import me.rerere.stapp.data.api.ModelApi
 import kotlinx.coroutines.launch
 import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.AppIconButton
+import me.rerere.stapp.ui.components.draggableLiftScale
 import sh.calvin.reorderable.ReorderableItem
 import me.rerere.stapp.ui.components.rememberReorderableList
 import me.rerere.stapp.ui.components.ConfirmDeleteDialog
@@ -152,7 +153,7 @@ private fun ProviderCard(
 ) {
     Row(
         Modifier.fillMaxWidth()
-            .scale(if (dragging) 0.95f else 1f)
+            .draggableLiftScale(dragging)
             .clip(RoundedCornerShape(16.dp))
             .background(if (prov.enabled) MaterialTheme.colorScheme.surfaceContainer
                         else MaterialTheme.colorScheme.errorContainer)
@@ -213,8 +214,14 @@ private fun ProviderDetailScreen(
                     .statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Lucide.CircleChevronLeft, stringResource(R.string.back), Modifier.size(24.dp).clickable { onBack() },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                AppIconButton(
+                    icon = Lucide.ChevronLeft,
+                    contentDescription = stringResource(R.string.back),
+                    onClick = onBack,
+                    container = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    size = 32.dp,
+                    iconSize = 24.dp,
+                )
                 Spacer(Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Space8)) {
@@ -225,7 +232,7 @@ private fun ProviderDetailScreen(
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Spacer(Modifier.weight(1f))
-                Spacer(Modifier.size(24.dp))
+                Spacer(Modifier.size(32.dp))
             }
         },
         bottomBar = {

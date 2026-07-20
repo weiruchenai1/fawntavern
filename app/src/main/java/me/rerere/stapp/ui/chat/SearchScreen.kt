@@ -51,6 +51,7 @@ import me.rerere.stapp.data.chat.ChatRepository
 import me.rerere.stapp.data.chat.ChatSession
 import me.rerere.stapp.data.settings.SearchHistoryStore
 import me.rerere.stapp.ui.components.AppTopBar
+import me.rerere.stapp.ui.components.AppIconButton
 import me.rerere.stapp.ui.components.Space8
 import me.rerere.stapp.ui.components.Space12
 import me.rerere.stapp.ui.components.Space16
@@ -134,10 +135,12 @@ fun SearchScreen(
                 },
             )
             if (query.isNotEmpty()) {
-                Icon(
-                    Lucide.X, "Clear",
-                    Modifier.size(20.dp).clickable { query = "" },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                AppIconButton(
+                    icon = Lucide.X,
+                    contentDescription = "Clear",
+                    onClick = { query = "" },
+                    size = 32.dp,
+                    iconSize = 20.dp,
                 )
             }
         }
@@ -258,14 +261,15 @@ fun SearchScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            Icon(
-                                Lucide.X,
-                                stringResource(R.string.delete),
-                                Modifier.size(16.dp).clickable {
+                            AppIconButton(
+                                icon = Lucide.X,
+                                contentDescription = stringResource(R.string.delete),
+                                onClick = {
                                     SearchHistoryStore.remove(context, item)
                                     history = SearchHistoryStore.getHistory(context)
                                 },
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                size = 32.dp,
+                                iconSize = 16.dp,
                             )
                         }
                     }

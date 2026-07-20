@@ -78,13 +78,12 @@ import me.rerere.stapp.ui.settings.PromptLogScreen
 import me.rerere.stapp.ui.settings.SettingsScreen
 import me.rerere.stapp.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.stapp.ui.worldbook.WorldBookListScreen
-import me.rerere.stapp.ui.worldbook.WorldInfoSettingsScreen
 import me.rerere.stapp.ui.components.Space8
 import me.rerere.stapp.ui.components.Space16
 
 /** 聊天之上的全屏页面，以返回栈方式叠放（栈顶显示，返回键弹出） */
 private enum class Screen {
-    Settings, Presets, Characters, WorldBooks, WiSettings, ApiConfig, DataMgmt, FontSize, PromptLog, Search,
+    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, PromptLog, Search,
 }
 
 @Composable
@@ -205,10 +204,6 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
             })
             return
         }
-        Screen.WiSettings -> {
-            WorldInfoSettingsScreen(onBack = ::navBack)
-            return
-        }
         Screen.Characters -> {
             CharacterListScreen(onBack = {
                 navBack()
@@ -233,7 +228,6 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                 onNavigateToPresets = { nav.add(Screen.Presets) },
                 onNavigateToCharacters = { nav.add(Screen.Characters) },
                 onNavigateToWorldBooks = { nav.add(Screen.WorldBooks) },
-                onNavigateToWiSettings = { nav.add(Screen.WiSettings) },
                 onNavigateToApiConfig = { nav.add(Screen.ApiConfig) },
                 onNavigateToDataManagement = { nav.add(Screen.DataMgmt) },
                 onNavigateToFontSize = { nav.add(Screen.FontSize) },
