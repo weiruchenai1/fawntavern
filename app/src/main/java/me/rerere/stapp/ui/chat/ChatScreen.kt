@@ -76,6 +76,7 @@ import me.rerere.stapp.ui.settings.DataManagementScreen
 import me.rerere.stapp.ui.settings.FontSizeScreen
 import me.rerere.stapp.ui.settings.PromptLogScreen
 import me.rerere.stapp.ui.settings.SettingsScreen
+import me.rerere.stapp.ui.extension.ExtensionsScreen
 import me.rerere.stapp.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.stapp.ui.worldbook.WorldBookListScreen
 import me.rerere.stapp.ui.components.Space8
@@ -83,7 +84,7 @@ import me.rerere.stapp.ui.components.Space16
 
 /** 聊天之上的全屏页面，以返回栈方式叠放（栈顶显示，返回键弹出） */
 private enum class Screen {
-    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, PromptLog, Search,
+    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, PromptLog, Search, Extensions,
 }
 
 @Composable
@@ -232,7 +233,16 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                 onNavigateToDataManagement = { nav.add(Screen.DataMgmt) },
                 onNavigateToFontSize = { nav.add(Screen.FontSize) },
                 onNavigateToPromptLog = { nav.add(Screen.PromptLog) },
+                onNavigateToExtensions = { nav.add(Screen.Extensions) },
             )
+            return
+        }
+        Screen.Extensions -> {
+            ExtensionsScreen(onBack = {
+                navBack()
+                // 扩展开关/配置可能变化：刷新 UI 插槽（快捷回复等）
+                vm.refreshExtensionSlots()
+            })
             return
         }
         null -> {}
@@ -304,6 +314,12 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                         },
                         onGallery = { galleryLauncher.launch("image/*") },
                         onFile = { fileLauncher.launch("*/*") },
+                        quickReplies = vm.quickReplies,
+                        onQuickReply = { qr ->
+                            val outcome = vm.onQuickReply(qr)
+                            if (outcome != ChatViewModel.SendOutcome.SKIPPED) keyboardController?.hide()
+                            handleOutcome(outcome)
+                        },
                     )
                 }
             ) { padding ->

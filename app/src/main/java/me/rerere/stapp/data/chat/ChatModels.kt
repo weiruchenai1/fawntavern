@@ -46,4 +46,5 @@ data class ChatSession(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val timedWi: Map<String, Int> = emptyMap(),  // 世界书定时效果状态（sticky/cooldown 跨轮持久化）
+    val extState: Map<String, String> = emptyMap(),  // 每扩展的会话级状态 blob（extId → JSON 串，如摘要）
 )

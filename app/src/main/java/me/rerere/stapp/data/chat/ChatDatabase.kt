@@ -29,6 +29,7 @@ internal data class SessionEntity(
     val createdAt: Long,
     val updatedAt: Long,
     @ColumnInfo(defaultValue = "") val timedWiJson: String = "",  // 世界书定时效果状态 JSON
+    @ColumnInfo(defaultValue = "") val extStateJson: String = "",  // 每扩展会话级状态 JSON（extId → blob）
 )
 
 /** (sessionId, ts) 为主键：ts 在会话内严格递增，天然唯一且保序 */
@@ -73,6 +74,10 @@ internal interface ChatDao {
     @Query("SELECT * FROM sessions ORDER BY updatedAt DESC")
     suspend fun listAll(): List<SessionWithMessages>
 
+    @Transaction
+    @Query("SELECT * FROM sessions WHERE id = :id")
+    suspend fun getSession(id: String): SessionWithMessages?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSession(s: SessionEntity)
 
@@ -105,7 +110,7 @@ internal interface ChatDao {
     fun messagesPaged(id: String): PagingSource<Int, MessageEntity>
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 3, exportSchema = false)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 4, exportSchema = false)
 internal abstract class ChatDatabase : RoomDatabase() {
 
     abstract fun dao(): ChatDao
@@ -128,11 +133,18 @@ internal abstract class ChatDatabase : RoomDatabase() {
             }
         }
 
+        /** v4：会话表增加扩展会话级状态列 */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE sessions ADD COLUMN extStateJson TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile private var instance: ChatDatabase? = null
 
         fun get(context: Context): ChatDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, ChatDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build().also { instance = it }
         }
     }

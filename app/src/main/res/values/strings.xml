@@ -391,4 +391,20 @@
     <string name="test_tool_call">工具调用</string>
     <string name="test_tool_called_fmt">调用 %1$s，入参 %2$s</string>
     <string name="test_tool_not_called_fmt">未调用工具，回复：%s</string>
+
+    <!-- Extensions -->
+    <string name="extensions">扩展</string>
+    <string name="ext_summarize">对话摘要</string>
+    <string name="ext_summarize_desc">把较早的对话压缩成摘要注入提示，缓解长对话超出上下文。</string>
+    <string name="ext_quickreply">快捷回复</string>
+    <string name="ext_quickreply_desc">在输入框上方提供可点击的快捷回复按钮。</string>
+    <string name="ext_summarize_auto">自动摘要</string>
+    <string name="ext_summarize_keep_recent">保留最近消息数</string>
+    <string name="ext_summarize_target_tokens">摘要目标 token</string>
+    <string name="ext_summarize_trigger_tokens">触发阈值 token</string>
+    <string name="ext_qr_empty">还没有快捷回复，点下方添加。</string>
+    <string name="ext_qr_add">添加快捷回复</string>
+    <string name="ext_qr_label">按钮文字</string>
+    <string name="ext_qr_text">内容</string>
+    <string name="ext_qr_send">直接发送</string>
 </resources>

@@ -35,6 +35,15 @@ import me.rerere.stapp.domain.ConversationOps
 import me.rerere.stapp.domain.GenerationController
 import me.rerere.stapp.domain.PromptBuilder
 import me.rerere.stapp.domain.PromptLog
+import me.rerere.stapp.extension.BuiltinExtensions
+import me.rerere.stapp.extension.ExtensionStore
+import me.rerere.stapp.extension.GenerationContext
+import me.rerere.stapp.extension.GenerationLifecycle
+import me.rerere.stapp.extension.HostServices
+import me.rerere.stapp.extension.PromptContext
+import me.rerere.stapp.extension.PromptContributor
+import me.rerere.stapp.extension.QuickReply
+import me.rerere.stapp.extension.QuickReplyProvider
 
 /**
  * 聊天状态容器：只负责持有 UI 状态、调度协程和落盘。
@@ -67,6 +76,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     var inputText by mutableStateOf("")
     var attachments by mutableStateOf(listOf<Attachment>())
 
+    /** 启用的快捷回复（UI 插槽扩展提供），随扩展配置刷新 */
+    var quickReplies by mutableStateOf<List<QuickReply>>(emptyList()); private set
+
     /** 当前预设私有的正则（关联该预设的聊天才生效），转成引擎统一类型 */
     private val presetRegex: List<CharRegex>
         get() = activePreset?.regexScripts?.map { it.toCharRegex() } ?: emptyList()
@@ -79,6 +91,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx: Application get() = getApplication()
 
     init {
+        // 登记内置官方扩展（幂等）
+        BuiltinExtensions.registerAll()
+        refreshExtensionSlots()
         // Prompt 调试日志开关：把持久化设置同步到内存 sink（关闭时生成不记录）
         PromptLog.enabled = PromptLogStore.isEnabled(app)
         // 会话列表来自 Repository 的 Flow：任何 save/delete/clear 后自动刷新
@@ -268,6 +283,26 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         generation.stop()
     }
 
+    /** 重新计算 UI 插槽类扩展的产出（快捷回复等）。扩展配置变更后调用（如从扩展设置返回）。 */
+    fun refreshExtensionSlots() {
+        val qr = mutableListOf<QuickReply>()
+        for (ext in ExtensionStore.enabledExtensions(ctx)) {
+            if (ext is QuickReplyProvider) qr += ext.quickReplies(ExtensionStore.getConfig(ctx, ext.info.id))
+        }
+        quickReplies = qr
+    }
+
+    /** 点击快捷回复：send=true 直接发送，否则插入输入框末尾。 */
+    fun onQuickReply(qr: QuickReply): SendOutcome {
+        return if (qr.send) {
+            inputText = qr.text
+            sendMessage()
+        } else {
+            inputText += qr.text
+            SendOutcome.SKIPPED
+        }
+    }
+
     /** AI 消息重答：保留旧版本，新回复作为新版本（可左右切换）；其后的消息保留，由所有版本共享 */
     fun regenerateAi(idx: Int): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
@@ -299,6 +334,26 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             generating = true
             generatingIdx = regenIdx ?: base.messages.size
+            // 收集启用扩展的提示贡献（如摘要），并入历史之外的固定块（不进历史流、不被预算裁剪）
+            val extraPre = mutableListOf<PromptBuilder.Piece>()
+            val extraPost = mutableListOf<PromptBuilder.Piece>()
+            val extraDepth = mutableListOf<PromptBuilder.DepthPiece>()
+            for (ext in ExtensionStore.enabledExtensions(ctx)) {
+                if (ext !is PromptContributor) continue
+                val c = ext.contribute(
+                    PromptContext(
+                        session = base,
+                        charName = currentCard?.name ?: base.charName,
+                        userName = userName,
+                        extState = base.extState[ext.info.id] ?: "",
+                        config = ExtensionStore.getConfig(ctx, ext.info.id),
+                    )
+                )
+                val src = PromptBuilder.PromptSource.EXTENSION
+                extraPre += c.preHistory.map { PromptBuilder.Piece(it.role, it.content, src, ext.info.name) }
+                extraPost += c.postHistory.map { PromptBuilder.Piece(it.role, it.content, src, ext.info.name) }
+                extraDepth += c.depthInjections.map { PromptBuilder.DepthPiece(it.role, it.content, it.depth, src, ext.info.name) }
+            }
             val built = PromptBuilder.build(
                 card = currentCard,
                 userName = userName,
@@ -312,6 +367,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 // 重答历史消息不回写定时状态，避免污染 sticky/cooldown 窗口
                 updateTimed = regenIdx == null,
                 wiSettings = WorldInfoSettingsStore.get(ctx),
+                extraPre = extraPre,
+                extraPost = extraPost,
+                extraDepth = extraDepth,
             )
             val final = generation.run(
                 base = base,
@@ -326,6 +384,38 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             )
             ChatRepository.save(ctx, final.copy(timedWi = built.timedWi))
             generating = false
+            runExtensionLifecycle(final)
+        }
+    }
+
+    /** 生成完成后跑扩展生命周期钩子（如摘要）：后台执行、失败隔离，完成后同步内存会话的扩展状态。 */
+    private fun runExtensionLifecycle(done: ChatSession) {
+        viewModelScope.launch {
+            val services = HostServices(ctx, apiConfig)
+            val cName = currentCard?.name ?: done.charName
+            var ran = false
+            for (ext in ExtensionStore.enabledExtensions(ctx)) {
+                if (ext !is GenerationLifecycle) continue
+                ran = true
+                try {
+                    ext.onGenerationComplete(
+                        GenerationContext(
+                            session = done,
+                            charName = cName,
+                            userName = userName,
+                            extState = done.extState[ext.info.id] ?: "",
+                            config = ExtensionStore.getConfig(ctx, ext.info.id),
+                        ),
+                        services,
+                    )
+                } catch (_: Exception) { /* 单个扩展失败不影响其它 */ }
+            }
+            // 钩子可能写入了会话级状态（如摘要）：若仍停留在同一会话，刷新内存 extState 供下次拼装取用
+            if (ran && session?.id == done.id) {
+                ChatRepository.get(ctx, done.id)?.let { fresh ->
+                    if (session?.id == done.id) session = session?.copy(extState = fresh.extState)
+                }
+            }
         }
     }
 

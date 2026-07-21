@@ -47,6 +47,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Monitor
 import com.composables.icons.lucide.Moon
 import com.composables.icons.lucide.Package
+import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.Smile
 import com.composables.icons.lucide.SlidersHorizontal
@@ -70,6 +71,7 @@ fun SettingsScreen(
     onNavigateToDataManagement: () -> Unit = {},
     onNavigateToFontSize: () -> Unit = {},
     onNavigateToPromptLog: () -> Unit = {},
+    onNavigateToExtensions: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var currentLang by remember { mutableStateOf(LanguageStore.getLanguage(context)) }
@@ -237,6 +239,10 @@ fun SettingsScreen(
                     { Icon(Lucide.Database, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     stringResource(R.string.data_management), onClick = onNavigateToDataManagement)
+                SettingsRow(
+                    { Icon(Lucide.Puzzle, null, Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    stringResource(R.string.extensions), onClick = onNavigateToExtensions)
             }
             SettingsSection(stringResource(R.string.about)) {
                 SettingsRow(

@@ -39,6 +39,7 @@ internal object PromptBuilder {
         WORLD_INFO,         // 世界书条目
         PRESET,             // 预设条目
         USER_PERSONA,       // 用户人设描述
+        EXTENSION,          // 扩展注入（摘要等）
         OTHER,
     }
 
@@ -80,6 +81,9 @@ internal object PromptBuilder {
         timedWi: Map<String, Int> = emptyMap(),
         updateTimed: Boolean = true,
         wiSettings: WorldInfoSettings = WorldInfoSettings(),
+        extraPre: List<Piece> = emptyList(),
+        extraPost: List<Piece> = emptyList(),
+        extraDepth: List<DepthPiece> = emptyList(),
     ): Built {
         val charName = card?.name ?: ""
         val maxContext = preset?.maxContext?.takeIf { it > 0 } ?: 0
@@ -136,11 +140,11 @@ internal object PromptBuilder {
         }
 
         return Built(
-            preHistory = macro(assembled.pre),
-            postHistory = macro(assembled.post),
+            preHistory = macro(assembled.pre) + extraPre.filter { it.content.isNotBlank() },
+            postHistory = macro(assembled.post) + extraPost.filter { it.content.isNotBlank() },
             depthInjections = (wiDepth + wiAn + assembled.injections + listOfNotNull(cardDepth))
                 .map { it.copy(content = finalize(it.content)) }
-                .filter { it.content.isNotBlank() },
+                .filter { it.content.isNotBlank() } + extraDepth.filter { it.content.isNotBlank() },
             promptRegex = promptRegex,
             genParams = genParams,
             userName = userName,

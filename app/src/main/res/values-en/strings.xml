@@ -391,4 +391,20 @@
     <string name="test_tool_call">Tool Call</string>
     <string name="test_tool_called_fmt">Called %1$s, args %2$s</string>
     <string name="test_tool_not_called_fmt">No tool call, response: %s</string>
+
+    <!-- Extensions -->
+    <string name="extensions">Extensions</string>
+    <string name="ext_summarize">Summarize</string>
+    <string name="ext_summarize_desc">Condense earlier conversation into a summary injected into the prompt.</string>
+    <string name="ext_quickreply">Quick Reply</string>
+    <string name="ext_quickreply_desc">Show tappable quick-reply buttons above the input.</string>
+    <string name="ext_summarize_auto">Auto-summarize</string>
+    <string name="ext_summarize_keep_recent">Keep recent messages</string>
+    <string name="ext_summarize_target_tokens">Summary target tokens</string>
+    <string name="ext_summarize_trigger_tokens">Trigger threshold tokens</string>
+    <string name="ext_qr_empty">No quick replies yet. Tap below to add.</string>
+    <string name="ext_qr_add">Add quick reply</string>
+    <string name="ext_qr_label">Button label</string>
+    <string name="ext_qr_text">Text</string>
+    <string name="ext_qr_send">Send immediately</string>
 </resources>

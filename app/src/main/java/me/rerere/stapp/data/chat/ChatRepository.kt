@@ -27,12 +27,17 @@ object ChatRepository {
     suspend fun list(context: Context): List<ChatSession> =
         dao(context).listAll().map { it.toModel() }
 
+    /** 按 id 取单个会话（含消息），不存在返回 null */
+    suspend fun get(context: Context, id: String): ChatSession? =
+        dao(context).getSession(id)?.toModel()
+
     suspend fun save(context: Context, session: ChatSession) {
         dao(context).saveSession(
             s = SessionEntity(
                 id = session.id, charFile = session.charFile, charName = session.charName,
                 createdAt = session.createdAt, updatedAt = session.updatedAt,
                 timedWiJson = if (session.timedWi.isEmpty()) "" else json.encodeToString(session.timedWi),
+                extStateJson = if (session.extState.isEmpty()) "" else json.encodeToString(session.extState),
             ),
             ms = session.messages.map { it.toEntity(session.id) },
         )
@@ -74,6 +79,8 @@ object ChatRepository {
         updatedAt = session.updatedAt,
         timedWi = if (session.timedWiJson.isBlank()) emptyMap()
                   else try { json.decodeFromString<Map<String, Int>>(session.timedWiJson) } catch (_: Exception) { emptyMap() },
+        extState = if (session.extStateJson.isBlank()) emptyMap()
+                   else try { json.decodeFromString<Map<String, String>>(session.extStateJson) } catch (_: Exception) { emptyMap() },
     )
 
     private fun MessageEntity.toModel() = ChatMessage(

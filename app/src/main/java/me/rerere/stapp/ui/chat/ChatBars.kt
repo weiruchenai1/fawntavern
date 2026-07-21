@@ -53,6 +53,7 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.X
 import me.rerere.stapp.R
+import me.rerere.stapp.extension.QuickReply
 import me.rerere.stapp.ui.api.ProviderIcon
 import me.rerere.stapp.ui.components.Space8
 import me.rerere.stapp.ui.components.Space12
@@ -104,10 +105,34 @@ internal fun ChatBottomArea(
     onCamera: () -> Unit = {},
     onGallery: () -> Unit = {},
     onFile: () -> Unit = {},
+    quickReplies: List<QuickReply> = emptyList(),
+    onQuickReply: (QuickReply) -> Unit = {},
 ) {
     val hasContent = text.isNotBlank() || attachments.isNotEmpty()
     val context = LocalContext.current
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = Space16, vertical = Space8)) {
+        // 快捷回复行（UI 插槽扩展）：位于输入卡片上方，可横向滚动
+        if (quickReplies.isNotEmpty()) {
+            LazyRow(
+                Modifier.fillMaxWidth().padding(bottom = Space8),
+                horizontalArrangement = Arrangement.spacedBy(Space8),
+            ) {
+                itemsIndexed(quickReplies) { _, qr ->
+                    Text(
+                        qr.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .clickable { onQuickReply(qr) }
+                            .padding(horizontal = Space12, vertical = Space8),
+                    )
+                }
+            }
+        }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow)) {
             // 附件预览：位于输入框上方，可横向滚动
             if (attachments.isNotEmpty()) {
