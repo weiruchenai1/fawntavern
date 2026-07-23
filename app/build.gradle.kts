@@ -5,6 +5,17 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+fun readKeystoreProperties(): Map<String, String> {
+    val file = rootProject.file("keystore.properties")
+    if (!file.exists()) return emptyMap()
+    return file.readLines()
+        .filter { it.isNotBlank() && !it.trimStart().startsWith("#") }
+        .map { it.split("=", limit = 2) }
+        .filter { it.size == 2 }
+        .associate { it[0].trim() to it[1].trim() }
+}
+val keystoreProps = readKeystoreProperties()
+
 android {
     namespace = "me.rerere.fawntavern"
     compileSdk = 37
@@ -17,8 +28,20 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        if (keystoreProps.isNotEmpty()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps["storeFile"]!!)
+                storePassword = keystoreProps["storePassword"]!!
+                keyAlias = keystoreProps["keyAlias"]!!
+                keyPassword = keystoreProps["keyPassword"]!!
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
