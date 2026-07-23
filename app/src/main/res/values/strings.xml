@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">ST App</string>
+    <string name="app_name">FawnTavern</string>
 
     <!-- Common -->
     <string name="back">返回</string>
@@ -43,7 +43,7 @@
     <string name="update_available_msg">新版本 %1$s 可用，当前版本 %2$s。请前往下载更新。</string>
     <string name="update_go_download">前往下载</string>
     <string name="about_version">版本 %1$s</string>
-    <string name="about_description">SillyTavern 风格的 AI 角色扮演聊天客户端。\n\n支持导入 SillyTavern 兼容的角色卡、预设和世界书，可对接多种大模型 API，随时随地与喜欢的角色聊天。</string>
+    <string name="about_description">轻量 AI 角色扮演聊天客户端。\n\n支持导入 SillyTavern 兼容的角色卡、预设和世界书，可对接多种大模型 API，随时随地与喜欢的角色聊天。</string>
     <string name="about_tech">技术栈</string>
     <string name="about_tech_detail">Kotlin + Jetpack Compose (Material 3)</string>
     <string name="about_disclaimer">免责声明</string>

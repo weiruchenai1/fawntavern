@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">ST App</string>
+    <string name="app_name">FawnTavern</string>
 
     <!-- Common -->
     <string name="back">Back</string>
@@ -43,7 +43,7 @@
     <string name="update_available_msg">Version %1$s is available (current: %2$s). Please download the update.</string>
     <string name="update_go_download">Download</string>
     <string name="about_version">Version %1$s</string>
-    <string name="about_description">A SillyTavern-style AI role-playing chat client.\n\nSupports importing SillyTavern-compatible character cards, presets, and world books with multiple LLM API backends. Chat with your favorite characters anytime, anywhere.</string>
+    <string name="about_description">A lightweight AI role-playing chat client.\n\nSupports importing SillyTavern-compatible character cards, presets, and world books with multiple LLM API backends. Chat with your favorite characters anytime, anywhere.</string>
     <string name="about_tech">Tech Stack</string>
     <string name="about_tech_detail">Kotlin + Jetpack Compose (Material 3)</string>
     <string name="about_disclaimer">Disclaimer</string>

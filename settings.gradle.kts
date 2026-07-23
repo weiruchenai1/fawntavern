@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "st-app"
+rootProject.name = "fawntavern"
 include(":app")

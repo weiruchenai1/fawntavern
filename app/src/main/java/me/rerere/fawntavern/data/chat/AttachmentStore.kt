@@ -1,0 +1,102 @@
+package me.rerere.fawntavern.data.chat
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
+import android.provider.OpenableColumns
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * 附件落盘：发送时把 content URI 指向的内容拷入 filesDir/attachments/，
+ * 返回 filesDir 相对路径存进 [ChatMessage] —— URI 的读权限是临时的，重启后失效，
+ * 只有自有目录里的副本才能支撑历史消息展示与重答时的重复发送。
+ */
+object AttachmentStore {
+
+    private const val DIR = "attachments"
+    private const val MAX_DIM = 2048        // 图片最长边上限（重编码为 JPEG，控制 base64 体积）
+    private const val JPEG_QUALITY = 85
+    private const val MAX_FILE_BYTES = 20L * 1024 * 1024  // 非图片文件拷贝上限
+
+    fun dir(context: Context): File = File(context.filesDir, DIR).also { it.mkdirs() }
+
+    /**
+     * 图片：解码（API 28+ 走 ImageDecoder，自动处理 EXIF 旋转与降采样）后重编码为 JPEG。
+     * 返回 filesDir 相对路径；解码失败返回 null。
+     */
+    suspend fun persistImage(context: Context, uri: Uri): String? = withContext(Dispatchers.IO) {
+        val bitmap = decodeScaled(context, uri) ?: return@withContext null
+        val name = "img_${System.currentTimeMillis()}_${(0..999).random()}.jpg"
+        val out = File(dir(context), name)
+        try {
+            out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
+            "$DIR/$name"
+        } catch (_: Exception) {
+            out.delete()
+            null
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    /** 其它文件：原样拷贝，返回 (原始文件名, filesDir 相对路径)；过大或读取失败返回 null */
+    suspend fun persistFile(context: Context, uri: Uri): MsgFile? = withContext(Dispatchers.IO) {
+        val displayName = queryDisplayName(context, uri) ?: "file"
+        val safeName = "file_${System.currentTimeMillis()}_${(0..999).random()}_" +
+            displayName.replace(Regex("[\\\\/:*?\"<>|]"), "_").takeLast(60)
+        val out = File(dir(context), safeName)
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                out.outputStream().use { output ->
+                    val copied = input.copyTo(output, bufferSize = 64 * 1024)
+                    if (copied > MAX_FILE_BYTES) throw IllegalStateException("file too large")
+                }
+            } ?: return@withContext null
+            MsgFile(name = displayName, path = "$DIR/$safeName")
+        } catch (_: Exception) {
+            out.delete()
+            null
+        }
+    }
+
+    private fun queryDisplayName(context: Context, uri: Uri): String? = try {
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (idx >= 0 && cursor.moveToFirst()) cursor.getString(idx) else null
+        } ?: uri.lastPathSegment?.substringAfterLast('/')
+    } catch (_: Exception) {
+        uri.lastPathSegment?.substringAfterLast('/')
+    }
+
+    private fun decodeScaled(context: Context, uri: Uri): Bitmap? = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val source = ImageDecoder.createSource(context.contentResolver, uri)
+            ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE  // compress 需要软件位图
+                val maxSide = maxOf(info.size.width, info.size.height)
+                if (maxSide > MAX_DIM) {
+                    val scale = MAX_DIM.toFloat() / maxSide
+                    decoder.setTargetSize(
+                        (info.size.width * scale).toInt().coerceAtLeast(1),
+                        (info.size.height * scale).toInt().coerceAtLeast(1),
+                    )
+                }
+            }
+        } else {
+            // API 26/27：无 ImageDecoder，用 inSampleSize 降采样（不处理 EXIF 旋转）
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_DIM) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+        }
+    } catch (_: Exception) {
+        null
+    }
+}

@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "me.rerere.stapp"
+    namespace = "me.rerere.fawntavern"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "me.rerere.stapp"
+        applicationId = "me.rerere.fawntavern"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
