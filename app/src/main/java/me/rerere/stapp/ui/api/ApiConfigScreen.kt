@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,49 +55,56 @@ fun ApiConfigScreen(onBack: () -> Unit) {
 
     var editingId by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
+    // SaveableStateHolder：进入详情页时列表离开组合，其 LazyListState 被暂存；
+    // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
+    val stateHolder = rememberSaveableStateHolder()
 
     if (editingId != null) {
-        val prov = config.providers.find { it.id == editingId } ?: return
-        BackHandler { editingId = null }
-        ProviderDetailScreen(
-            provider = prov,
-            onBack = { editingId = null },
-            onSave = { updated ->
-                config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
-                save()
-                Toast.makeText(context, context.getString(R.string.saved), Toast.LENGTH_SHORT).show()
-            },
-            onDelete = {
-                config = config.copy(providers = config.providers.filter { it.id != prov.id })
-                save()
-                editingId = null
-            },
-            onChange = { updated ->
-                config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
-                save()
-            },
-        )
+        stateHolder.SaveableStateProvider("detail") {
+            val prov = config.providers.find { it.id == editingId } ?: return@SaveableStateProvider
+            BackHandler { editingId = null }
+            ProviderDetailScreen(
+                provider = prov,
+                onBack = { editingId = null },
+                onSave = { updated ->
+                    config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
+                    save()
+                    Toast.makeText(context, context.getString(R.string.saved), Toast.LENGTH_SHORT).show()
+                },
+                onDelete = {
+                    config = config.copy(providers = config.providers.filter { it.id != prov.id })
+                    save()
+                    editingId = null
+                },
+                onChange = { updated ->
+                    config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
+                    save()
+                },
+            )
+        }
         return
     }
 
     if (adding) {
-        ProviderDetailScreen(
-            provider = ApiProvider(),
-            onBack = { adding = false },
-            onSave = { newProv ->
-                config = config.copy(providers = config.providers + newProv)
-                save()
-                Toast.makeText(context, context.getString(R.string.saved), Toast.LENGTH_SHORT).show()
-                // 保存后原地转入编辑态：留在详情页，后续保存走更新而非重复新增
-                adding = false
-                editingId = newProv.id
-            },
-            onDelete = { adding = false }
-        )
+        stateHolder.SaveableStateProvider("detail") {
+            ProviderDetailScreen(
+                provider = ApiProvider(),
+                onBack = { adding = false },
+                onSave = { newProv ->
+                    config = config.copy(providers = config.providers + newProv)
+                    save()
+                    Toast.makeText(context, context.getString(R.string.saved), Toast.LENGTH_SHORT).show()
+                    adding = false
+                    editingId = newProv.id
+                },
+                onDelete = { adding = false }
+            )
+        }
         return
     }
 
-    BackHandler(onBack = onBack)
+    stateHolder.SaveableStateProvider("list") {
+        BackHandler(onBack = onBack)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -141,6 +149,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
             }
         }
     }
+    } // SaveableStateProvider("list")
 }
 
 @OptIn(ExperimentalLayoutApi::class)

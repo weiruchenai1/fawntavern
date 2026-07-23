@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -164,19 +165,25 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
 
     // 保存世界书关联时需要用到卡片文件名
     var editingFileName by remember { mutableStateOf("") }
+    // SaveableStateHolder：进入编辑器时列表离开组合，其 LazyListState 被暂存；
+    // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
+    val stateHolder = rememberSaveableStateHolder()
     if (selectedChar != null) {
-        BackHandler { selectedChar = null; imageVersion++; refresh() }
-        CharacterEditorScreen(
-            card = selectedChar!!,
-            onBack = { selectedChar = null; imageVersion++; refresh() },
-            cardFileName = editingFileName,
-        )
+        stateHolder.SaveableStateProvider("editor") {
+            BackHandler { selectedChar = null; imageVersion++; refresh() }
+            CharacterEditorScreen(
+                card = selectedChar!!,
+                onBack = { selectedChar = null; imageVersion++; refresh() },
+                cardFileName = editingFileName,
+            )
+        }
         return
     }
 
-    BackHandler(onBack = onBack)
+    stateHolder.SaveableStateProvider("list") {
+        BackHandler(onBack = onBack)
 
-    Scaffold(
+        Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(stringResource(R.string.characters), onBack) },
         floatingActionButton = {
@@ -254,6 +261,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
             }
         }
     }
+    } // SaveableStateProvider("list")
 }
 
 @Composable

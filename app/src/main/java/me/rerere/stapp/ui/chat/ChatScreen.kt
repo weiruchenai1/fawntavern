@@ -46,6 +46,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -62,11 +63,15 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Lucide
 import java.io.File
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import me.rerere.stapp.R
+import me.rerere.stapp.data.chat.ChatMessage
 import me.rerere.stapp.data.settings.FontSizeStore
 import me.rerere.stapp.data.settings.ThemeMode
 import me.rerere.stapp.ui.api.ApiConfigScreen
@@ -75,6 +80,7 @@ import me.rerere.stapp.ui.preset.PresetListScreen
 import me.rerere.stapp.ui.settings.DataManagementScreen
 import me.rerere.stapp.ui.settings.FontSizeScreen
 import me.rerere.stapp.ui.settings.PromptLogScreen
+import me.rerere.stapp.ui.settings.AboutScreen
 import me.rerere.stapp.ui.settings.SettingsScreen
 import me.rerere.stapp.ui.extension.ExtensionsScreen
 import me.rerere.stapp.ui.hooks.ImeLazyListAutoScroller
@@ -84,7 +90,7 @@ import me.rerere.stapp.ui.components.Space16
 
 /** 聊天之上的全屏页面，以返回栈方式叠放（栈顶显示，返回键弹出） */
 private enum class Screen {
-    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, PromptLog, Search, Extensions,
+    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, PromptLog, Search, Extensions, About,
 }
 
 @Composable
@@ -102,9 +108,9 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     var showModelPicker by remember { mutableStateOf(false) }
     var showCharPicker by remember { mutableStateOf(false) }
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
-    // ── 消息操作弹窗状态 ──
-    var menuTargetIdx by remember { mutableStateOf<Int?>(null) }
-    var editTargetIdx by remember { mutableStateOf<Int?>(null) }
+    // ── 消息操作弹窗状态（按消息 ts 定位，与分页/内存窗口无关） ──
+    var menuTargetIdx by remember { mutableStateOf<Long?>(null) }
+    var editTargetIdx by remember { mutableStateOf<Long?>(null) }
     var selectCopyText by remember { mutableStateOf<String?>(null) }
     var deleteSessionId by remember { mutableStateOf<String?>(null) }
     var scrollToBottomTrigger by remember { mutableStateOf(0) }
@@ -153,96 +159,132 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
         }
     }
 
+    // ── 滚动状态提升到全屏页面切换上方 ──
+    // 全屏页面（设置/角色列表等）通过 when 分支 + return 实现，命中时整个聊天区域离开组合，
+    // 其内所有 remember 状态被销毁。返回时从零重建 → 滚动位置丢失 + LaunchedEffect 误触钉底。
+    // 把 listState / autoFollow 提升到 when 上方，使其存活在 ChatScreen 作用域内，不受 when 分支切换影响。
+    val listState = rememberLazyListState()
+    var autoFollow by remember { mutableStateOf(true) }
+    var userRequestedFollow by remember { mutableStateOf(false) }
+    // 记录上次因为"开/切会话"钉底的 session id，切换全屏页返回不触发重钉
+    var lastPinnedSessionId by remember { mutableStateOf<String?>(null) }
+    val followScope = rememberCoroutineScope()
+
     // ── 全屏页面：渲染栈顶 ──
+    // SaveableStateProvider 包裹每个分支：从 Settings 进入 Characters 再返回时，
+    // Settings 的 ScrollState 被暂存→恢复；否则 Settings 离开组合后重建，滚动回到顶部。
+    val screenStateHolder = rememberSaveableStateHolder()
     var fontScale by remember { mutableFloatStateOf(FontSizeStore.getScale(ctx)) }
     when (nav.lastOrNull()) {
         Screen.Search -> {
-            SearchScreen(
-                charFile = vm.session?.charFile ?: "",
-                onBack = ::navBack,
-                onOpenSession = { id ->
-                    vm.openSession(id)
-                    // 搜索是从抽屉进入的、抽屉此刻仍为打开状态；直达会话应落在聊天页而不是抽屉
-                    scope.launch { drawerState.snapTo(DrawerValue.Closed) }
-                    navBack()
-                },
-            )
+            screenStateHolder.SaveableStateProvider("Search") {
+                SearchScreen(
+                    charFile = vm.session?.charFile ?: "",
+                    onBack = ::navBack,
+                    onOpenSession = { id ->
+                        vm.openSession(id)
+                        scope.launch { drawerState.snapTo(DrawerValue.Closed) }
+                        navBack()
+                    },
+                )
+            }
             return
         }
         Screen.FontSize -> {
-            FontSizeScreen(
-                onBack = {
-                    navBack()
-                    fontScale = FontSizeStore.getScale(ctx)
-                },
-                currentScale = fontScale,
-            )
+            screenStateHolder.SaveableStateProvider("FontSize") {
+                FontSizeScreen(
+                    onBack = {
+                        navBack()
+                        fontScale = FontSizeStore.getScale(ctx)
+                    },
+                    currentScale = fontScale,
+                )
+            }
             return
         }
         Screen.PromptLog -> {
-            PromptLogScreen(onBack = ::navBack)
+            screenStateHolder.SaveableStateProvider("PromptLog") {
+                PromptLogScreen(onBack = ::navBack)
+            }
             return
         }
         Screen.DataMgmt -> {
-            DataManagementScreen(onBack = {
-                navBack()
-                vm.refreshAfterDataManagement()
-            })
+            screenStateHolder.SaveableStateProvider("DataMgmt") {
+                DataManagementScreen(onBack = {
+                    navBack()
+                    vm.refreshAfterDataManagement()
+                })
+            }
             return
         }
         Screen.ApiConfig -> {
-            ApiConfigScreen(onBack = {
-                navBack()
-                vm.reloadApiConfig()
-            })
+            screenStateHolder.SaveableStateProvider("ApiConfig") {
+                ApiConfigScreen(onBack = {
+                    navBack()
+                    vm.reloadApiConfig()
+                })
+            }
             return
         }
         Screen.WorldBooks -> {
-            WorldBookListScreen(onBack = {
-                navBack()
-                // 世界书内容可能被编辑，当前角色关联的书需要重载
-                vm.reloadPromptData()
-            })
+            screenStateHolder.SaveableStateProvider("WorldBooks") {
+                WorldBookListScreen(onBack = {
+                    navBack()
+                    vm.reloadPromptData()
+                })
+            }
             return
         }
         Screen.Characters -> {
-            CharacterListScreen(onBack = {
-                navBack()
-                // 列表/编辑器里可能改了当前角色的字段或图片
-                vm.refreshCurrentCard()
-            })
+            screenStateHolder.SaveableStateProvider("Characters") {
+                CharacterListScreen(onBack = {
+                    navBack()
+                    vm.refreshCurrentCard()
+                })
+            }
             return
         }
         Screen.Presets -> {
-            PresetListScreen(onBack = {
-                navBack()
-                // 预设/独立正则脚本可能被增删改
-                vm.reloadPromptData()
-            })
+            screenStateHolder.SaveableStateProvider("Presets") {
+                PresetListScreen(onBack = {
+                    navBack()
+                    vm.reloadPromptData()
+                })
+            }
             return
         }
         Screen.Settings -> {
-            SettingsScreen(
-                onBack = ::navBack,
-                themeMode = themeMode,
-                onThemeModeChange = onThemeModeChange,
-                onNavigateToPresets = { nav.add(Screen.Presets) },
-                onNavigateToCharacters = { nav.add(Screen.Characters) },
-                onNavigateToWorldBooks = { nav.add(Screen.WorldBooks) },
-                onNavigateToApiConfig = { nav.add(Screen.ApiConfig) },
-                onNavigateToDataManagement = { nav.add(Screen.DataMgmt) },
-                onNavigateToFontSize = { nav.add(Screen.FontSize) },
-                onNavigateToPromptLog = { nav.add(Screen.PromptLog) },
-                onNavigateToExtensions = { nav.add(Screen.Extensions) },
-            )
+            screenStateHolder.SaveableStateProvider("Settings") {
+                SettingsScreen(
+                    onBack = ::navBack,
+                    themeMode = themeMode,
+                    onThemeModeChange = onThemeModeChange,
+                    onNavigateToPresets = { nav.add(Screen.Presets) },
+                    onNavigateToCharacters = { nav.add(Screen.Characters) },
+                    onNavigateToWorldBooks = { nav.add(Screen.WorldBooks) },
+                    onNavigateToApiConfig = { nav.add(Screen.ApiConfig) },
+                    onNavigateToDataManagement = { nav.add(Screen.DataMgmt) },
+                    onNavigateToFontSize = { nav.add(Screen.FontSize) },
+                    onNavigateToPromptLog = { nav.add(Screen.PromptLog) },
+                    onNavigateToExtensions = { nav.add(Screen.Extensions) },
+                    onNavigateToAbout = { nav.add(Screen.About) },
+                )
+            }
             return
         }
         Screen.Extensions -> {
-            ExtensionsScreen(onBack = {
-                navBack()
-                // 扩展开关/配置可能变化：刷新 UI 插槽（快捷回复等）
-                vm.refreshExtensionSlots()
-            })
+            screenStateHolder.SaveableStateProvider("Extensions") {
+                ExtensionsScreen(onBack = {
+                    navBack()
+                    vm.refreshExtensionSlots()
+                })
+            }
+            return
+        }
+        Screen.About -> {
+            screenStateHolder.SaveableStateProvider("About") {
+                AboutScreen(onBack = ::navBack)
+            }
             return
         }
         null -> {}
@@ -323,12 +365,44 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     )
                 }
             ) { padding ->
-                val msgs = vm.session?.messages ?: emptyList()
-                val listState = rememberLazyListState()
-                val followScope = rememberCoroutineScope()
+                // 消息列表来自 Paging 3（DB 为准），已加载页叠加内存 overlay（流式内容 / 分支切换编辑
+                // 的乐观即时反映）后供渲染与滚动锚定用。分页为空（未落盘的新会话，仅开场白）时回退到
+                // 内存会话，保证开场白可见、首帧不闪空。
+                val lazyMessages = vm.pagedMessages.collectAsLazyPagingItems()
+                val overlays = vm.overlays
+                val genTs = vm.genTargetTs
+                val usePaging = lazyMessages.itemCount > 0
+                val pagedBase: List<ChatMessage> = lazyMessages.itemSnapshotList.items
+                    .ifEmpty { vm.session?.messages ?: emptyList() }
+                val msgs: List<ChatMessage> = if (overlays.isEmpty()) pagedBase else {
+                    val substituted = pagedBase.map { overlays[it.ts] ?: it }
+                    // overlay 里分页尚未纳入的行（刚开始生成、还没落盘的新 assistant，其 ts 最大）按序追加到末尾。
+                    // 仅当已加载窗口"确实稳定地"未抵达底部时才不追加（长会话滚上去、refresh 收窗到上方锚点）——
+                    // 此时该消息在视口下方之外，不该错插进当前窗口尾部。
+                    // 但 refresh/append 加载中属过渡态：append.endOfPaginationReached 会被临时重置为 false，
+                    // 若此时也判定"非底部"，生成完成那次写库触发的 refresh 会让刚完成的消息瞬间闪掉再回来。
+                    // 故加载中一律按抵达底部处理，保持追加。
+                    val append = lazyMessages.loadState.append
+                    val windowAtBottom = !usePaging || append.endOfPaginationReached ||
+                        append is LoadState.Loading || lazyMessages.loadState.refresh is LoadState.Loading
+                    val extra = if (!windowAtBottom) emptyList()
+                        else overlays.values.filter { ov -> pagedBase.none { it.ts == ov.ts } }.sortedBy { it.ts }
+                    substituted + extra
+                }
+                // rememberUpdatedState：快照 Flow 的 collect lambda 里引用 msgs，需要始终读到最新值
+                val msgsNow by rememberUpdatedState(msgs)
+                // overlay 收敛：分页已把该 ts 的最终内容补齐、且该行不在生成中时撤下 overlay
+                //（避免"异步写库→分页刷新"时间差造成的空帧/陈旧内容闪烁）
+                val settledOverlayTs = overlays.values.filter { ov ->
+                    !(vm.generating && ov.ts == genTs) &&
+                        pagedBase.any { it.ts == ov.ts && it.content == ov.content && it.reasoning == ov.reasoning }
+                }.map { it.ts }
+                LaunchedEffect(settledOverlayTs) { settledOverlayTs.forEach { vm.clearOverlay(it) } }
+                // listState / followScope 已提升到全屏页面切换上方
                 // 长生命周期跟随协程读取的最新值（协程不随这些值重启）。
                 // 只有生成目标是末条消息时才自动跟随钉底；重答中间消息时原地生成，视口不动
-                val generatingAtEndNow by rememberUpdatedState(vm.generating && vm.generatingIdx == msgs.lastIndex)
+                val generatingAtEndNow by rememberUpdatedState(
+                    vm.generating && genTs != null && genTs == msgs.lastOrNull()?.ts)
                 val lastUserIdxNow by rememberUpdatedState(msgs.indexOfLast { it.role == "user" })
                 // 末条消息正文是否还是空的 = 纯思考阶段（思考内容默认折叠，屏上没有可读的正文）
                 val lastMsgContentBlankNow by rememberUpdatedState(msgs.lastOrNull()?.content.isNullOrBlank())
@@ -362,10 +436,8 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     return info.offset <= topLinePx
                 }
                 // ── 状态机 ──
-                // autoFollow: 是否自动滚到底部跟随。userRequestedFollow: 用户显式要求持续跟随（点向下按钮/下划到底），
-                //   为 true 时跳过顶线停跟。
-                var autoFollow by remember { mutableStateOf(true) }
-                var userRequestedFollow by remember { mutableStateOf(false) }
+                // autoFollow / userRequestedFollow 已提升到全屏页面切换上方；
+                // 此处不再重复声明，仅供下游读取最新值（Compose state 委托属性天然读到最新值）。
                 // “向下”按钮可见性是纯派生值：离底超过缓冲自动出现，
                 // 贴底自动消失，不需要在各个事件里手动开关
                 val showScrollDown by remember {
@@ -459,23 +531,36 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     }
                 }
 
-                // 用户发送、重试、删除末条：回到底部并重置状态（提问在底部起步，随回复增长再被顶到线）
-                LaunchedEffect(scrollToBottomTrigger) {
-                    if (msgs.isNotEmpty()) {
-                        autoFollow = true
-                        userRequestedFollow = false
-                        pinToBottom()
+                // 用户发送、重试、删除末条：回到底部并重置状态（提问在底部起步，随回复增长再被顶到线）。
+                // 用 snapshotFlow.drop(1) 跳过当前值，避免从全屏页面返回时（LaunchedEffect 重入）误钉底。
+                LaunchedEffect(Unit) {
+                    snapshotFlow { scrollToBottomTrigger }
+                        .drop(1)
+                        .collect {
+                            if (msgsNow.isNotEmpty()) {
+                                autoFollow = true
+                                userRequestedFollow = false
+                                pinToBottom()
+                            }
+                        }
+                }
+                // 打开/切换会话：回到底部并重置。用 lastPinnedSessionId 跳过"从全屏页面返回后重入"的情况。
+                LaunchedEffect(vm.session?.id) {
+                    if (vm.session?.id != null && vm.session?.id != lastPinnedSessionId) {
+                        lastPinnedSessionId = vm.session?.id
+                        autoFollow = true; userRequestedFollow = false
+                        if (msgsNow.isNotEmpty()) pinToBottom()
                     }
                 }
-                // 打开/切换会话：回到底部并重置
-                LaunchedEffect(vm.session?.id) {
-                    autoFollow = true; userRequestedFollow = false
-                    if (msgs.isNotEmpty()) pinToBottom()
-                }
-                // 生成结束：仍在跟随且生成目标是末条消息则钉住底部（正文切 Markdown、工具栏出现会改高度）
-                LaunchedEffect(vm.generating) {
-                    if (!vm.generating && msgs.isNotEmpty() && autoFollow &&
-                        vm.generatingIdx == msgs.lastIndex) pinToBottom()
+                // 生成结束：仍在跟随且生成目标是末条消息则钉住底部（正文切 Markdown、工具栏出现会改高度）。
+                // 用 snapshotFlow.drop(1) 跳过当前值，避免从全屏页面返回时（正在生成中才离开的罕见场景）误钉底。
+                LaunchedEffect(Unit) {
+                    snapshotFlow { vm.generating }
+                        .drop(1)
+                        .collect { generating ->
+                            if (!generating && msgsNow.isNotEmpty() && autoFollow &&
+                                vm.genTargetTs != null && vm.genTargetTs == msgsNow.lastOrNull()?.ts) pinToBottom()
+                        }
                 }
                 // 键盘弹出只在贴底时跟随上移；在上方读历史时视口保持不动
                 ImeLazyListAutoScroller(lazyListState = listState, shouldFollow = ::isAtBottom)
@@ -506,6 +591,9 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                             verticalArrangement = Arrangement.spacedBy(Space16)
                         ) {
                             itemsIndexed(msgs, key = { _, msg -> msg.ts }) { i, msg ->
+                                // 触发分页按需加载：访问对应下标即向 Paging 登记位置，滚到边缘时预取相邻页。
+                                // msgs 与已加载分页共享下标（enablePlaceholders=false，itemCount 即已加载数）。
+                                if (usePaging && i < lazyMessages.itemCount) lazyMessages[i]
                                 if (msg.role == "user") {
                                     UserMsg(
                                         name = vm.userName,
@@ -516,9 +604,9 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                         onRegenerate = {
                                             // 其后紧跟的 AI 回复在中间时原地重答，不滚到底部
                                             val midRegen = i + 1 < msgs.lastIndex && msgs[i + 1].role == "assistant"
-                                            handleOutcome(vm.regenerateAfterUser(i), scroll = !midRegen)
+                                            handleOutcome(vm.regenerateAfterUser(msg.ts), scroll = !midRegen)
                                         },
-                                        onMore = { menuTargetIdx = i },
+                                        onMore = { menuTargetIdx = msg.ts },
                                         scale = fontScale,
                                         avatarBitmap = vm.userAvatarBitmap,
                                     )
@@ -531,14 +619,18 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                     // 短的分支时偏移越界、被归一化到任意位置；新分支变短时还可能触发
                                     // 底部"填满视口"回拉，落点看起来随机。锚定 i+1 则按钮与下方内容
                                     // 纹丝不动，长度变化全部向上生长，与末条/贴底分支行为一致。
+                                    // 切换走 DB（异步），锚定按 index+offset 与内容更新解耦：i+1 一经钉住，
+                                    // 本条内容随分页刷新在其上方变化，不动 i+1 的落点。
                                     fun switchAltAnchored(dir: Int) {
+                                        // 可切换性同步预判（避免边界处无谓的重锚定）
+                                        if (msg.alts.size < 2 || (msg.altIdx + dir) !in 0..msg.alts.lastIndex) return
                                         val layoutBefore = listState.layoutInfo
                                         val iInfo = layoutBefore.visibleItemsInfo.firstOrNull { it.index == i }
                                         // i+1 可见用实测顶部；不可见（按钮贴着视口底）用本条底 + 间距推算
                                         val nextTop = layoutBefore.visibleItemsInfo.firstOrNull { it.index == i + 1 }?.offset
                                             ?: iInfo?.let { it.offset + it.size + layoutBefore.mainAxisItemSpacing }
                                         val nearBottom = isAtBottom()
-                                        if (!vm.switchAlt(i, dir)) return
+                                        vm.switchAlt(msg.ts, dir)
                                         if (i == msgs.lastIndex || nearBottom) {
                                             // 底部锚点可见时把锚点原地钉住（同步请求，与新内容同帧生效）：
                                             // 分支长短变化全部发生在锚点上方，切换按钮到输入栏的距离纹丝
@@ -559,10 +651,10 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                     }
                                     AIMsg(
                                         msg = msg,
-                                        isStreaming = vm.generating && i == vm.generatingIdx,
+                                        isStreaming = vm.generating && msg.ts == genTs,
                                         onCopy = { copyText(msg.content) },
-                                        onRegenerate = { handleOutcome(vm.regenerateAi(i), scroll = i == msgs.lastIndex) },
-                                        onMore = { menuTargetIdx = i },
+                                        onRegenerate = { handleOutcome(vm.regenerateAi(msg.ts), scroll = i == msgs.lastIndex) },
+                                        onMore = { menuTargetIdx = msg.ts },
                                         onPrevAlt = { switchAltAnchored(-1) },
                                         onNextAlt = { switchAltAnchored(+1) },
                                         scale = fontScale,
@@ -613,9 +705,10 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     }
 
     // ── 消息操作菜单 ──
-    val menuIdx = menuTargetIdx
-    val menuMsg = menuIdx?.let { vm.session?.messages?.getOrNull(it) }
-    if (menuIdx != null && menuMsg != null) {
+    val menuTs = menuTargetIdx
+    // 与渲染一致地取目标：overlay（流式/乐观态）优先，回退到内存会话
+    val menuMsg = menuTs?.let { ts -> vm.overlays[ts] ?: vm.session?.messages?.firstOrNull { it.ts == ts } }
+    if (menuTs != null && menuMsg != null) {
         MessageMenu(
             onDismiss = { menuTargetIdx = null },
             onSelectCopy = {
@@ -623,12 +716,12 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                 menuTargetIdx = null
             },
             onEdit = {
-                if (!vm.generating) editTargetIdx = menuIdx
+                if (!vm.generating) editTargetIdx = menuTs
                 menuTargetIdx = null
             },
             onDelete = {
-                val wasLast = menuIdx == (vm.session?.messages?.lastIndex ?: -1)
-                vm.deleteMessage(menuIdx)
+                val wasLast = menuMsg.ts == vm.session?.messages?.lastOrNull()?.ts
+                vm.deleteMessage(menuTs)
                 // 删除末条（整条或当前分支）导致内容高度骤变，钉回底部避免落点漂移
                 if (wasLast) scrollToBottomTrigger++
                 menuTargetIdx = null
@@ -659,10 +752,10 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     }
 
     // ── 编辑消息对话框 ──
-    val editIdx = editTargetIdx
-    val editMsg = editIdx?.let { vm.session?.messages?.getOrNull(it) }
-    if (editIdx != null && editMsg != null) {
-        var editText by remember(editIdx) { mutableStateOf(editMsg.content) }
+    val editTs = editTargetIdx
+    val editMsg = editTs?.let { ts -> vm.overlays[ts] ?: vm.session?.messages?.firstOrNull { it.ts == ts } }
+    if (editTs != null && editMsg != null) {
+        var editText by remember(editTs) { mutableStateOf(editMsg.content) }
         AlertDialog(
             onDismissRequest = { editTargetIdx = null },
             title = { Text(stringResource(R.string.edit_message)) },
@@ -672,7 +765,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
             },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.updateMessage(editIdx, editText)
+                    vm.updateMessage(editTs, editText)
                     editTargetIdx = null
                 }) { Text(stringResource(R.string.confirm)) }
             },

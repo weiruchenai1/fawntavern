@@ -19,6 +19,7 @@ object QuickReplyExtension : Extension, QuickReplyProvider {
         id = ID,
         name = "Quick Reply",
         description = "在输入框上方提供可点击的快捷回复按钮（插入或直接发送）。",
+        defaultEnabled = false,
     )
 
     override fun quickReplies(config: String): List<QuickReply> = parseConfig(config)

@@ -80,6 +80,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.room.paging)
     implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
     implementation(libs.kotlinx.serialization.json)
     ksp(libs.androidx.room.compiler)
 }

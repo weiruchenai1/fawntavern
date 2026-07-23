@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,22 +46,30 @@ fun WorldBookListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var selectedBook by remember { mutableStateOf<WorldBook?>(null) }
     var showWiSettings by remember { mutableStateOf(false) }
+    // SaveableStateHolder：进入编辑器/设置时列表离开组合，其 LazyListState 被暂存；
+    // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
+    val stateHolder = rememberSaveableStateHolder()
 
     if (selectedBook != null) {
-        BackHandler { selectedBook = null }
-        WorldBookViewScreen(book = selectedBook!!, onBack = { selectedBook = null })
+        stateHolder.SaveableStateProvider("editor") {
+            BackHandler { selectedBook = null }
+            WorldBookViewScreen(book = selectedBook!!, onBack = { selectedBook = null })
+        }
         return
     }
 
     if (showWiSettings) {
-        BackHandler { showWiSettings = false }
-        WorldInfoSettingsScreen(onBack = { showWiSettings = false })
+        stateHolder.SaveableStateProvider("settings") {
+            BackHandler { showWiSettings = false }
+            WorldInfoSettingsScreen(onBack = { showWiSettings = false })
+        }
         return
     }
 
-    BackHandler(onBack = onBack)
+    stateHolder.SaveableStateProvider("list") {
+        BackHandler(onBack = onBack)
 
-    ImportableListScreen(
+        ImportableListScreen(
         titleRes = R.string.world_books,
         onBack = onBack,
         importMimeType = "application/json",
@@ -89,6 +98,7 @@ fun WorldBookListScreen(onBack: () -> Unit) {
             BookCard(book, onClick = onClick, onLongPress = onLongPress)
         },
     )
+    } // SaveableStateProvider("list")
 }
 
 @Composable

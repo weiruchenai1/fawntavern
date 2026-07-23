@@ -40,6 +40,7 @@ import com.composables.icons.lucide.Database
 import android.app.Activity
 import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.material3.TextButton
 import androidx.core.os.LocaleListCompat
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Info
@@ -72,11 +73,19 @@ fun SettingsScreen(
     onNavigateToFontSize: () -> Unit = {},
     onNavigateToPromptLog: () -> Unit = {},
     onNavigateToExtensions: () -> Unit = {},
+    onNavigateToAbout: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var currentLang by remember { mutableStateOf(LanguageStore.getLanguage(context)) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showLangDialog by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+
+    val versionName = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.1"
+        } catch (_: Exception) { "0.0.1" }
+    }
 
     BackHandler(onBack = onBack)
 
@@ -178,6 +187,25 @@ fun SettingsScreen(
         )
     }
 
+    if (showUpdateDialog) {
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            title = { Text(stringResource(R.string.update_latest_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.update_latest_msg, versionName),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showUpdateDialog = false }) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {},
+        )
+    }
+
     val themeLabel = when (themeMode) {
         ThemeMode.SYSTEM -> stringResource(R.string.follow_system)
         ThemeMode.LIGHT -> stringResource(R.string.light)
@@ -248,11 +276,15 @@ fun SettingsScreen(
                 SettingsRow(
                     { Icon(Lucide.Info, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.check_update), "0.0.1")
+                    stringResource(R.string.check_update), versionName,
+                    onClick = {
+                        showUpdateDialog = true
+                    })
                 SettingsRow(
                     { Icon(Lucide.CircleHelp, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.about))
+                    stringResource(R.string.about),
+                    onClick = onNavigateToAbout)
             }
             Spacer(Modifier.height(16.dp))
         }

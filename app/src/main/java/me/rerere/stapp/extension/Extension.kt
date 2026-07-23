@@ -27,6 +27,8 @@ data class ExtensionInfo(
     val name: String,
     val description: String = "",
     val builtin: Boolean = true,
+    /** 首次使用时（无已存启用记录）的默认启用状态 */
+    val defaultEnabled: Boolean = true,
 )
 
 // ── 能力：提示注入 ──────────────────────────────────────────
@@ -58,6 +60,8 @@ data class PromptContribution(
     val preHistory: List<ExtPiece> = emptyList(),
     val postHistory: List<ExtPiece> = emptyList(),
     val depthInjections: List<ExtDepthPiece> = emptyList(),
+    /** 告知系统可以跳过历史消息的前 N 条（0-based 索引），这些消息已被本扩展压缩（如摘要）。-1 = 不跳过 */
+    val skipMessagesUpTo: Int = -1,
 ) {
     companion object {
         val EMPTY = PromptContribution()

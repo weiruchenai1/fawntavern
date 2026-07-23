@@ -33,6 +33,7 @@ object SummarizeExtension : Extension, PromptContributor, GenerationLifecycle {
         id = ID,
         name = "Summarize",
         description = "把较早的对话滚动压缩成摘要并注入提示，缓解长对话超出上下文。",
+        defaultEnabled = false,
     )
 
     // ── 会话级状态：当前摘要 + 已折叠到的消息水位（extState[ID]） ──
@@ -82,10 +83,13 @@ object SummarizeExtension : Extension, PromptContributor, GenerationLifecycle {
         .toString()
 
     override fun contribute(ctx: PromptContext): PromptContribution {
-        val summary = parseState(ctx.extState).summary
+        val state = parseState(ctx.extState)
+        val summary = state.summary
         if (summary.isBlank()) return PromptContribution.EMPTY
         return PromptContribution(
             preHistory = listOf(ExtPiece("[对话摘要 / Summary of earlier conversation]\n$summary")),
+            // 告诉系统：前 N 条消息已被压缩进摘要，构建 prompt 时可跳过原文
+            skipMessagesUpTo = state.coveredUpTo,
         )
     }
 

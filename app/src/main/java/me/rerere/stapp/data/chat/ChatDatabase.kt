@@ -87,6 +87,32 @@ internal interface ChatDao {
     @Query("DELETE FROM messages WHERE sessionId = :id")
     suspend fun deleteMessages(id: String)
 
+    // ── 单条消息的按 (sessionId, ts) 粒度操作（分支切换/删除/编辑走 DB，不再整会话覆盖） ──
+
+    @Query("SELECT * FROM messages WHERE sessionId = :sid AND ts = :ts")
+    suspend fun getMessage(sid: String, ts: Long): MessageEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMessage(m: MessageEntity)
+
+    @Query("DELETE FROM messages WHERE sessionId = :sid AND ts = :ts")
+    suspend fun deleteMessageRow(sid: String, ts: Long)
+
+    @Query("SELECT COUNT(*) FROM messages WHERE sessionId = :sid")
+    suspend fun countMessages(sid: String): Int
+
+    /** 截断：删掉该会话内 ts 大于给定值的所有消息（用户消息后无 AI 回复时的重答兜底） */
+    @Query("DELETE FROM messages WHERE sessionId = :sid AND ts > :ts")
+    suspend fun deleteMessagesAfter(sid: String, ts: Long)
+
+    /** 单条消息变更后回填会话 updatedAt（抽屉据此重排序） */
+    @Query("UPDATE sessions SET updatedAt = :t WHERE id = :id")
+    suspend fun touchSession(id: String, t: Long)
+
+    /** 生成收尾单独回写会话的世界书定时状态（不整会话覆盖，避免踩到分页在改的消息行） */
+    @Query("UPDATE sessions SET timedWiJson = :json, updatedAt = :t WHERE id = :id")
+    suspend fun updateTimedWi(id: String, json: String, t: Long)
+
     /** 整会话覆盖保存。REPLACE 会话行会级联删掉旧消息，再补一次显式删除兜底 */
     @Transaction
     suspend fun saveSession(s: SessionEntity, ms: List<MessageEntity>) {

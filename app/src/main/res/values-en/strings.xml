@@ -36,6 +36,18 @@
     <string name="data_management">Data Management</string>
     <string name="about">About</string>
     <string name="check_update">Check Update</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_latest_title">Up to Date</string>
+    <string name="update_latest_msg">Version %1$s is the latest, no update needed.</string>
+    <string name="update_available_title">New Version Available</string>
+    <string name="update_available_msg">Version %1$s is available (current: %2$s). Please download the update.</string>
+    <string name="update_go_download">Download</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_description">A SillyTavern-style AI role-playing chat client.\n\nSupports importing SillyTavern-compatible character cards, presets, and world books with multiple LLM API backends. Chat with your favorite characters anytime, anywhere.</string>
+    <string name="about_tech">Tech Stack</string>
+    <string name="about_tech_detail">Kotlin + Jetpack Compose (Material 3)</string>
+    <string name="about_disclaimer">Disclaimer</string>
+    <string name="about_disclaimer_text">This app is for learning and entertainment purposes only. AI-generated content does not represent the developer\'s views. Please use responsibly.</string>
 
     <!-- Prompt debug log -->
     <string name="debug_log">Prompt Log</string>

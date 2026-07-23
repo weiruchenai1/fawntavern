@@ -36,6 +36,18 @@
     <string name="data_management">数据管理</string>
     <string name="about">关于</string>
     <string name="check_update">检查更新</string>
+    <string name="update_checking">正在检查更新…</string>
+    <string name="update_latest_title">已是最新版本</string>
+    <string name="update_latest_msg">当前版本 %1$s 已是最新，无需更新。</string>
+    <string name="update_available_title">发现新版本</string>
+    <string name="update_available_msg">新版本 %1$s 可用，当前版本 %2$s。请前往下载更新。</string>
+    <string name="update_go_download">前往下载</string>
+    <string name="about_version">版本 %1$s</string>
+    <string name="about_description">SillyTavern 风格的 AI 角色扮演聊天客户端。\n\n支持导入 SillyTavern 兼容的角色卡、预设和世界书，可对接多种大模型 API，随时随地与喜欢的角色聊天。</string>
+    <string name="about_tech">技术栈</string>
+    <string name="about_tech_detail">Kotlin + Jetpack Compose (Material 3)</string>
+    <string name="about_disclaimer">免责声明</string>
+    <string name="about_disclaimer_text">本应用仅供学习和娱乐用途。AI 生成的内容不代表开发者立场，请合理使用。</string>
 
     <!-- Prompt 调试日志 -->
     <string name="debug_log">Prompt 日志</string>

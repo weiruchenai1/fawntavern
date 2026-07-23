@@ -9,8 +9,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.stapp.R
@@ -20,6 +28,7 @@ import me.rerere.stapp.data.character.CharRegex
 import me.rerere.stapp.data.character.CharacterCard
 import me.rerere.stapp.data.character.CharacterRepository
 import me.rerere.stapp.data.chat.AttachmentStore
+import me.rerere.stapp.data.chat.ChatMessage
 import me.rerere.stapp.data.chat.ChatRepository
 import me.rerere.stapp.data.chat.ChatSession
 import me.rerere.stapp.data.chat.MsgFile
@@ -65,8 +74,15 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 当前角色卡的图片（无图为 null，UI 回退到占位图标） */
     var charImageBitmap by mutableStateOf<Bitmap?>(null); private set
     var generating by mutableStateOf(false); private set
-    /** 当前/最近一次生成的目标消息下标（重答非末条消息时指向中间的消息），-1 = 尚未生成过 */
-    var generatingIdx by mutableStateOf(-1); private set
+    /**
+     * 覆盖在分页列表之上的内存消息（按 ts 索引）：承载流式生成的实时内容、以及分支切换/编辑的
+     * 乐观即时反馈。写库是异步的（DB→Room 失效→分页重刷有几帧时间差），overlay 在此期间顶替显示，
+     * 待分页把该 ts 的最终内容补齐后由 UI 调 [clearOverlay] 撤下——避免空帧/陈旧内容闪烁，
+     * 并让滚动锚定像旧同步逻辑一样在下一帧就能读到新内容。
+     */
+    var overlays by mutableStateOf<Map<Long, ChatMessage>>(emptyMap()); private set
+    /** 当前/最近一次生成的目标消息 ts（重答时指向被重答的消息），null = 尚未生成过 */
+    var genTargetTs by mutableStateOf<Long?>(null); private set
     var userName by mutableStateOf(UserProfileStore.getName(app)); private set
     var userAvatarBitmap by mutableStateOf<Bitmap?>(null); private set
     // 当前角色关联的世界书/预设（随角色卡切换加载，生成时进入 Prompt 拼装）
@@ -89,6 +105,28 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val generation = GenerationController()
     private val ctx: Application get() = getApplication()
+
+    /**
+     * 当前会话消息的分页流（Paging 3）。随 [session] 的 id 切换：初始加载偏移定位到最后一页，
+     * 天然停在底部；后续任何 DB 写入由 Room 使数据源失效自动重刷。未落盘的新会话（仅开场白）
+     * 分页为空，UI 回退到 [session] 内存消息显示开场白。
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val pagedMessages: Flow<PagingData<ChatMessage>> =
+        snapshotFlow { session?.id }
+            .flatMapLatest { id ->
+                if (id == null) flowOf(PagingData.empty())
+                else flow {
+                    // 切会话瞬间先发一个空页：清掉 collectAsLazyPagingItems 里残留的上个会话快照，
+                    // 让 UI 立刻回退到新会话的内存消息（避免旧会话消息在新标题下闪现），随后加载真实分页
+                    emit(PagingData.empty())
+                    val count = ChatRepository.messageCount(ctx, id)
+                    // 让最新一页先加载：初始偏移取 count-pageSize（pageSize=60），不足一页则从头
+                    val initialKey = (count - 60).takeIf { it > 0 }
+                    emitAll(ChatRepository.messagesPaged(ctx, id, initialKey))
+                }
+            }
+            .cachedIn(viewModelScope)
 
     init {
         // 登记内置官方扩展（幂等）
@@ -118,6 +156,12 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 charImageBitmap = if (file.isNullOrBlank()) null else loadCharImage(file)
                 loadPromptData()
             }
+        }
+        // 切换会话即清空 overlay：overlay 按 ts 索引，而 ts 仅在会话内唯一，跨会话残留会误覆盖
+        // 另一会话里同 ts 的消息。生成中会话切换被禁用（generating 时 openSession/openCharacter 直接返回），
+        // 故生成用的 overlay 不会被此清除。
+        viewModelScope.launch {
+            snapshotFlow { session?.id }.collect { overlays = emptyMap() }
         }
         reloadUserProfile()
     }
@@ -262,19 +306,34 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val (prov, modelId) = currentProviderAndModel() ?: return SendOutcome.NO_MODEL
         inputText = ""
         attachments = emptyList()
+        generating = true  // 同步置位:附件落盘/DB 读等挂起点之前就挡住重复发送与并发生成
         viewModelScope.launch {
-            // 附件先拷入自有目录（content URI 的读权限是临时的，落盘副本才能支撑历史展示与重答）
-            val images = mutableListOf<String>()
-            val files = mutableListOf<MsgFile>()
-            for (a in atts) {
-                if (a.isImage) AttachmentStore.persistImage(ctx, a.uri)?.let { images.add(it) }
-                else AttachmentStore.persistFile(ctx, a.uri)?.let { files.add(it) }
+            try {
+                // 附件先拷入自有目录（content URI 的读权限是临时的，落盘副本才能支撑历史展示与重答）
+                val images = mutableListOf<String>()
+                val files = mutableListOf<MsgFile>()
+                for (a in atts) {
+                    if (a.isImage) AttachmentStore.persistImage(ctx, a.uri)?.let { images.add(it) }
+                    else AttachmentStore.persistFile(ctx, a.uri)?.let { files.add(it) }
+                }
+                // 以 DB 为准取当前会话（内存态可能落后于分支切换等 DB 变更）；未落盘的新会话回退内存态
+                val existing = session?.id?.let { ChatRepository.get(ctx, it) }
+                val src = existing ?: session ?: ChatSession()
+                val base = ConversationOps.appendUserMessage(src, text, images, files)
+                session = base
+                val userMsg = base.messages.last()
+                // 新用户消息即时进 overlay：putMessage 触发的分页 refresh 要过几帧才把它纳入 pagedBase，
+                // 这期间渲染列表若少这一条，发送瞬间的贴底/滚动会按"少一条"的高度算，加载图标落不到真正底部。
+                // 放进 overlay 后任何时刻列表都不缺它，分页补齐后由 settle 逻辑自动撤下。
+                overlays = overlays + (userMsg.ts to userMsg)
+                // 用户消息先落盘：生成中途 App 被杀/Activity 重建也不丢消息。
+                // 已落盘会话只插新用户消息；未落盘的新会话整存一次（含开场白）
+                if (existing != null) ChatRepository.putMessage(ctx, base.id, userMsg)
+                else ChatRepository.save(ctx, base)
+                runGeneration(base.id, prov, modelId, GenMode.SEND, null)
+            } finally {
+                generating = false
             }
-            val base = ConversationOps.appendUserMessage(session ?: ChatSession(), text, images, files)
-            session = base
-            // 用户消息先落盘：生成中途 App 被杀/Activity 重建也不丢消息（生成结束后会再存完整内容）
-            ChatRepository.save(ctx, base)
-            startGenerate(base, prov, modelId)
         }
         return SendOutcome.STARTED
     }
@@ -304,87 +363,154 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** AI 消息重答：保留旧版本，新回复作为新版本（可左右切换）；其后的消息保留，由所有版本共享 */
-    fun regenerateAi(idx: Int): SendOutcome {
+    fun regenerateAi(ts: Long): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
         val s = session ?: return SendOutcome.SKIPPED
-        if (s.messages.getOrNull(idx)?.role != "assistant") return SendOutcome.SKIPPED
+        val idx = s.messages.indexOfFirst { it.ts == ts }
+        // 同步预判仅用于 SendOutcome（提示"先选模型"/是否滚动）；真正的目标计算在 runGeneration
+        // 里以 DB 最新态重做，避免读到异步变更（删除/切换）后的陈旧 session 而复活/覆盖消息
+        if (idx < 0 || s.messages[idx].role != "assistant") return SendOutcome.SKIPPED
         if (s.messages.take(idx).none { it.role == "user" }) return SendOutcome.SKIPPED  // 开场白不可重答
         val (prov, modelId) = currentProviderAndModel() ?: return SendOutcome.NO_MODEL
-        startGenerate(s, prov, modelId, regenIdx = idx)
+        startGenerate(s.id, prov, modelId, GenMode.REGEN, ts)
         return SendOutcome.STARTED
     }
 
     /** 用户消息重答：对其后的 AI 回复生成新版本 */
-    fun regenerateAfterUser(idx: Int): SendOutcome {
+    fun regenerateAfterUser(ts: Long): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
         val s = session ?: return SendOutcome.SKIPPED
-        if (s.messages.getOrNull(idx + 1)?.role == "assistant") {
-            return regenerateAi(idx + 1)
-        }
+        val idx = s.messages.indexOfFirst { it.ts == ts }
+        if (idx < 0) return SendOutcome.SKIPPED
+        val next = s.messages.getOrNull(idx + 1)
+        if (next?.role == "assistant") return regenerateAi(next.ts)
         val (prov, modelId) = currentProviderAndModel() ?: return SendOutcome.NO_MODEL
         // 走到这里说明其后没有 AI 回复（正常对话流总是有）：极罕见的用户消息连排场景，
-        // 没有分支点可挂下文，直接截断
-        val base = s.copy(messages = s.messages.take(idx + 1), updatedAt = System.currentTimeMillis())
-        session = base
-        startGenerate(base, prov, modelId)
+        // 没有分支点可挂下文，直接截断到该用户消息后再生成（截断需先于生成完成，故同一协程内顺序执行）
+        generating = true  // 同步置位:截断/DB 读挂起点之前就挡住并发
+        viewModelScope.launch {
+            try {
+                ChatRepository.truncateAfter(ctx, s.id, ts)
+                runGeneration(s.id, prov, modelId, GenMode.SEND, null)
+            } finally {
+                generating = false
+            }
+        }
         return SendOutcome.STARTED
     }
 
-    private fun startGenerate(base: ChatSession, prov: ApiProvider, modelId: String, regenIdx: Int? = null) {
+    private enum class GenMode { SEND, REGEN }
+
+    private fun startGenerate(sessionId: String, prov: ApiProvider, modelId: String, mode: GenMode, targetTs: Long?) {
+        generating = true  // 同步置位:runGeneration 内首个 get() 挂起前就挡住重复触发（防双击并发生成）
         viewModelScope.launch {
-            generating = true
-            generatingIdx = regenIdx ?: base.messages.size
-            // 收集启用扩展的提示贡献（如摘要），并入历史之外的固定块（不进历史流、不被预算裁剪）
-            val extraPre = mutableListOf<PromptBuilder.Piece>()
-            val extraPost = mutableListOf<PromptBuilder.Piece>()
-            val extraDepth = mutableListOf<PromptBuilder.DepthPiece>()
-            for (ext in ExtensionStore.enabledExtensions(ctx)) {
-                if (ext !is PromptContributor) continue
-                val c = ext.contribute(
-                    PromptContext(
-                        session = base,
-                        charName = currentCard?.name ?: base.charName,
-                        userName = userName,
-                        extState = base.extState[ext.info.id] ?: "",
-                        config = ExtensionStore.getConfig(ctx, ext.info.id),
-                    )
-                )
-                val src = PromptBuilder.PromptSource.EXTENSION
-                extraPre += c.preHistory.map { PromptBuilder.Piece(it.role, it.content, src, ext.info.name) }
-                extraPost += c.postHistory.map { PromptBuilder.Piece(it.role, it.content, src, ext.info.name) }
-                extraDepth += c.depthInjections.map { PromptBuilder.DepthPiece(it.role, it.content, it.depth, src, ext.info.name) }
+            try {
+                runGeneration(sessionId, prov, modelId, mode, targetTs)
+            } finally {
+                generating = false
             }
-            val built = PromptBuilder.build(
-                card = currentCard,
-                userName = userName,
-                userDescription = UserProfileStore.getDescription(ctx),
-                worldBooks = activeWorldBooks,
-                preset = activePreset,
-                // 重答中间消息时世界书扫描只看该消息及之前的历史，与旧行为（截断后扫描）一致
-                history = if (regenIdx != null) base.messages.subList(0, regenIdx + 1) else base.messages,
-                promptRegex = (currentCard?.regexScripts ?: emptyList()) + presetRegex,
-                timedWi = base.timedWi,
-                // 重答历史消息不回写定时状态，避免污染 sticky/cooldown 窗口
-                updateTimed = regenIdx == null,
-                wiSettings = WorldInfoSettingsStore.get(ctx),
-                extraPre = extraPre,
-                extraPost = extraPost,
-                extraDepth = extraDepth,
+        }
+    }
+
+    /**
+     * 一次生成的核心：以 DB 最新态重取会话，据 [mode] 组装目标消息（SEND 追加新 assistant；
+     * REGEN 在 [targetTs] 上开新版本），流式内容走 overlay（不落盘空行），收尾只写一次最终消息。
+     */
+    private suspend fun runGeneration(
+        sessionId: String, prov: ApiProvider, modelId: String, mode: GenMode, targetTs: Long?,
+    ) {
+        // 以 DB 最新态为准，避免异步变更后的陈旧内存态导致复活已删消息 / 覆盖已切分支
+        val base = ChatRepository.get(ctx, sessionId) ?: return
+        val genMessage: ChatMessage
+        val buildHistory: List<ChatMessage>
+        val promptHistory: List<ChatMessage>
+        val updateTimed: Boolean
+        if (mode == GenMode.REGEN) {
+            val idx = base.messages.indexOfFirst { it.ts == targetTs }
+            if (idx < 0 || base.messages[idx].role != "assistant") return
+            if (base.messages.take(idx).none { it.role == "user" }) return
+            genMessage = ConversationOps.startVariantOne(base.messages[idx], modelId)
+            // 重答中间消息时世界书扫描只看该消息及之前的历史，与旧行为（截断后扫描）一致
+            buildHistory = base.messages.subList(0, idx + 1)
+            promptHistory = base.messages.subList(0, idx)
+            updateTimed = false  // 重答历史消息不回写定时状态，避免污染 sticky/cooldown 窗口
+        } else {
+            genMessage = ChatMessage(role = "assistant", model = modelId, ts = ConversationOps.nextTs(base))
+            buildHistory = base.messages
+            promptHistory = base.messages
+            updateTimed = true
+        }
+        session = base
+        genTargetTs = genMessage.ts
+        // 目标消息只进 overlay、不落盘空行：进程被杀不会残留空 assistant 行，也不需起始那次写库
+        // （generating 已由调用方在挂起点之前同步置位，此处不再重复设置）
+        overlays = overlays + (genMessage.ts to genMessage)
+        // 收集启用扩展的提示贡献（如摘要），并入历史之外的固定块（不进历史流、不被预算裁剪）
+        val extraPre = mutableListOf<PromptBuilder.Piece>()
+        val extraPost = mutableListOf<PromptBuilder.Piece>()
+        val extraDepth = mutableListOf<PromptBuilder.DepthPiece>()
+        var historySkip = 0
+        for (ext in ExtensionStore.enabledExtensions(ctx)) {
+            if (ext !is PromptContributor) continue
+            val c = ext.contribute(
+                PromptContext(
+                    session = base,
+                    charName = currentCard?.name ?: base.charName,
+                    userName = userName,
+                    extState = base.extState[ext.info.id] ?: "",
+                    config = ExtensionStore.getConfig(ctx, ext.info.id),
+                )
             )
-            val final = generation.run(
-                base = base,
-                provider = prov,
-                modelId = modelId,
-                built = built,
-                filesDir = ctx.filesDir,
-                streaming = currentCard?.streaming ?: true,
-                regenIdx = regenIdx,
-                errorText = { e -> ctx.getString(R.string.chat_error_fmt, e.message ?: "") },
-                onUpdate = { session = it },
-            )
-            ChatRepository.save(ctx, final.copy(timedWi = built.timedWi))
-            generating = false
-            runExtensionLifecycle(final)
+            val srcTag = PromptBuilder.PromptSource.EXTENSION
+            extraPre += c.preHistory.map { PromptBuilder.Piece(it.role, it.content, srcTag, ext.info.name) }
+            extraPost += c.postHistory.map { PromptBuilder.Piece(it.role, it.content, srcTag, ext.info.name) }
+            extraDepth += c.depthInjections.map { PromptBuilder.DepthPiece(it.role, it.content, it.depth, srcTag, ext.info.name) }
+            if (c.skipMessagesUpTo > historySkip) historySkip = c.skipMessagesUpTo
+        }
+        // 扩展声明了要跳过的历史消息（如摘要已压缩前 N 条）→ 裁剪 buildHistory 和 promptHistory，
+        // 用扩展注入的固定块（preHistory 中的摘要）代替原文。仅 SEND 模式裁剪（REGEN 重答中间消息
+        // 时前面的上下文不可省略）；跳过数不得超过实际消息数
+        val slicedBuildHistory = if (mode == GenMode.SEND && historySkip > 0 && historySkip < buildHistory.size)
+            buildHistory.drop(historySkip) else buildHistory
+        val slicedPromptHistory = if (mode == GenMode.SEND && historySkip > 0 && historySkip < promptHistory.size)
+            promptHistory.drop(historySkip) else promptHistory
+        val built = PromptBuilder.build(
+            card = currentCard,
+            userName = userName,
+            userDescription = UserProfileStore.getDescription(ctx),
+            worldBooks = activeWorldBooks,
+            preset = activePreset,
+            history = slicedBuildHistory,
+            promptRegex = (currentCard?.regexScripts ?: emptyList()) + presetRegex,
+            timedWi = base.timedWi,
+            updateTimed = updateTimed,
+            wiSettings = WorldInfoSettingsStore.get(ctx),
+            extraPre = extraPre,
+            extraPost = extraPost,
+            extraDepth = extraDepth,
+        )
+        val finalMsg = generation.run(
+            promptHistory = slicedPromptHistory,
+            genMessage = genMessage,
+            provider = prov,
+            modelId = modelId,
+            built = built,
+            filesDir = ctx.filesDir,
+            streaming = currentCard?.streaming ?: true,
+            errorText = { e -> ctx.getString(R.string.chat_error_fmt, e.message ?: "") },
+            onUpdate = { overlays = overlays + (it.ts to it) },
+        )
+        // 收尾：最终消息与会话定时状态落盘。overlay 不在此清除——留着顶替显示，等分页把最终内容
+        // 补齐后由 UI（clearOverlay）撤下，避免"撤 overlay 时分页还没刷新出最终内容"的空帧
+        ChatRepository.putMessage(ctx, sessionId, finalMsg)
+        ChatRepository.saveTimedWi(ctx, sessionId, built.timedWi)
+        overlays = overlays + (finalMsg.ts to finalMsg)  // 定格最终内容（供 UI 比对分页是否补齐）
+        // generating 由调用方 finally 复位（覆盖异常/提前 return 各路径）
+        // 同步内存会话（供下次生成拼装历史 + 菜单/编辑按 ts 取消息）；仍停留在本会话才覆盖。
+        // 生命周期钩子（如摘要）无论是否切走都对已完成会话执行
+        ChatRepository.get(ctx, sessionId)?.let { done ->
+            if (session?.id == sessionId) session = done
+            runExtensionLifecycle(done)
         }
     }
 
@@ -419,32 +545,74 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ── 消息操作 ──
+    // ── 消息操作（统一走 DB：按 ts 定位单条消息落盘，分页由 Room 自动刷新） ──
+    //   写库异步、分页刷新有时间差，故变更先进 overlay 即时反映（滚动锚定/避免陈旧闪烁），
+    //   DB 回来后把 overlay 校准到权威结果，最终由 UI 在分页补齐后 clearOverlay 撤下。
 
-    /** 左右切换消息版本；实际发生切换才返回 true（供 UI 决定是否重新锚定滚动位置） */
-    fun switchAlt(idx: Int, dir: Int): Boolean {
-        if (generating) return false
-        val s = session ?: return false
-        val upd = ConversationOps.switchAlt(s, idx, dir) ?: return false
-        updateSession(upd)
-        return true
+    /** 左右切换消息版本（DB 落盘 + 乐观 overlay 即时切换，供锚定同帧读到新内容） */
+    fun switchAlt(ts: Long, dir: Int) {
+        if (generating) return
+        val s = session ?: return
+        // 以当前显示态（未收敛的 overlay 优先，否则内存会话）为基准算新版本：连续快速切换才不丢中间态
+        val cur = overlays[ts] ?: s.messages.firstOrNull { it.ts == ts } ?: return
+        val optimistic = ConversationOps.switchAltOne(cur, dir) ?: return  // 到边界无切换：直接返回
+        overlays = overlays + (ts to optimistic)
+        viewModelScope.launch {
+            ensurePersisted(s)
+            ChatRepository.switchAlt(ctx, s.id, ts, dir)
+            reconcileOverlay(s.id, ts)
+        }
     }
 
     /** 删除消息：多版本时只删当前显示的版本（下文不受影响），单版本删除整条 */
-    fun deleteMessage(idx: Int) {
+    fun deleteMessage(ts: Long) {
         if (generating) return
         val s = session ?: return
-        updateSession(ConversationOps.deleteMessage(s, idx) ?: return)
+        // 删除是"移除行"，overlay 无法表示；撤掉该 ts 可能存在的 overlay，直接走 DB + 分页刷新
+        overlays = overlays - ts
+        viewModelScope.launch {
+            ensurePersisted(s)
+            ChatRepository.deleteMessage(ctx, s.id, ts)
+            resyncSession(s.id)
+        }
     }
 
-    fun updateMessage(idx: Int, content: String) {
+    fun updateMessage(ts: Long, content: String) {
         val s = session ?: return
-        updateSession(ConversationOps.editMessage(s, idx, content) ?: return)
+        val cur = overlays[ts] ?: s.messages.firstOrNull { it.ts == ts }
+        if (cur != null) overlays = overlays + (ts to cur.copy(content = content))
+        viewModelScope.launch {
+            ensurePersisted(s)
+            ChatRepository.editMessage(ctx, s.id, ts, content)
+            reconcileOverlay(s.id, ts)
+        }
     }
 
-    private fun updateSession(upd: ChatSession) {
-        session = upd
-        viewModelScope.launch { ChatRepository.save(ctx, upd) }
+    /** UI 检测到分页已把该 ts 的最终内容补齐后调用：撤下顶替显示的 overlay */
+    fun clearOverlay(ts: Long) {
+        overlays = overlays - ts
+    }
+
+    /** 单条 DB 变更后把 overlay 校准到 DB 权威结果并同步内存会话（陈旧乐观值在此被纠正） */
+    private suspend fun reconcileOverlay(sid: String, ts: Long) {
+        val fresh = ChatRepository.get(ctx, sid) ?: return
+        if (session?.id != sid) return
+        session = fresh
+        val row = fresh.messages.firstOrNull { it.ts == ts }
+        overlays = if (row != null) overlays + (ts to row) else overlays - ts
+    }
+
+    /**
+     * 首次修改前把仅存在于内存的会话（如只有开场白、尚未发消息的新会话）整存落盘，
+     * 使其消息进入 DB / 分页，随后的按 ts 单条操作才有行可改。仅浏览角色不触发落盘。
+     */
+    private suspend fun ensurePersisted(s: ChatSession) {
+        if (ChatRepository.get(ctx, s.id) == null) ChatRepository.save(ctx, s)
+    }
+
+    /** 单条消息落盘后把内存会话同步回 DB（供下次生成拼装历史 + 菜单/编辑按 ts 取消息） */
+    private suspend fun resyncSession(sid: String) {
+        ChatRepository.get(ctx, sid)?.let { fresh -> if (session?.id == sid) session = fresh }
     }
 
     // ── IO 辅助 ──

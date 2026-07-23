@@ -302,7 +302,8 @@ private fun PromptsTab(
         item {
             Row(
                 Modifier.fillMaxWidth().clickable { onAdd() }.padding(Space16),
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Lucide.Plus, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(Space8))

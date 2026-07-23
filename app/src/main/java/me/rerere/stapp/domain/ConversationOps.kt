@@ -51,9 +51,10 @@ internal object ConversationOps {
         updatedAt = System.currentTimeMillis(),
     )
 
-    /** 左右切换消息版本：只换本消息显示的内容（下文由所有版本共享，不随切换变化）；无实际切换返回 null */
-    fun switchAlt(s: ChatSession, idx: Int, dir: Int): ChatSession? {
-        val m = s.messages.getOrNull(idx) ?: return null
+    // ── 单条消息的纯变换（DB 粒度落盘用）：只作用于本消息，下文由所有版本共享，不受影响 ──
+
+    /** 左右切换本消息版本：无实际切换返回 null */
+    fun switchAltOne(m: ChatMessage, dir: Int): ChatMessage? {
         if (m.alts.size < 2) return null
         val ni = (m.altIdx + dir).coerceIn(0, m.alts.lastIndex)
         if (ni == m.altIdx) return null
@@ -62,55 +63,35 @@ internal object ConversationOps {
         newAlts[m.altIdx] = newAlts[m.altIdx].copy(
             content = m.content, reasoning = m.reasoning, model = m.model, reasoningMs = m.reasoningMs)
         val target = newAlts[ni]
-        val list = s.messages.toMutableList()
-        list[idx] = m.copy(content = target.content, reasoning = target.reasoning,
+        return m.copy(content = target.content, reasoning = target.reasoning,
             model = target.model, reasoningMs = target.reasoningMs, alts = newAlts, altIdx = ni)
-        return s.copy(messages = list, updatedAt = System.currentTimeMillis())
     }
 
     /**
-     * 重答准备：在 idx 消息上开一个空白新版本并切换过去（由 GenerationController 流式填充）。
-     * 下文保留在 messages 里，由所有版本共享 —— 重答非末条消息不再截断其后的时间线。
+     * 删除本消息的当前版本：多版本时就近切到相邻版本并返回新消息；单版本返回 null 表示应整条删除。
      */
-    fun startVariant(s: ChatSession, idx: Int, modelId: String): ChatSession {
-        val m = s.messages[idx]
-        // 单版本消息先物化为 alts；镜像字段写回当前版本，切回旧版本时内容不丢
+    fun deleteAltOne(m: ChatMessage): ChatMessage? {
+        if (m.alts.size <= 1) return null
+        val newAlts = m.alts.toMutableList().also { it.removeAt(m.altIdx) }
+        val newIdx = m.altIdx.coerceAtMost(newAlts.lastIndex)
+        val cur = newAlts[newIdx]
+        val single = newAlts.size == 1
+        return m.copy(
+            content = cur.content, reasoning = cur.reasoning,
+            model = cur.model, reasoningMs = cur.reasoningMs,
+            alts = if (single) emptyList() else newAlts,
+            altIdx = if (single) 0 else newIdx,
+        )
+    }
+
+    /** 重答准备（单消息版）：在本消息上开一个空白新版本并切换过去，由生成器流式填充 */
+    fun startVariantOne(m: ChatMessage, modelId: String): ChatMessage {
         val alts = m.alts.ifEmpty { listOf(MsgAlt()) }.toMutableList()
         val ai = m.altIdx.coerceIn(0, alts.lastIndex)
         alts[ai] = alts[ai].copy(content = m.content, reasoning = m.reasoning,
             model = m.model, reasoningMs = m.reasoningMs)
         alts += MsgAlt(model = modelId)
-        val list = s.messages.toMutableList()
-        list[idx] = m.copy(content = "", reasoning = "", model = modelId, reasoningMs = 0,
+        return m.copy(content = "", reasoning = "", model = modelId, reasoningMs = 0,
             alts = alts, altIdx = alts.lastIndex)
-        return s.copy(messages = list, updatedAt = System.currentTimeMillis())
-    }
-
-    /** 删除消息：多版本时删当前版本、就近切换相邻版本（下文共享，不受影响）；单版本删除整条消息 */
-    fun deleteMessage(s: ChatSession, idx: Int): ChatSession? {
-        val m = s.messages.getOrNull(idx) ?: return null
-        val list = s.messages.toMutableList()
-        if (m.alts.size > 1) {
-            val newAlts = m.alts.toMutableList().also { it.removeAt(m.altIdx) }
-            val newIdx = m.altIdx.coerceAtMost(newAlts.lastIndex)
-            val cur = newAlts[newIdx]
-            val single = newAlts.size == 1
-            list[idx] = m.copy(
-                content = cur.content, reasoning = cur.reasoning,
-                model = cur.model, reasoningMs = cur.reasoningMs,
-                alts = if (single) emptyList() else newAlts,
-                altIdx = if (single) 0 else newIdx,
-            )
-        } else {
-            list.removeAt(idx)
-        }
-        return s.copy(messages = list, updatedAt = System.currentTimeMillis())
-    }
-
-    fun editMessage(s: ChatSession, idx: Int, content: String): ChatSession? {
-        if (idx >= s.messages.size) return null
-        val list = s.messages.toMutableList()
-        list[idx] = list[idx].copy(content = content)
-        return s.copy(messages = list, updatedAt = System.currentTimeMillis())
     }
 }

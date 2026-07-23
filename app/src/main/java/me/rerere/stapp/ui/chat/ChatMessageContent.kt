@@ -28,7 +28,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.DefaultMarkdownAnimation
@@ -46,16 +45,22 @@ private val markdownFlavour = GFMFlavourDescriptor()
 private val markdownParser = MarkdownParser(markdownFlavour)
 
 /**
- * 关闭文本块默认的 animateContentSize：它是给流式增长设计的，而这里 Markdown 只渲染
- * 已完成的消息（流式期间走纯 Text）。切分支/编辑替换内容时若让高度做动画，条目要
- * ~300ms 才长到真实高度，切分支的同帧锚定会随之漂移（句子下滑、整体下移一截）。
+ * 关闭文本块默认的 animateContentSize：它是给流式增长设计的，但这里内容变化（流式增长 /
+ * 切分支 / 编辑）都希望**同帧**长到真实高度——让高度做 ~300ms 动画会拖慢流式跟随、并使切分支
+ * 的同帧锚定漂移（句子下滑、整体下移一截）。
  */
 private val noTextAnimations = DefaultMarkdownAnimation(animateTextSize = { this })
 
 /**
  * 聊天消息正文渲染。
- * - 流式生成中：纯文本，避免每帧重解析。
- * - 生成结束：先套用角色卡正则（含宏替换），再通过 mikepenz Markdown 渲染。
+ * - 流式生成中：**实时** Markdown 渲染（与结束态同一条管线：先套正则+宏，再 Markdown），
+ *   随每帧节流刷新的内容增量重解析上屏——不再是纯文本、结束才一次性渲染。正文尚为空
+ *   （纯思考阶段）时显示呼吸点。
+ * - 生成结束：同样的管线渲染最终内容。
+ *
+ * 同步解析（非 `Markdown(content)` 的异步重载）：内容一变即同帧成型到真实高度，流式增长
+ * 平滑跟随、切分支/重试的同帧锚定不抖；`remember(processed)` 保证每段内容只解析一次，
+ * 流式期间即"每 60ms 节流帧解析一次"。
  *
  * 注意：不使用 WebView，避免 WebView 与 LazyColumn 嵌套导致的布局闪烁/滚动跳页。
  * 所有内容（包括裸 HTML 标签和 ```html 围栏）均通过 mikepenz 渲染。
@@ -75,23 +80,18 @@ fun MessageContent(
     userName: String = "",
     charName: String = "",
 ) {
-    if (isStreaming) {
-        if (content.isBlank()) {
-            StreamingDots(modifier.padding(vertical = 8.dp))
-        } else {
-            Text(content, style = textStyle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
-        }
+    if (content.isBlank()) {
+        // 流式等待（还没有正文，纯思考阶段）显示呼吸点；非流式空内容不占位
+        if (isStreaming) StreamingDots(modifier.padding(vertical = 8.dp))
         return
     }
-    if (content.isBlank()) return
 
     // 稳定的深度键，避免新消息到达时重算旧消息
     val depthKey = remember(depth, regexScripts) {
         RegexEngine.depthKey(regexScripts, depth)
     }
 
-    // 先套用角色卡内嵌正则，再做宏替换
+    // 先套用角色卡内嵌正则，再做宏替换（流式期间同样套用，使实时预览与最终渲染一致、结尾不跳变）
     val processed = remember(content, regexScripts, depthKey, userName, charName) {
         RegexEngine.applyForDisplay(
             content = content,
@@ -101,14 +101,12 @@ fun MessageContent(
             charName = charName,
         )
     }
-    // 全部走 mikepenz Markdown（一次性渲染）。
-    // mikepenz 原生支持 ``` 代码围栏、**粗体**、*斜体*、链接等 GFM 语法。
+    // 全部走 mikepenz Markdown。mikepenz 原生支持 ``` 代码围栏、**粗体**、*斜体*、链接等 GFM 语法。
     // HTML 标签（如 <b>/<i>/<StatusBlock>）如果被 mikepenz 识别为 HTML 则会渲染，否则显示源码。
     //
-    // 同步解析：Markdown(content) 重载默认异步解析，消息会先以极小
-    // 高度上屏、几帧后才长到真实高度，跳转/切分支/重试后的重新定位会因此肉眼可见地抖动。
-    // 聊天里 Markdown 只渲染已完成的消息（流式期间走纯 Text），没有高频重解析路径，
-    // 组合期同步解析一次成型是安全的；remember(processed) 保证每段内容只解析一次。
+    // 同步解析：Markdown(content) 重载默认异步解析，消息会先以极小高度上屏、几帧后才长到真实高度，
+    // 流式增长与跳转/切分支/重试后的重新定位会因此肉眼可见地抖动。此处同步解析一次成型，
+    // remember(processed) 保证每段内容只解析一次（流式期间即每帧节流刷新时解析一次）。
     val markdownState = remember(processed) {
         val md = prepareMarkdown(processed)
         val handler = ReferenceLinkHandlerImpl()

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import me.rerere.stapp.domain.ConversationOps
 
 /** 聊天会话存储：Room 数据库（sessions + messages 两张表），写入后 Flow 自动重发 */
 object ChatRepository {
@@ -60,11 +61,71 @@ object ChatRepository {
         dao(context).migrateCharFile(from, to)
     }
 
-    /** 单会话消息的分页流（Paging 3），供海量消息场景按需加载 */
-    fun messagesPaged(context: Context, sessionId: String): Flow<PagingData<ChatMessage>> =
-        Pager(PagingConfig(pageSize = 60, enablePlaceholders = false)) {
+    /** 单会话消息的分页流（Paging 3），供海量消息场景按需加载。
+     *  [initialKey] 为初始加载偏移（一般传 count-pageSize 让最新一页先加载、天然停在底部）。 */
+    fun messagesPaged(context: Context, sessionId: String, initialKey: Int? = null): Flow<PagingData<ChatMessage>> =
+        Pager(PagingConfig(pageSize = 60, enablePlaceholders = false), initialKey = initialKey) {
             dao(context).messagesPaged(sessionId)
         }.flow.map { paging -> paging.map { it.toModel() } }
+
+    /** 会话消息总数（分页初始定位到底部用） */
+    suspend fun messageCount(context: Context, sessionId: String): Int =
+        dao(context).countMessages(sessionId)
+
+    /** 取单条消息（不存在返回 null） */
+    suspend fun getMessage(context: Context, sessionId: String, ts: Long): ChatMessage? =
+        dao(context).getMessage(sessionId, ts)?.toModel()
+
+    /** 写入/覆盖单条消息（生成起止、重答开新版本等），并回填会话 updatedAt */
+    suspend fun putMessage(context: Context, sessionId: String, msg: ChatMessage) {
+        val d = dao(context)
+        d.upsertMessage(msg.toEntity(sessionId))
+        d.touchSession(sessionId, System.currentTimeMillis())
+    }
+
+    /** 左右切换单条消息版本（DB 落盘）：实际发生切换返回 true */
+    suspend fun switchAlt(context: Context, sessionId: String, ts: Long, dir: Int): Boolean {
+        val d = dao(context)
+        val m = d.getMessage(sessionId, ts)?.toModel() ?: return false
+        val upd = ConversationOps.switchAltOne(m, dir) ?: return false
+        d.upsertMessage(upd.toEntity(sessionId))
+        d.touchSession(sessionId, System.currentTimeMillis())
+        return true
+    }
+
+    /** 删除单条消息（DB 落盘）：多版本删当前版本，单版本删整条 */
+    suspend fun deleteMessage(context: Context, sessionId: String, ts: Long) {
+        val d = dao(context)
+        val m = d.getMessage(sessionId, ts)?.toModel() ?: return
+        val upd = ConversationOps.deleteAltOne(m)
+        if (upd == null) d.deleteMessageRow(sessionId, ts)
+        else d.upsertMessage(upd.toEntity(sessionId))
+        d.touchSession(sessionId, System.currentTimeMillis())
+    }
+
+    /** 编辑单条消息正文（DB 落盘） */
+    suspend fun editMessage(context: Context, sessionId: String, ts: Long, content: String) {
+        val d = dao(context)
+        val m = d.getMessage(sessionId, ts)?.toModel() ?: return
+        d.upsertMessage(m.copy(content = content).toEntity(sessionId))
+        d.touchSession(sessionId, System.currentTimeMillis())
+    }
+
+    /** 截断该会话内 ts 之后的所有消息 */
+    suspend fun truncateAfter(context: Context, sessionId: String, ts: Long) {
+        val d = dao(context)
+        d.deleteMessagesAfter(sessionId, ts)
+        d.touchSession(sessionId, System.currentTimeMillis())
+    }
+
+    /** 单独回写会话的世界书定时状态（生成收尾用，不整会话覆盖） */
+    suspend fun saveTimedWi(context: Context, sessionId: String, timedWi: Map<String, Int>) {
+        dao(context).updateTimedWi(
+            sessionId,
+            if (timedWi.isEmpty()) "" else json.encodeToString(timedWi),
+            System.currentTimeMillis(),
+        )
+    }
 
     /** 数据管理页统计存储占用用：Room 数据库所在目录 */
     fun storageDir(context: Context): File? =

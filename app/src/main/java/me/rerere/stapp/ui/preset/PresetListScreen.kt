@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,15 +39,21 @@ import me.rerere.stapp.ui.components.appClickable
 fun PresetListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var selectedPreset by remember { mutableStateOf<StPreset?>(null) }
+    // SaveableStateHolder：进入编辑器时列表离开组合，其 LazyListState 被暂存；
+    // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
+    val stateHolder = rememberSaveableStateHolder()
 
     if (selectedPreset != null) {
-        PresetEditorScreen(preset = selectedPreset!!, onBack = { selectedPreset = null })
+        stateHolder.SaveableStateProvider("editor") {
+            PresetEditorScreen(preset = selectedPreset!!, onBack = { selectedPreset = null })
+        }
         return
     }
 
-    BackHandler(onBack = onBack)
+    stateHolder.SaveableStateProvider("list") {
+        BackHandler(onBack = onBack)
 
-    ImportableListScreen(
+        ImportableListScreen(
         titleRes = R.string.presets,
         onBack = onBack,
         importMimeType = "application/json",
@@ -72,6 +79,7 @@ fun PresetListScreen(onBack: () -> Unit) {
             )
         },
     )
+    } // SaveableStateProvider("list")
 }
 
 @Composable

@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,10 +64,19 @@ private val HAS_SETTINGS = setOf(SummarizeExtension.ID, QuickReplyExtension.ID)
 @Composable
 fun ExtensionsScreen(onBack: () -> Unit) {
     var settingsFor by remember { mutableStateOf<String?>(null) }
+    // SaveableStateHolder：进入设置页时列表离开组合，其 ScrollState 被暂存；
+    // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
+    val stateHolder = rememberSaveableStateHolder()
     when (settingsFor) {
-        SummarizeExtension.ID -> SummarizeSettings(onBack = { settingsFor = null })
-        QuickReplyExtension.ID -> QuickReplySettings(onBack = { settingsFor = null })
-        else -> ExtensionsList(onBack = onBack, onOpenSettings = { settingsFor = it })
+        SummarizeExtension.ID -> stateHolder.SaveableStateProvider("settings") {
+            SummarizeSettings(onBack = { settingsFor = null })
+        }
+        QuickReplyExtension.ID -> stateHolder.SaveableStateProvider("settings") {
+            QuickReplySettings(onBack = { settingsFor = null })
+        }
+        else -> stateHolder.SaveableStateProvider("list") {
+            ExtensionsList(onBack = onBack, onOpenSettings = { settingsFor = it })
+        }
     }
 }
 

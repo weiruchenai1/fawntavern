@@ -15,14 +15,15 @@ object ExtensionStore {
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** 扩展是否启用；无记录时用 [default]（内置扩展默认启用）。 */
+    /** 扩展是否启用；无记录时取 [ExtensionInfo.defaultEnabled] 为默认值（内置扩展默认启用）。 */
     fun isEnabled(ctx: Context, id: String, default: Boolean = true): Boolean {
-        val raw = prefs(ctx).getString(K_ENABLED, null) ?: return default
+        val fallback = ExtensionHost.byId(id)?.info?.defaultEnabled ?: default
+        val raw = prefs(ctx).getString(K_ENABLED, null) ?: return fallback
         return try {
             val o = JSONObject(raw)
-            if (o.has(id)) o.getBoolean(id) else default
+            if (o.has(id)) o.getBoolean(id) else fallback
         } catch (_: Exception) {
-            default
+            fallback
         }
     }
 
