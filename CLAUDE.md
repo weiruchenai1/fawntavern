@@ -10,7 +10,9 @@ FawnTavern — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3�
 
 ```bash
 ./gradlew assembleDebug      # 构建 debug APK
-./gradlew installDebug       # 构建并安装到已连接的设备/模拟器
+./gradlew installDebug       # 构建并安装 debug 版到已连接的设备/模拟器
+./gradlew assembleRelease    # 构建 release APK
+./gradlew installRelease     # 构建并安装 release 版到已连接的设备/模拟器
 ./gradlew lint               # Android lint
 ```
 

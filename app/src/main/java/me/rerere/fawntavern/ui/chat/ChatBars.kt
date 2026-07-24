@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -110,7 +111,7 @@ internal fun ChatBottomArea(
 ) {
     val hasContent = text.isNotBlank() || attachments.isNotEmpty()
     val context = LocalContext.current
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = Space16, vertical = Space8)) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).navigationBarsPadding().padding(horizontal = Space16, vertical = Space8)) {
         // 快捷回复行（UI 插槽扩展）：位于输入卡片上方，可横向滚动
         if (quickReplies.isNotEmpty()) {
             LazyRow(
