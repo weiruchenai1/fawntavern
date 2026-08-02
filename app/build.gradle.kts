@@ -29,6 +29,7 @@ android {
     }
 
     signingConfigs {
+        // keystore.properties 不入库，缺失时不创建该配置
         if (keystoreProps.isNotEmpty()) {
             create("release") {
                 storeFile = rootProject.file(keystoreProps["storeFile"]!!)
@@ -40,8 +41,17 @@ android {
     }
 
     buildTypes {
+        debug {
+            // 与 release 并存安装：包名带 .debug 后缀 → 对 Android 是两个独立应用，数据目录
+            // 互不影响，也不会因签名不同（debug/release keystore）撞 INSTALL_FAILED_UPDATE_INCOMPATIBLE。
+            // manifest 的 FileProvider authority 用 ${applicationId}.fileprovider、代码里用
+            // ctx.packageName，都会跟着后缀走，无需改动。
+            applicationIdSuffix = ".debug"
+        }
         release {
-            signingConfig = signingConfigs.getByName("release")
+            // findByName 而非 getByName：没有 keystore.properties 时 release 保持未签名，
+            // 不至于在配置阶段抛 "SigningConfig not found" 把所有任务（含 assembleDebug）带崩
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

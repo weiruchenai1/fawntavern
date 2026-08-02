@@ -358,6 +358,9 @@
     <string name="no_chats">No chats yet</string>
     <string name="chat_empty_hint">Send a message to start chatting</string>
     <string name="scroll_to_bottom">Scroll to bottom</string>
+    <string name="scroll_to_top">Scroll to top</string>
+    <string name="previous_message">Previous message</string>
+    <string name="next_message">Next message</string>
     <string name="no_model_selected">No model selected</string>
     <string name="select_model_first">Please select a model first</string>
     <string name="copied">Copied</string>

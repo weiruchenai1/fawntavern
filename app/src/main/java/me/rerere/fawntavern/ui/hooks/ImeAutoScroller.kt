@@ -15,19 +15,21 @@ import androidx.compose.ui.platform.LocalDensity
  * 是否跟随由键盘开始弹出那一刻的 [shouldFollow] 决定（如"贴底才跟随"），整个
  * 弹出/收起周期沿用该决定：不跟随时视口纹丝不动，键盘收起时也不回滚。
  *
- * 跟随用 requestScrollToItem 越界钉底（下一次测量时生效并 clamp 到真实底部，
- * 调用方列表末尾需有底部锚点行），而不是按高度差 scrollBy——后者与视口重测量
- * 存在竞态：贴底时可滚余量尚未增长，scrollBy 被 clamp 掉一部分且无后续校正，
- * 最终上移量小于键盘高度。
+ * [onFollow] 应走调用方滚动状态机的钉底入口，以共用同一套手势让位判断；它必须是
+ * requestScrollToItem 一类"下次测量生效"的钉底，不能按高度差 scrollBy——后者与视口重测量
+ * 存在竞态：贴底时可滚余量尚未增长，scrollBy 被 clamp 掉一部分且无后续校正，最终上移量
+ * 小于键盘高度。
  */
 @Composable
 fun ImeLazyListAutoScroller(
     lazyListState: LazyListState,
-    shouldFollow: () -> Boolean = { true },
+    shouldFollow: () -> Boolean,
+    onFollow: () -> Unit,
 ) {
     val ime = WindowInsets.ime
     val localDensity = LocalDensity.current
     val follow by rememberUpdatedState(shouldFollow)
+    val doFollow by rememberUpdatedState(onFollow)
     LaunchedEffect(Unit) {
         var imeHeight = 0
         var following = false
@@ -35,9 +37,9 @@ fun ImeLazyListAutoScroller(
             ime.getBottom(localDensity)
         }.collect { keyboardHeight ->
             if (imeHeight == 0 && keyboardHeight > 0) following = follow()
-            // 手势优先，与生成跟随同款保险：用户正在滚动时不抢滚动位置
+            // 手势优先：用户正在滚动时不抢滚动位置
             if (following && keyboardHeight != imeHeight && !lazyListState.isScrollInProgress) {
-                lazyListState.requestScrollToItem(lazyListState.layoutInfo.totalItemsCount + 5)
+                doFollow()
             }
             imeHeight = keyboardHeight
         }

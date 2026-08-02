@@ -4,9 +4,6 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,15 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -39,7 +32,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -50,10 +42,8 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -65,8 +55,6 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.Lucide
 import java.io.File
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -162,13 +150,10 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     // ── 滚动状态提升到全屏页面切换上方 ──
     // 全屏页面（设置/角色列表等）通过 when 分支 + return 实现，命中时整个聊天区域离开组合，
     // 其内所有 remember 状态被销毁。返回时从零重建 → 滚动位置丢失 + LaunchedEffect 误触钉底。
-    // 把 listState / autoFollow 提升到 when 上方，使其存活在 ChatScreen 作用域内，不受 when 分支切换影响。
-    val listState = rememberLazyListState()
-    var autoFollow by remember { mutableStateOf(true) }
-    var userRequestedFollow by remember { mutableStateOf(false) }
+    // 把滚动状态机提升到 when 上方，使其存活在 ChatScreen 作用域内，不受 when 分支切换影响。
+    val scrollCtrl = rememberChatScrollController()
     // 记录上次因为"开/切会话"钉底的 session id，切换全屏页返回不触发重钉
     var lastPinnedSessionId by remember { mutableStateOf<String?>(null) }
-    val followScope = rememberCoroutineScope()
 
     // ── 全屏页面：渲染栈顶 ──
     // SaveableStateProvider 包裹每个分支：从 Settings 进入 Characters 再返回时，
@@ -398,158 +383,35 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                         pagedBase.any { it.ts == ov.ts && it.content == ov.content && it.reasoning == ov.reasoning }
                 }.map { it.ts }
                 LaunchedEffect(settledOverlayTs) { settledOverlayTs.forEach { vm.clearOverlay(it) } }
-                // listState / followScope 已提升到全屏页面切换上方
-                // 长生命周期跟随协程读取的最新值（协程不随这些值重启）。
-                // 只有生成目标是末条消息时才自动跟随钉底；重答中间消息时原地生成，视口不动
-                val generatingAtEndNow by rememberUpdatedState(
-                    vm.generating && genTs != null && genTs == msgs.lastOrNull()?.ts)
-                val lastUserIdxNow by rememberUpdatedState(msgs.indexOfLast { it.role == "user" })
-                // 末条消息正文是否还是空的 = 纯思考阶段（思考内容默认折叠，屏上没有可读的正文）
-                val lastMsgContentBlankNow by rememberUpdatedState(msgs.lastOrNull()?.content.isNullOrBlank())
 
+                // ── 滚动状态机的外部输入 ──
+                // 每次重组把状态机依赖的最新值刷进去（等价 rememberUpdatedState：其协程只读
+                // "当前值"，不需要驱动重组）。scrollCtrl 本身已提升到全屏页面切换上方。
                 val density = LocalDensity.current
-                // 贴底判定，带 80dp 缓冲：reasoning 行等一帧内插入把底部顶出视口时仍算贴底
-                val bottomSlackPx = remember(density) { with(density) { 80.dp.toPx() } }
-                fun isAtBottom(): Boolean {
-                    val layout = listState.layoutInfo
-                    if (layout.totalItemsCount == 0) return true
-                    val last = layout.visibleItemsInfo.lastOrNull() ?: return true
-                    if (last.index < layout.totalItemsCount - 2) return false
-                    val overshoot = last.offset + last.size - layout.viewportEndOffset
-                    return overshoot <= bottomSlackPx
+                scrollCtrl.inputs.apply {
+                    // 只有生成目标是末条消息时才自动跟随钉底；重答中间消息时原地生成，视口不动
+                    generatingAtEnd = vm.generating && genTs != null && genTs == msgs.lastOrNull()?.ts
+                    hasMessages = msgs.isNotEmpty()
+                    messageCount = msgs.size
+                    bottomSlackPx = with(density) { 80.dp.toPx() }
+                    touchBottomSlackPx = with(density) { 24.dp.toPx() }
                 }
-                // 内容是否溢出视口（不足一屏时无需跟随、也不显示向下按钮）
-                fun contentOverflows(): Boolean {
-                    val layout = listState.layoutInfo
-                    if (layout.totalItemsCount == 0) return false
-                    return listState.canScrollForward || listState.firstVisibleItemIndex > 0 ||
-                        listState.firstVisibleItemScrollOffset > 0
-                }
-                // 提问顶部是否已抵达顶线（视口顶 8dp 内）
-                val topLinePx = remember(density) { with(density) { 8.dp.toPx() } }
-                fun lastUserMsgTopReached(): Boolean {
-                    val idx = lastUserIdxNow
-                    if (idx < 0) return false
-                    if (listState.firstVisibleItemIndex > idx) return true   // 提问已滚出视口上方
-                    val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == idx }
-                        ?: return false
-                    return info.offset <= topLinePx
-                }
-                // ── 状态机 ──
-                // autoFollow / userRequestedFollow 已提升到全屏页面切换上方；
-                // 此处不再重复声明，仅供下游读取最新值（Compose state 委托属性天然读到最新值）。
-                // “向下”按钮可见性是纯派生值：离底超过缓冲自动出现，
-                // 贴底自动消失，不需要在各个事件里手动开关
-                val showScrollDown by remember {
-                    derivedStateOf { contentOverflows() && !isAtBottom() }
-                }
+                // 手势订阅 + 流式跟随两个长循环：随聊天区域在屏/离屏启停，
+                // 不能提升到全屏页面切换之上（否则会对着已离开组合的列表操作）
+                LaunchedEffect(scrollCtrl) { scrollCtrl.runLoops() }
 
-                // AI 输出新内容 → 若 autoFollow 则滚到底；到顶线且未显式跟随 → 顶线停跟
-                //（停跟后向下按钮由派生的 showScrollDown 在离底超过缓冲时自动出现）
-                LaunchedEffect(listState) {
-                    snapshotFlow { listState.layoutInfo.visibleItemsInfo }.collect {
-                        // 手势永远优先：拖拽/惯性滚动期间绝不钉底
-                        if (!generatingAtEndNow || !autoFollow || listState.isScrollInProgress) return@collect
-                        // 停跟的意义是"从头阅读正在输出的正文"。思考阶段（正文为空）没有可读内容，
-                        // 不允许停跟——否则发送时键盘还开着、视口被压小，提问顶部很容易越过小视口
-                        // 顶线而误触发停跟，之后思考行/正文出现就再也没人钉底了。
-                        if (!userRequestedFollow && !lastMsgContentBlankNow && contentOverflows() && lastUserMsgTopReached()) {
-                            autoFollow = false          // 顶线停跟：提问钉在顶线，回复在折线下继续输出
-                        } else {
-                            listState.requestScrollToItem(listState.layoutInfo.totalItemsCount + 5)
-                        }
-                    }
-                }
-                // 用户手势拖拽结束：主动下划回到底部 → 恢复跟随；其余情况保持停跟。
-                // 用 DragInteraction 而非 isScrollInProgress，排除键盘收起触发的程序化滚动。
-                var dragging by remember { mutableStateOf(false) }
-                LaunchedEffect(listState) {
-                    var dragStartIdx = 0
-                    var dragStartOff = 0
-                    launch {
-                        listState.interactionSource.interactions.collect { interaction ->
-                            when (interaction) {
-                                is DragInteraction.Start -> {
-                                    dragging = true
-                                    dragStartIdx = listState.firstVisibleItemIndex
-                                    dragStartOff = listState.firstVisibleItemScrollOffset
-                                    // 手指开始拖动立即断开跟随：否则生成中每帧钉底会把列表拽回，根本无法上划看历史
-                                    autoFollow = false
-                                    userRequestedFollow = false
-                                }
-                                is DragInteraction.Stop, is DragInteraction.Cancel -> {
-                                    // 零位移拖拽不会经历 isScrollInProgress 翻转，settle 收集器不触发，
-                                    // 必须在抬手时清除，否则 dragging 悬挂为 true
-                                    if (!listState.isScrollInProgress) dragging = false
-                                }
-                                else -> {}
-                            }
-                        }
-                    }
-                    launch {
-                        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
-                            if (!scrolling && dragging) {
-                                dragging = false
-                                // 只有"确实向下划过"且落在底部才恢复跟随：轻触、小幅上划（在 80dp
-                                // 缓冲内也算贴底）都不算，否则生成中随手一碰就又被拽回底部
-                                val scrolledDown = listState.firstVisibleItemIndex > dragStartIdx ||
-                                    (listState.firstVisibleItemIndex == dragStartIdx &&
-                                        listState.firstVisibleItemScrollOffset > dragStartOff)
-                                if (scrolledDown && isAtBottom()) {
-                                    if (generatingAtEndNow) { autoFollow = true; userRequestedFollow = true }
-                                } else {
-                                    autoFollow = false
-                                    userRequestedFollow = false
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 钉到底部：反复请求直到连续几帧稳定贴底。Markdown 是异步解析的，远距离跳转时
-                // 新组合的消息要过几帧才长到真实高度，固定次数连钉会停在半路。
-                // 用户拖拽接管、或生成中触发了顶线停跟时立即让位。
-                suspend fun pinToBottom() {
-                    var stable = 0
-                    var frames = 0
-                    while (frames++ < 60 && stable < 3) {
-                        // dragging 需与 isScrollInProgress 同真才让位：零位移拖拽不经历
-                        // isScrollInProgress 翻转，settle 收集器不清除，悬挂的 dragging
-                        // 会让这里静默不钉（表现为切分支后落点随机）
-                        if ((dragging && listState.isScrollInProgress) || (generatingAtEndNow && !autoFollow)) return
-                        val info = listState.layoutInfo
-                        val last = info.visibleItemsInfo.lastOrNull()
-                        val atBottomNow = last != null && last.index == info.totalItemsCount - 1 &&
-                            last.offset + last.size <= info.viewportEndOffset
-                        if (atBottomNow) {
-                            stable++
-                        } else {
-                            stable = 0
-                            listState.requestScrollToItem(info.totalItemsCount + 5)
-                        }
-                        withFrameNanos { }
-                    }
-                }
-
-                // 用户发送、重试、删除末条：回到底部并重置状态（提问在底部起步，随回复增长再被顶到线）。
+                // 用户发送、重试、删除末条：回到底部并恢复跟随。
                 // 用 snapshotFlow.drop(1) 跳过当前值，避免从全屏页面返回时（LaunchedEffect 重入）误钉底。
                 LaunchedEffect(Unit) {
                     snapshotFlow { scrollToBottomTrigger }
                         .drop(1)
-                        .collect {
-                            if (msgsNow.isNotEmpty()) {
-                                autoFollow = true
-                                userRequestedFollow = false
-                                pinToBottom()
-                            }
-                        }
+                        .collect { scrollCtrl.onSendOrReset() }
                 }
                 // 打开/切换会话：回到底部并重置。用 lastPinnedSessionId 跳过"从全屏页面返回后重入"的情况。
                 LaunchedEffect(vm.session?.id) {
                     if (vm.session?.id != null && vm.session?.id != lastPinnedSessionId) {
                         lastPinnedSessionId = vm.session?.id
-                        autoFollow = true; userRequestedFollow = false
-                        if (msgsNow.isNotEmpty()) pinToBottom()
+                        scrollCtrl.onSessionOpened()
                     }
                 }
                 // 生成结束：仍在跟随且生成目标是末条消息则钉住底部（正文切 Markdown、工具栏出现会改高度）。
@@ -558,12 +420,19 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     snapshotFlow { vm.generating }
                         .drop(1)
                         .collect { generating ->
-                            if (!generating && msgsNow.isNotEmpty() && autoFollow &&
-                                vm.genTargetTs != null && vm.genTargetTs == msgsNow.lastOrNull()?.ts) pinToBottom()
+                            if (!generating && vm.genTargetTs != null &&
+                                vm.genTargetTs == msgsNow.lastOrNull()?.ts) {
+                                scrollCtrl.onGenerationFinished()
+                            }
                         }
                 }
-                // 键盘弹出只在贴底时跟随上移；在上方读历史时视口保持不动
-                ImeLazyListAutoScroller(lazyListState = listState, shouldFollow = ::isAtBottom)
+                // 键盘弹出只在贴底时跟随上移；在上方读历史时视口保持不动。
+                // 跟随动作走状态机的统一入口，与流式跟随共用同一套手势让位判断。
+                ImeLazyListAutoScroller(
+                    lazyListState = scrollCtrl.listState,
+                    shouldFollow = scrollCtrl::isAtBottom,
+                    onFollow = scrollCtrl::snapToBottom,
+                )
 
                 Box(Modifier.fillMaxSize()) {
                     if (msgs.isEmpty()) {
@@ -580,7 +449,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                 .fillMaxSize()
                                 .padding(top = padding.calculateTopPadding())
                                 .padding(horizontal = Space16),
-                            state = listState,
+                            state = scrollCtrl.listState,
                             contentPadding = PaddingValues(
                                 top = Space8,
                                 // spacedBy(16) 在末条消息与底部锚点之间固定垫了 16dp，无法对单个
@@ -611,42 +480,12 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                         avatarBitmap = vm.userAvatarBitmap,
                                     )
                                 } else {
-                                    // 切分支后重新锚定：内容一换，旧的像素锚定会落在新文本的任意位置。
-                                    // 末条消息或人在底部附近：钉回底部——切换按钮原地不动，且新分支
-                                    // 更短时不会触发 LazyColumn"填满视口"的回拉（忽高忽低的来源）。
-                                    // 其余历史消息：钉住下一条消息（i+1）的顶部，即本条底部/切换按钮行。
-                                    // 不钉本条顶部——那个偏移与本条新高度相关：滚进长消息内部后切到更
-                                    // 短的分支时偏移越界、被归一化到任意位置；新分支变短时还可能触发
-                                    // 底部"填满视口"回拉，落点看起来随机。锚定 i+1 则按钮与下方内容
-                                    // 纹丝不动，长度变化全部向上生长，与末条/贴底分支行为一致。
-                                    // 切换走 DB（异步），锚定按 index+offset 与内容更新解耦：i+1 一经钉住，
-                                    // 本条内容随分页刷新在其上方变化，不动 i+1 的落点。
+                                    // 切分支后的落点锚定见 ChatScrollController.switchAnchored。
+                                    // 这里只做可切换性预判，避免边界处无谓的重锚定。
                                     fun switchAltAnchored(dir: Int) {
-                                        // 可切换性同步预判（避免边界处无谓的重锚定）
                                         if (msg.alts.size < 2 || (msg.altIdx + dir) !in 0..msg.alts.lastIndex) return
-                                        val layoutBefore = listState.layoutInfo
-                                        val iInfo = layoutBefore.visibleItemsInfo.firstOrNull { it.index == i }
-                                        // i+1 可见用实测顶部；不可见（按钮贴着视口底）用本条底 + 间距推算
-                                        val nextTop = layoutBefore.visibleItemsInfo.firstOrNull { it.index == i + 1 }?.offset
-                                            ?: iInfo?.let { it.offset + it.size + layoutBefore.mainAxisItemSpacing }
-                                        val nearBottom = isAtBottom()
-                                        vm.switchAlt(msg.ts, dir)
-                                        if (i == msgs.lastIndex || nearBottom) {
-                                            // 底部锚点可见时把锚点原地钉住（同步请求，与新内容同帧生效）：
-                                            // 分支长短变化全部发生在锚点上方，切换按钮到输入栏的距离纹丝
-                                            // 不动——即使当前离精确底部还差几十 dp 也不会被吸附着上移。
-                                            // 锚点不可见（离底较远）才退回"吸附到底"。
-                                            val info = listState.layoutInfo
-                                            val anchor = info.visibleItemsInfo.lastOrNull()
-                                                ?.takeIf { it.index == info.totalItemsCount - 1 }
-                                            if (anchor != null) {
-                                                listState.requestScrollToItem(anchor.index, -anchor.offset)
-                                            } else {
-                                                listState.requestScrollToItem(info.totalItemsCount + 5)
-                                                followScope.launch { pinToBottom() }
-                                            }
-                                        } else if (nextTop != null) {
-                                            listState.requestScrollToItem(i + 1, -nextTop)
+                                        scrollCtrl.switchAnchored(index = i, isLast = i == msgs.lastIndex) {
+                                            vm.switchAlt(msg.ts, dir)
                                         }
                                     }
                                     AIMsg(
@@ -671,35 +510,19 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                         }
                     }
 
-                    // ── 向下按钮 ──（顶线停跟或用户上滑后出现；生成中带加载环，结束为纯向下图标）
+                    // ── 悬浮滚动导航按钮栏 ──
                     // msgs 为空时 LazyColumn 不在组合中，listState.layoutInfo 停留在上个会话的
-                    // 旧值，派生的 showScrollDown 会误报——新建空会话（默认角色无开场白）不显示
-                    if (msgs.isNotEmpty() && showScrollDown) {
-                        Box(
-                            Modifier.align(Alignment.BottomCenter)
-                                // Scaffold 的 content 铺满全屏、底栏叠在上层：必须加上底栏高度才不会被盖住
-                                .padding(bottom = Space16 + padding.calculateBottomPadding())
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                                .clickable {
-                                    // 点击向下按钮：钉到底部（按钮随贴底自动消失）；末条生成中则恢复持续跟随
-                                    followScope.launch { pinToBottom() }
-                                    if (generatingAtEndNow) { autoFollow = true; userRequestedFollow = true }
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (vm.generating) {
-                                CircularProgressIndicator(
-                                    Modifier.size(40.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                            Icon(Lucide.ChevronDown, stringResource(R.string.scroll_to_bottom),
-                                Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
+                    // 旧值，contentOverflows 会误报——新建空会话（默认角色无开场白）不显示
+                    ScrollNavButtons(
+                        visible = msgs.isNotEmpty() && scrollCtrl.showNavButtons,
+                        onScrollToTop = scrollCtrl::scrollToTop,
+                        onPreviousMessage = { scrollCtrl.jumpToAdjacentMessage(forward = false) },
+                        onNextMessage = { scrollCtrl.jumpToAdjacentMessage(forward = true) },
+                        onScrollToBottom = scrollCtrl::scrollToBottom,
+                        modifier = Modifier.align(Alignment.BottomEnd)
+                            // Scaffold 的 content 铺满全屏、底栏叠在上层：必须加上底栏高度才不会被盖住
+                            .padding(end = Space8, bottom = Space16 + padding.calculateBottomPadding()),
+                    )
                 }
             }
     }

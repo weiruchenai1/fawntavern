@@ -358,6 +358,9 @@
     <string name="no_chats">暂无聊天</string>
     <string name="chat_empty_hint">发送消息开始对话</string>
     <string name="scroll_to_bottom">滚动到底部</string>
+    <string name="scroll_to_top">滚动到顶部</string>
+    <string name="previous_message">上一条消息</string>
+    <string name="next_message">下一条消息</string>
     <string name="no_model_selected">未选择模型</string>
     <string name="select_model_first">请先选择模型</string>
     <string name="copied">已复制</string>

@@ -17,6 +17,8 @@ FawnTavern — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3�
 ```
 
 - 需要 JDK 17；minSdk 26、compile/targetSdk 37；Android SDK 路径在 `local.properties` 中。
+- debug 版包名带 `.debug` 后缀，与 release 版可并存安装、数据互不干扰。
+- release 签名读根目录的 `keystore.properties`（不入库）；文件缺失时 release 走未签名，debug 构建不受影响。
 - 目前没有单元测试或仪器测试（`app/src/test` 和 `app/src/androidTest` 不存在）。
 - 依赖版本集中在 `gradle/libs.versions.toml`（AGP 9.x、Kotlin 2.4、Compose BOM）。
 - 开发过程中的验证方式是安装到设备/模拟器上实际运行查看。
@@ -24,6 +26,8 @@ FawnTavern — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3�
 ## 架构
 
 单 Activity 的 Compose 应用，**没有使用导航库**。`MainActivity` 渲染 `ChatScreen`（`ui/chat/ChatScreen.kt`），它既是主聊天界面，也是导航器：文件内有一个私有 `Screen` 枚举和一个 `mutableStateListOf<Screen>` 返回栈，渲染栈顶页面（`when (nav.lastOrNull())`），返回即弹栈。新增页面：加一个枚举值 + 一个 `when` 分支，入口处 `nav.add(Screen.X)`。模型/角色选择等弹层仍用布尔标志 + `ModalBottomSheet`。
+
+**消息列表的滚动位置由 `ui/chat/ChatScrollController.kt` 单一持有**，`ChatScreen` 不直接碰 `LazyListState`，只在每次重组把外部依赖刷进 `scrollCtrl.inputs`。位置变更只有两个原语，**不可混用**：`requestScrollToItem`（登记待生效位置、下一次**测量**采用，内容增长与位置更新同帧完成，无先画错再纠正的闪烁；钉底传越界索引，clamp 后停在列表末尾的 1dp 锚点行）用于钉底与锚定；`animateScrollToItem`/`scrollToItem` 走 `scroll {}`，仅用于导航按钮跳转——`requestScrollToItem` 在 `isScrollInProgress` 时会自己 `launch { scroll {} }` 抢占，塞进 `scroll {}` 块里等于取消自己。三条到底部的路径：`snapToBottom()` 单帧（流式跟随、IME 高度变化）、`pinToBottom()` 同帧登记 + 跨帧收敛（发送/切会话/点回到底部——Markdown 异步解析，远距离跳转要几帧才长到真实高度）、`switchAnchored()` 切分支落点锚定。并发安全靠 `pinJob` + `MutatorMutex`：任何新钉底**原子作废**在途的那个，绝不允许两个收敛循环互抢。跟随规则只有两条——**上划即停跟**、**落点触底即跟随**，都在 `settleDrag()`（手指抬起且惯性走完）一处判；fling 阶段靠 `dragging` 标志让位，不让位会把用户甩出的惯性硬截停。右下角的悬浮导航按钮栏（`ui/chat/ScrollNavButtons.kt`：顶部/上一条/下一条/底部）滚动时出现、静止两秒后隐藏，连续点上/下一条靠 `navAnchorIndex` 链式推进（不受动画途中 `firstVisibleItemIndex` 尚未落位的影响），手指一碰即失效。控制器实例提升到 `when (nav.lastOrNull())` **之上**（全屏页面命中时聊天区域整个离开组合，其内 remember 全毁），但 `runLoops()` 的两个长循环留在聊天区域内，随其在屏/离屏启停。
 
 **聊天状态在 `ui/chat/ChatViewModel.kt`**（唯一的 ViewModel，`AndroidViewModel` + Compose `mutableStateOf` 状态），它只持有状态、调度协程和落盘；业务逻辑在 `domain/` 层（均为无 Android UI 依赖的普通 Kotlin）：
 - `domain/PromptBuilder` — Prompt 拼装，两步走：`build`（角色卡 + 已加载的世界书/预设 → `Built`：历史前后的提示块、深度注入块、发送侧正则、采样参数、token 上限；世界书按多轮激活引擎收集条目，预设按 `promptOrder` 编排、marker 映射角色卡字段，角色卡 `system_prompt`/`post_history_instructions` 优先于预设 main/jailbreak，角色 `extensions.depth_prompt` 作深度注入）；`assemble`（每次请求把 `Built` 与聊天历史合成完整 `ApiMessage` 数组：历史逐条套发送侧正则、文件附件内联为 `<file>` 文本块、图片读盘编码 base64、按 `maxContext − maxTokens` token 预算从新到旧裁剪历史、深度注入按位插入）。宏（`{{char}}`/`{{user}}`/`{{newline}}`/时间日期/`{{random}}`/`{{roll}}`/`{{pick}}`）由 `domain/Macros` 统一替换，`{{original}}` 在角色卡覆盖预设 main/jailbreak 时引用被覆盖原文。世界书激活引擎（`PromptBuilder.activateWorldInfo`）已实现：constant/关键词扫描 + 次级 selectiveLogic + probability 掷骰 + 条目级 scanDepth/caseSensitive/matchWholeWords 覆盖、**递归激活**（excludeRecursion/preventRecursion/delayUntilRecursion）、**inclusion group 互斥组**（groupOverride/groupWeight/useGroupScoring）、**sticky/cooldown/delay 定时效果**（状态存于 `ChatSession.timedWi`，随会话持久化）。
@@ -44,6 +48,7 @@ FawnTavern — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3�
 
 ## 约定
 
+- **注释**：一律用简体中文，且尽量精简。只写代码本身读不出来的「为什么」——踩过的坑、竞态与时序、看似多余的写法为何必要；不要复述代码在做什么，不要留框架常识、外部项目对比、TODO 式旁白和过时描述。改了实现就同步改注释，宁可删掉也不要留错的。
 - **公共 UI 组件**：`ui/components/` 存放跨页面复用的 composable —— `AppTopBar`（返回键 + 居中标题页头）、`ConfirmDeleteDialog`/`RenameDialog`、`LoadingState`/`EmptyState`（列表页加载/空态）、`ImportableListScreen`（可导入条目的通用列表页，预设/世界书列表即其薄壳；角色列表因拖拽排序/导出菜单差异未套用）、`rememberReorderableList`（长按拖拽排序状态，封装 sh.calvin.reorderable，按 key 反查下标换位以避开头部项下标错位）、`Spacing.kt`（`Space4/8/12/16` 间距常量）、`Interactions.kt`（`appClickable` 单击+可选长按一体，含 Material 波纹与长按 haptic；`noRippleClickable` 气泡内贴边小图标的无波纹点击；`draggableLiftScale` 拖拽抬起的统一缩放过渡）、`AppIconButton`（统一图标按钮：圆形可点击区、圆角全圆，`container` 透明=点击才显圆形按压背景、给色=常驻底色圆按钮；约定返回键/主导航图标用常驻底色、内联操作小图标用点击显背景）。新页面一律复用这些组件，不要在页面文件里重新手写同款页头/对话框/间距常量/点击手势（尤其不要再散装 `pointerInput { detectTapGestures }` 或 `clickable(indication = null, …)`）。
 - **国际化**：默认字符串（`values/strings.xml`）为中文；英文在 `values-en/strings.xml`。每个面向用户的字符串都必须同时添加到两处。应用内语言切换由 `data/settings/LanguageStore` + `MainActivity` 中的 `AppCompatDelegate` 处理（切换语言会重启 Activity，并通过 `LanguageStore.consumePendingChange` 重新打开设置页）。
 - **图标**：使用 Lucide 图标（`com.composables.icons.lucide`），不要使用 Material 图标 — UI 遵循基于 Lucide 的 Figma 设计稿。
