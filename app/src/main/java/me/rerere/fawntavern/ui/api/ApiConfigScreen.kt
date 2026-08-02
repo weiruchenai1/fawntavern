@@ -31,6 +31,7 @@ import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ConnectionTester
 import me.rerere.fawntavern.data.api.ModelApi
+import me.rerere.fawntavern.data.api.withValidCurrentModel
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
@@ -51,7 +52,11 @@ val API_TYPES = listOf("openai" to "OpenAI", "google" to "Google", "claude" to "
 fun ApiConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var config by remember { mutableStateOf(ApiConfigStore.loadConfig(context)) }
-    fun save() { ApiConfigStore.saveConfig(context, config) }
+    // 每次落盘都校正选中模型：禁用/删除提供商、移除模型后不留悬空选择
+    fun save() {
+        config = config.withValidCurrentModel()
+        ApiConfigStore.saveConfig(context, config)
+    }
 
     var editingId by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
@@ -720,10 +725,12 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
     }
 
     // 模型选择底板：从屏幕底部滑出，点击模型后自动关闭并把选中模型带回弹窗
+    // filterEnabled=false —— 提供商还没启用时也要能先测通
     if (showModelPicker) {
         ModelPickerSheet(
             providers = listOf(prov),
             currentModel = "${prov.id}::$selectedModel",
+            filterEnabled = false,
             onSelect = { _, modelId -> selectedModel = modelId; showModelPicker = false },
             onDismiss = { showModelPicker = false },
         )

@@ -369,6 +369,17 @@
     <string name="thinking_label">Thinking</string>
     <string name="thinking_running">Thinking…</string>
     <string name="thinking_took_fmt">Thought for %1$.2fs</string>
+    <string name="thinking_budget">Thinking budget</string>
+    <string name="thinking_budget_hint">Remembered per model. Reasoning models only — raising it on a regular model may make requests fail.</string>
+    <string name="reasoning_off">Off</string>
+    <string name="reasoning_off_desc">Explicitly tell the model not to think</string>
+    <string name="reasoning_auto">Auto</string>
+    <string name="reasoning_auto_desc">Send no thinking parameter; use the model default</string>
+    <string name="reasoning_low">Low</string>
+    <string name="reasoning_medium">Medium</string>
+    <string name="reasoning_high">High</string>
+    <string name="reasoning_xhigh">Max</string>
+    <string name="reasoning_budget_fmt">~%1$d tokens</string>
     <string name="stop">Stop</string>
     <string name="chat_error_fmt">Request error: %s</string>
     <string name="delete_chat_title">Delete Chat</string>

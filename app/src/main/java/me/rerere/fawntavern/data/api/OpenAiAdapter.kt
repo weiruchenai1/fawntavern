@@ -22,6 +22,7 @@ internal object OpenAiAdapter : ProviderAdapter {
             params?.frequencyPenalty?.let { put("frequency_penalty", it.toDouble()) }
             params?.presencePenalty?.let { put("presence_penalty", it.toDouble()) }
             params?.seed?.let { put("seed", it) }
+            putReasoning(provider.baseUrl, params?.reasoning ?: ReasoningLevel.AUTO)
             put("messages", JSONArray().apply {
                 messages.forEach { m -> put(encodeMessage(m)) }
             })
@@ -39,6 +40,39 @@ internal object OpenAiAdapter : ProviderAdapter {
             val content = delta.strOr("content")
             val reasoning = delta.strOr("reasoning_content").ifEmpty { delta.strOr("reasoning") }
             if (content.isNotEmpty() || reasoning.isNotEmpty()) onDelta(content, reasoning)
+        }
+    }
+
+    /**
+     * 思考预算：OpenAI 兼容阵营各家字段互不相同（无统一标准），按 baseUrl 主机名分流；
+     * 认不出的主机走 OpenAI 官方的 reasoning_effort。AUTO 什么都不发。
+     */
+    private fun JSONObject.putReasoning(baseUrl: String, level: ReasoningLevel) {
+        if (level == ReasoningLevel.AUTO) return
+        val host = try { java.net.URI(baseUrl).host?.lowercase() ?: "" } catch (_: Exception) { "" }
+        when {
+            host.endsWith("openrouter.ai") -> put("reasoning", JSONObject().apply {
+                put("effort", if (level.isEnabled) level.effort else "none")
+            })
+            // 阿里云百炼（通义千问）/ 硅基流动：开关 + token 预算
+            host.endsWith("dashscope.aliyuncs.com") || host.endsWith("siliconflow.cn") -> {
+                put("enable_thinking", level.isEnabled)
+                if (level.isEnabled) put("thinking_budget", level.budgetTokens)
+            }
+            // 火山方舟（豆包）/ 智谱 / Moonshot：thinking.type 开关
+            host.endsWith("volces.com") || host.endsWith("bigmodel.cn") || host.endsWith("moonshot.cn") ->
+                put("thinking", JSONObject().put("type", if (level.isEnabled) "enabled" else "disabled"))
+            host.endsWith("deepseek.com") -> {
+                put("thinking", JSONObject().put("type", if (level.isEnabled) "enabled" else "disabled"))
+                if (level.isEnabled) put("reasoning_effort", level.effort)
+            }
+            // OpenAI 官方及各类兼容网关：通用取值只有 low/medium/high，
+            // 关闭档没有对应值（降级为 low），xhigh 也非通用（降级为 high）
+            else -> put("reasoning_effort", when (level) {
+                ReasoningLevel.OFF -> "low"
+                ReasoningLevel.XHIGH -> "high"
+                else -> level.effort
+            })
         }
     }
 

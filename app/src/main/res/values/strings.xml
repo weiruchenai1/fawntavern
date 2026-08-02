@@ -369,6 +369,17 @@
     <string name="thinking_label">思考过程</string>
     <string name="thinking_running">思考中…</string>
     <string name="thinking_took_fmt">思考了%1$.2f秒</string>
+    <string name="thinking_budget">思考预算</string>
+    <string name="thinking_budget_hint">按模型分别记忆。仅推理模型支持，对普通模型调档可能导致请求失败。</string>
+    <string name="reasoning_off">关闭</string>
+    <string name="reasoning_off_desc">显式要求模型不思考</string>
+    <string name="reasoning_auto">自动</string>
+    <string name="reasoning_auto_desc">不下发思考参数，由模型默认行为决定</string>
+    <string name="reasoning_low">低</string>
+    <string name="reasoning_medium">中</string>
+    <string name="reasoning_high">高</string>
+    <string name="reasoning_xhigh">极高</string>
+    <string name="reasoning_budget_fmt">约 %1$d tokens</string>
     <string name="stop">停止</string>
     <string name="chat_error_fmt">请求出错：%s</string>
     <string name="delete_chat_title">删除聊天</string>

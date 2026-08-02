@@ -21,8 +21,8 @@ internal object GoogleAdapter : ProviderAdapter {
                 put("systemInstruction", JSONObject().put("parts",
                     JSONArray().put(JSONObject().put("text", system))))
             }
+            val cfg = JSONObject()
             params?.let { p ->
-                val cfg = JSONObject()
                 p.temperature?.let { cfg.put("temperature", it.toDouble()) }
                 p.topP?.let { cfg.put("topP", it.toDouble()) }
                 p.topK?.takeIf { it > 0 }?.let { cfg.put("topK", it) }
@@ -30,8 +30,29 @@ internal object GoogleAdapter : ProviderAdapter {
                 p.frequencyPenalty?.let { cfg.put("frequencyPenalty", it.toDouble()) }
                 p.presencePenalty?.let { cfg.put("presencePenalty", it.toDouble()) }
                 p.seed?.let { cfg.put("seed", it) }
-                if (cfg.length() > 0) put("generationConfig", cfg)
             }
+            val level = params?.reasoning ?: ReasoningLevel.AUTO
+            if (level != ReasoningLevel.AUTO) {
+                cfg.put("thinkingConfig", JSONObject().apply {
+                    // 不打开 includeThoughts 就收不到思考内容（Gemini 默认不回传）
+                    put("includeThoughts", level.isEnabled)
+                    if (modelId.contains("gemini-3", ignoreCase = true)) {
+                        // Gemini 3 起用 thinkingLevel 枚举取代 token 预算
+                        put("thinkingLevel", when (level) {
+                            ReasoningLevel.OFF -> "minimal"
+                            ReasoningLevel.LOW -> "low"
+                            ReasoningLevel.MEDIUM -> "medium"
+                            else -> "high"
+                        })
+                    } else if (level.isEnabled) {
+                        put("thinkingBudget", level.budgetTokens)
+                    } else if (!modelId.contains("2.5-pro", ignoreCase = true)) {
+                        // 2.5 Pro 根本不允许关掉思考（budget 0 会被拒），只能不发预算、单纯不回传思考内容
+                        put("thinkingBudget", 0)
+                    }
+                })
+            }
+            if (cfg.length() > 0) put("generationConfig", cfg)
             put("contents", JSONArray().apply {
                 merged.forEach { m ->
                     put(JSONObject().apply {
@@ -52,8 +73,11 @@ internal object GoogleAdapter : ProviderAdapter {
             val parts = obj.optJSONArray("candidates")
                 ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts") ?: return@post
             for (i in 0 until parts.length()) {
-                val text = parts.optJSONObject(i)?.strOr("text") ?: ""
-                if (text.isNotEmpty()) onDelta(text, "")
+                val part = parts.optJSONObject(i) ?: continue
+                val text = part.strOr("text")
+                if (text.isEmpty()) continue
+                // 思考内容与正文混在同一个 parts 数组里，只靠 thought=true 区分（不分流会当正文输出）
+                if (part.optBoolean("thought")) onDelta("", text) else onDelta(text, "")
             }
         }
     }

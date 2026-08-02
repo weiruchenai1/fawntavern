@@ -51,7 +51,7 @@ class HostServices(
         val provId = if (hasProv) spec.substringBefore("::") else config.currentModel.substringBefore("::", "")
         val model = if (hasProv) spec.substringAfter("::", "") else spec
         if (provId.isBlank() || model.isBlank()) return null
-        val prov = config.providers.find { it.id == provId } ?: return null
+        val prov = config.providers.find { it.id == provId && it.enabled } ?: return null
         return prov to model
     }
 }

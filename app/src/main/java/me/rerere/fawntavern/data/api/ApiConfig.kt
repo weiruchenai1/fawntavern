@@ -17,3 +17,15 @@ data class ApiConfig(
     val providers: List<ApiProvider> = emptyList(),
     val currentModel: String = "",  // "providerId::modelId"
 )
+
+/**
+ * 校正当前选中模型：提供商被删除/禁用、或该模型已从其列表移除时清空选择。
+ * enabled 只过滤选择列表，不清理旧选择的话，禁用后的提供商仍会被拿去发请求。
+ */
+fun ApiConfig.withValidCurrentModel(): ApiConfig {
+    if (currentModel.isBlank()) return this
+    val prov = providers.find { it.id == currentModel.substringBefore("::") }
+    val model = currentModel.substringAfter("::", "")
+    return if (prov != null && prov.enabled && model in prov.models) this
+           else copy(currentModel = "")
+}

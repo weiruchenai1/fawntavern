@@ -134,15 +134,17 @@ object ApiConfigStore {
             val existingNames = refreshed.map { it.name.lowercase() }.toSet()
             refreshed.addAll(defaultProviders().filter { it.name.lowercase() !in existingNames })
             val merged = ApiConfig(providers = refreshed, currentModel = p.getString(KEY_CURRENT, "") ?: "")
+                .withValidCurrentModel()
             saveConfig(context, merged)
             p.edit().putInt(KEY_PRESETS_VERSION, PRESETS_VERSION).apply()
             return merged
         }
 
+        // 读取即校正：历史遗留的悬空选择（指向已禁用/已删提供商）在这里被清掉
         return ApiConfig(
             providers = providers,
             currentModel = p.getString(KEY_CURRENT, "") ?: "",
-        )
+        ).withValidCurrentModel()
     }
 
     /** 重置为预设提供商（清除所有用户配置，重新补种默认预设） */

@@ -24,6 +24,7 @@ import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiProvider
+import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
@@ -37,6 +38,7 @@ import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
 import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.data.settings.PromptLogStore
+import me.rerere.fawntavern.data.settings.ThinkingStore
 import me.rerere.fawntavern.data.settings.WorldInfoSettingsStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
@@ -68,6 +70,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── 状态（写入只经由本类方法） ──
     var apiConfig by mutableStateOf(ApiConfigStore.loadConfig(app)); private set
+    /** 当前模型的思考预算档位（按模型记忆，随选模型切换）；AUTO = 不下发任何思考字段 */
+    var reasoning by mutableStateOf(ThinkingStore.get(app, apiConfig.currentModel)); private set
     var sessions by mutableStateOf<List<ChatSession>>(emptyList()); private set
     var session by mutableStateOf<ChatSession?>(null); private set
     var currentCard by mutableStateOf<CharacterCard?>(null); private set
@@ -171,11 +175,18 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 从 API 配置页返回时刷新 */
     fun reloadApiConfig() {
         apiConfig = ApiConfigStore.loadConfig(ctx)
+        reasoning = ThinkingStore.get(ctx, apiConfig.currentModel)
     }
 
     fun selectModel(providerId: String, modelId: String) {
         apiConfig = apiConfig.copy(currentModel = "$providerId::$modelId")
         ApiConfigStore.saveConfig(ctx, apiConfig)
+        reasoning = ThinkingStore.get(ctx, apiConfig.currentModel)
+    }
+
+    fun updateReasoning(level: ReasoningLevel) {
+        reasoning = level
+        ThinkingStore.set(ctx, apiConfig.currentModel, level)
     }
 
     /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
@@ -216,7 +227,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun currentProviderAndModel(): Pair<ApiProvider, String>? {
-        val prov = apiConfig.providers.find { it.id == apiConfig.currentModel.substringBefore("::") }
+        val prov = apiConfig.providers.find {
+            it.id == apiConfig.currentModel.substringBefore("::") && it.enabled
+        }
         val modelId = apiConfig.currentModel.substringAfter("::", "")
         if (prov == null || modelId.isBlank()) return null
         return prov to modelId
@@ -485,6 +498,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             timedWi = base.timedWi,
             updateTimed = updateTimed,
             wiSettings = WorldInfoSettingsStore.get(ctx),
+            reasoning = reasoning,
             extraPre = extraPre,
             extraPost = extraPost,
             extraDepth = extraDepth,

@@ -5,6 +5,7 @@ import java.util.Base64
 import me.rerere.fawntavern.data.api.ApiImage
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.GenParams
+import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.RegexEngine
@@ -81,6 +82,7 @@ internal object PromptBuilder {
         timedWi: Map<String, Int> = emptyMap(),
         updateTimed: Boolean = true,
         wiSettings: WorldInfoSettings = WorldInfoSettings(),
+        reasoning: ReasoningLevel = ReasoningLevel.AUTO,
         extraPre: List<Piece> = emptyList(),
         extraPost: List<Piece> = emptyList(),
         extraDepth: List<DepthPiece> = emptyList(),
@@ -116,16 +118,20 @@ internal object PromptBuilder {
             buildDefault(card, wiBefore, wiAfter, wiEmTop, wiEmBottom)
         }
 
-        val genParams = preset?.let {
-            GenParams(
-                temperature = it.temperature,
-                topP = it.topP,
-                topK = it.topK.takeIf { k -> k > 0 },
-                maxTokens = it.maxTokens.takeIf { t -> t > 0 },
-                frequencyPenalty = it.frequencyPenalty.takeIf { v -> v != 0f },
-                presencePenalty = it.presencePenalty.takeIf { v -> v != 0f },
-                seed = it.seed.takeIf { s -> s >= 0 },
+        // 采样参数来自预设；无预设时只有思考预算被显式调过才需要构造（否则保持不下发任何参数）
+        val genParams = when {
+            preset != null -> GenParams(
+                temperature = preset.temperature,
+                topP = preset.topP,
+                topK = preset.topK.takeIf { k -> k > 0 },
+                maxTokens = preset.maxTokens.takeIf { t -> t > 0 },
+                frequencyPenalty = preset.frequencyPenalty.takeIf { v -> v != 0f },
+                presencePenalty = preset.presencePenalty.takeIf { v -> v != 0f },
+                seed = preset.seed.takeIf { s -> s >= 0 },
+                reasoning = reasoning,
             )
+            reasoning != ReasoningLevel.AUTO -> GenParams(reasoning = reasoning)
+            else -> null
         }
 
         // 宏替换 + {{outlet::}} 取用（outlet 内容已在上面过宏）

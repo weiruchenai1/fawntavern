@@ -25,6 +25,8 @@ data class GenParams(
     val frequencyPenalty: Float? = null,
     val presencePenalty: Float? = null,
     val seed: Int? = null,
+    /** 思考预算档位（来自 ThinkingStore，按模型记忆）；AUTO = 不下发任何思考字段 */
+    val reasoning: ReasoningLevel = ReasoningLevel.AUTO,
 )
 
 /** 合并相邻同角色消息（Claude/Gemini 要求 user/assistant 交替出现） */

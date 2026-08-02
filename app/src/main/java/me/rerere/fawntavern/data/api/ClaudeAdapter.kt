@@ -18,13 +18,32 @@ internal object ClaudeAdapter : ProviderAdapter {
         val merged = mergeConsecutive(rest.map { if (it.role == "system") it.copy(role = "user") else it })
         // Claude 要求消息以 user 开头，去掉开头的 assistant 消息（如角色开场白）
         val msgs = merged.dropWhile { it.role != "user" }
+        val level = params?.reasoning ?: ReasoningLevel.AUTO
+        val adaptive = useAdaptiveThinking(modelId)
+        // budget_tokens 必须小于 max_tokens，预算比上限还大时把上限抬起来（否则整个请求被拒）
+        val maxTokens = params?.maxTokens ?: 8192
+        val effMaxTokens =
+            if (level.isEnabled && !adaptive) maxOf(maxTokens, level.budgetTokens + 4096) else maxTokens
         val body = JSONObject().apply {
             put("model", modelId)
-            put("max_tokens", params?.maxTokens ?: 8192)
+            put("max_tokens", effMaxTokens)
             put("stream", true)
-            params?.temperature?.let { put("temperature", it.toDouble().coerceIn(0.0, 1.0)) }
-            params?.topP?.let { put("top_p", it.toDouble()) }
-            params?.topK?.takeIf { it > 0 }?.let { put("top_k", it) }
+            // 开启思考时 Claude 不接受自定义采样参数（temperature 必须为 1、top_k 直接被拒），全部略过
+            if (!level.isEnabled) {
+                params?.temperature?.let { put("temperature", it.toDouble().coerceIn(0.0, 1.0)) }
+                params?.topP?.let { put("top_p", it.toDouble()) }
+                params?.topK?.takeIf { it > 0 }?.let { put("top_k", it) }
+            }
+            when {
+                level == ReasoningLevel.AUTO -> {}
+                !level.isEnabled -> put("thinking", JSONObject().put("type", "disabled"))
+                adaptive -> {
+                    put("thinking", JSONObject().put("type", "adaptive").put("display", "summarized"))
+                    put("output_config", JSONObject().put("effort", level.effort))
+                }
+                else -> put("thinking", JSONObject()
+                    .put("type", "enabled").put("budget_tokens", level.budgetTokens))
+            }
             if (system.isNotBlank()) put("system", system)
             put("messages", JSONArray().apply {
                 msgs.forEach { m -> put(encodeMessage(m)) }
@@ -54,6 +73,13 @@ internal object ClaudeAdapter : ProviderAdapter {
             }
         }
     }
+
+    /**
+     * Opus 4.7 起思考改为 adaptive 模式 + output_config.effort 控制强度，不再接受 budget_tokens；
+     * 3.7 / 4 / 4.5 则相反（只认 budget_tokens），故按模型号分流。
+     */
+    private fun useAdaptiveThinking(modelId: String): Boolean =
+        Regex("(opus|sonnet|haiku)-(4[._-]7|5)").containsMatchIn(modelId.lowercase())
 
     private fun encodeMessage(m: ApiMessage): JSONObject {
         if (m.images.isEmpty()) {

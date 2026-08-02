@@ -54,8 +54,10 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.X
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.extension.QuickReply
 import me.rerere.fawntavern.ui.api.ProviderIcon
+import me.rerere.fawntavern.ui.components.reasoningIcon
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
@@ -100,9 +102,11 @@ internal fun ChatBottomArea(
     onToggleAttachment: () -> Unit,
     onSend: () -> Unit,
     currentModelId: String = "",
+    reasoning: ReasoningLevel = ReasoningLevel.AUTO,
     generating: Boolean = false,
     onStop: () -> Unit = {},
     onSelectModel: () -> Unit = {},
+    onSelectReasoning: () -> Unit = {},
     onCamera: () -> Unit = {},
     onGallery: () -> Unit = {},
     onFile: () -> Unit = {},
@@ -207,7 +211,7 @@ internal fun ChatBottomArea(
                     // 该插槽不带 start padding：让这组图标的左缘与输入框文本的 12dp 内边距对齐
                     Box(
                         Modifier.noRippleClickable { onSelectModel() }
-                            .padding(top = Space12, bottom = Space12, end = Space8).size(24.dp),
+                            .padding(top = Space12, bottom = Space12, end = Space16).size(24.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (currentModelId.isNotBlank()) {
@@ -217,6 +221,13 @@ internal fun ChatBottomArea(
                                 Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    // 思考预算：灯泡光线数量即档位，着色与输入区其它图标一致
+                    Icon(
+                        reasoningIcon(reasoning), stringResource(R.string.thinking_budget),
+                        Modifier.noRippleClickable { onSelectReasoning() }
+                            .padding(vertical = Space12).size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Space8), verticalAlignment = Alignment.CenterVertically) {
                     Icon(

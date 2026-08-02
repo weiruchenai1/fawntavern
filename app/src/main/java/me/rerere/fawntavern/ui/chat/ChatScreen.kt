@@ -94,6 +94,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     // ── 弹层标志 ──
     var showAttachment by remember { mutableStateOf(false) }
     var showModelPicker by remember { mutableStateOf(false) }
+    var showReasoningPicker by remember { mutableStateOf(false) }
     var showCharPicker by remember { mutableStateOf(false) }
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
     // ── 消息操作弹窗状态（按消息 ts 定位，与分页/内存窗口无关） ──
@@ -275,7 +276,9 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
         null -> {}
     }
 
-    val curProv = vm.apiConfig.providers.find { it.id == vm.apiConfig.currentModel.substringBefore("::") }
+    val curProv = vm.apiConfig.providers.find {
+        it.id == vm.apiConfig.currentModel.substringBefore("::") && it.enabled
+    }
     val curModelId = if (curProv != null) vm.apiConfig.currentModel.substringAfter("::", "") else ""
 
     ModalNavigationDrawer(
@@ -324,6 +327,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                         showAttachment = showAttachment,
                         onToggleAttachment = { showAttachment = !showAttachment },
                         currentModelId = curModelId,
+                        reasoning = vm.reasoning,
                         generating = vm.generating,
                         onStop = { vm.stopGenerate() },
                         onSend = {
@@ -332,6 +336,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                             handleOutcome(outcome)
                         },
                         onSelectModel = { showModelPicker = true },
+                        onSelectReasoning = { showReasoningPicker = true },
                         onCamera = {
                             val photoFile = File(ctx.cacheDir, "photos/photo_${System.currentTimeMillis()}.jpg")
                             photoFile.parentFile?.mkdirs()
@@ -626,6 +631,18 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                 showModelPicker = false
             },
             onDismiss = { showModelPicker = false },
+        )
+    }
+
+    // ── 思考预算面板 ──
+    if (showReasoningPicker) {
+        ReasoningPickerSheet(
+            current = vm.reasoning,
+            onSelect = {
+                vm.updateReasoning(it)
+                showReasoningPicker = false
+            },
+            onDismiss = { showReasoningPicker = false },
         )
     }
 
