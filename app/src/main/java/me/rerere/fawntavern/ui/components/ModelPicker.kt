@@ -100,14 +100,14 @@ internal fun ModelPickerList(
                 modifier = Modifier.padding(horizontal = 8.dp))
         }
         prov.models.forEach { model ->
-            val key = "${prov.id}::$model"
+            val key = "${prov.id}::${model.id}"
             val sel = key == currentModel
             PickerRow(
                 selected = sel,
-                onClick = { onSelect(prov.id, model) },
-                icon = { ProviderIcon(model, size = 20.dp) },
+                onClick = { onSelect(prov.id, model.id) },
+                icon = { ProviderIcon(model.id, size = 20.dp) },
                 label = {
-                    Text(model, style = MaterialTheme.typography.bodyMedium,
+                    Text(model.name, style = MaterialTheme.typography.bodyMedium,
                         color = if (sel) MaterialTheme.colorScheme.onPrimaryContainer
                                else MaterialTheme.colorScheme.onSurface)
                 },

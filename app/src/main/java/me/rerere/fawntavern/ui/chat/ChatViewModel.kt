@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiConfigStore
+import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.character.CharRegex
@@ -38,6 +39,8 @@ import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
 import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.data.settings.PromptLogStore
+import me.rerere.fawntavern.data.settings.CharacterModelStore
+import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.data.settings.ThinkingStore
 import me.rerere.fawntavern.data.settings.WorldInfoSettingsStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
@@ -140,11 +143,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         PromptLog.enabled = PromptLogStore.isEnabled(app)
         // 会话列表来自 Repository 的 Flow：任何 save/delete/clear 后自动刷新
         viewModelScope.launch {
-            // 每次启动兜底：确保内置"默认角色"卡存在（可编辑、不可删除），并把无角色卡
-            // （charFile 为空）的会话归入该卡（幂等）——先于会话收集执行，避免拿到迁移前的旧行
             val defaultName = CharacterRepository.ensureDefaultCard(ctx, ctx.getString(R.string.default_character))
-            ChatRepository.migrateCharFile(ctx, "", defaultName)
-            // 没有任何会话（全新安装/清空聊天后）：直接落在默认角色上（内存态，发消息才落盘）
             if (ChatRepository.list(ctx).isEmpty()) {
                 session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName, userName)
             }
@@ -153,12 +152,18 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 if (session == null) session = it.firstOrNull()
             }
         }
-        // 会话的角色变化时加载对应角色卡（snapshotFlow 值不变不重发）
+        // 会话的角色变化时加载对应角色卡，并恢复该角色记忆的模型
         viewModelScope.launch {
             snapshotFlow { session?.charFile }.collect { file ->
                 currentCard = if (file.isNullOrBlank()) null else loadCard(file)
                 charImageBitmap = if (file.isNullOrBlank()) null else loadCharImage(file)
                 loadPromptData()
+                // 恢复该角色的模型：角色记忆 > 默认模型聊天卡片
+                val name = currentCard?.name
+                val charModel = if (!name.isNullOrBlank()) CharacterModelStore.get(ctx, name).takeIf { it.isNotBlank() } else null
+                val defaultChat = DefaultModelStore.get(ctx, DefaultModelStore.ROLE_CHAT).model.takeIf { it.isNotBlank() }
+                val spec = charModel ?: defaultChat ?: ""
+                reasoning = ThinkingStore.get(ctx, spec)
             }
         }
         // 切换会话即清空 overlay：overlay 按 ts 索引，而 ts 仅在会话内唯一，跨会话残留会误覆盖
@@ -172,21 +177,38 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── 配置 / 用户资料 ──
 
-    /** 从 API 配置页返回时刷新 */
+    /** 当前页面的模型：角色记忆 > ROLE_CHAT > apiConfig.currentModel 回退，全空时返回 null */
+    fun displayModelSpec(): String? {
+        val charModel = currentCard?.name?.let { CharacterModelStore.get(ctx, it) }.takeIf { !it.isNullOrBlank() }
+        if (charModel != null) return charModel
+        val defaultChat = DefaultModelStore.get(ctx, DefaultModelStore.ROLE_CHAT).model.takeIf { it.isNotBlank() }
+        if (defaultChat != null) return defaultChat
+        return apiConfig.currentModel.takeIf { it.isNotBlank() }
+    }
+
+    /** 从 API 配置页返回时刷新：若模型仍在则保持，若模型被删除/禁用则切到全局配置的 currentModel 兜底 */
     fun reloadApiConfig() {
         apiConfig = ApiConfigStore.loadConfig(ctx)
-        reasoning = ThinkingStore.get(ctx, apiConfig.currentModel)
+        // displayModelSpec 负责角色记忆 > ROLE_CHAT > apiConfig.currentModel 的完整回退
+        reasoning = ThinkingStore.get(ctx, displayModelSpec() ?: apiConfig.currentModel)
     }
 
     fun selectModel(providerId: String, modelId: String) {
-        apiConfig = apiConfig.copy(currentModel = "$providerId::$modelId")
-        ApiConfigStore.saveConfig(ctx, apiConfig)
-        reasoning = ThinkingStore.get(ctx, apiConfig.currentModel)
+        val spec = "$providerId::$modelId"
+        val name = currentCard?.name
+        if (!name.isNullOrBlank()) {
+            CharacterModelStore.set(ctx, name, spec)
+        } else {
+            // 无角色卡时记到全局聊天默认模型，避免选模型后无法持久化
+            DefaultModelStore.setModel(ctx, DefaultModelStore.ROLE_CHAT, spec)
+        }
+        reasoning = ThinkingStore.get(ctx, spec)
     }
 
     fun updateReasoning(level: ReasoningLevel) {
         reasoning = level
-        ThinkingStore.set(ctx, apiConfig.currentModel, level)
+        // 思考档位按当前实际生效的模型记忆，而非可能已过期的 apiConfig.currentModel
+        ThinkingStore.set(ctx, displayModelSpec() ?: apiConfig.currentModel, level)
     }
 
     /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
@@ -227,10 +249,14 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun currentProviderAndModel(): Pair<ApiProvider, String>? {
+        // 角色记忆 > ROLE_CHAT > apiConfig.currentModel 回退；全空则须显式选择模型
+        val charModel = currentCard?.name?.let { CharacterModelStore.get(ctx, it) }.takeIf { !it.isNullOrBlank() }
+        val defaultChat = DefaultModelStore.get(ctx, DefaultModelStore.ROLE_CHAT).model.takeIf { it.isNotBlank() }
+        val spec = charModel ?: defaultChat ?: apiConfig.currentModel.takeIf { it.isNotBlank() } ?: return null
         val prov = apiConfig.providers.find {
-            it.id == apiConfig.currentModel.substringBefore("::") && it.enabled
+            it.id == spec.substringBefore("::") && it.enabled
         }
-        val modelId = apiConfig.currentModel.substringAfter("::", "")
+        val modelId = spec.substringAfter("::", "")
         if (prov == null || modelId.isBlank()) return null
         return prov to modelId
     }
@@ -525,6 +551,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         ChatRepository.get(ctx, sessionId)?.let { done ->
             if (session?.id == sessionId) session = done
             runExtensionLifecycle(done)
+            maybeGenerateTitle(done)
         }
     }
 
@@ -556,6 +583,59 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     if (session?.id == done.id) session = session?.copy(extState = fresh.extState)
                 }
             }
+        }
+    }
+
+    /**
+     * 首轮对话完成后自动生成会话标题：只要会话尚无标题、且至少有一轮完整的用户+AI 对答，
+     * 就调用标题模型（DefaultModelStore.ROLE_TITLE，回退到当前聊天模型）生成简短标题。
+     * 失败静默跳过（不清掉已有标题），空结果不写。
+     */
+    private fun maybeGenerateTitle(session: ChatSession) {
+        if (session.title.isNotBlank()) return
+        val userMsgs = session.messages.filter { it.role == "user" }
+        val aiMsgs = session.messages.filter { it.role == "assistant" }
+        if (userMsgs.isEmpty() || aiMsgs.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val chatModel = displayModelSpec() ?: return@launch
+                val resolved = DefaultModelStore.resolveModel(ctx, DefaultModelStore.ROLE_TITLE, chatModel)
+                    ?: return@launch
+                val (provId, modelId) = resolved
+                val prov = apiConfig.providers.find { it.id == provId && it.enabled } ?: return@launch
+                // 取前 2 轮对答摘要作为标题上下文
+                val historyLines = mutableListOf<String>()
+                val cName = currentCard?.name ?: session.charName
+                val maxPairs = minOf(userMsgs.size, aiMsgs.size, 2)
+                for (i in 0 until maxPairs) {
+                    historyLines.add("${userName}: ${userMsgs[i].content.take(200)}")
+                    historyLines.add("$cName: ${aiMsgs[i].content.take(200)}")
+                }
+                val historyPreview = historyLines.joinToString("\n")
+
+                val promptEntry = DefaultModelStore.get(ctx, DefaultModelStore.ROLE_TITLE)
+                val titlePrompt = if (promptEntry.prompt.isNotBlank()) {
+                    promptEntry.prompt.replace("{content}", historyPreview)
+                } else {
+                    DefaultModelStore.DEFAULT_TITLE_PROMPT.replace("{content}", historyPreview)
+                }
+
+                val services = HostServices(ctx, apiConfig)
+                val title = services.callModel(
+                    messages = listOf(
+                        ApiMessage("user", titlePrompt),
+                    ),
+                    params = null,
+                    modelId = "$provId::$modelId",
+                ).trim().take(80)
+
+                if (title.isNotBlank()) {
+                    ChatRepository.updateTitle(ctx, session.id, title)
+                    if (session.id == this@ChatViewModel.session?.id) {
+                        this@ChatViewModel.session = this@ChatViewModel.session?.copy(title = title)
+                    }
+                }
+            } catch (_: Exception) { /* 标题生成失败静默跳过 */ }
         }
     }
 

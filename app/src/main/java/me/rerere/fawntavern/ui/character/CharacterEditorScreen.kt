@@ -61,6 +61,7 @@ import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.ImagePlus
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.MessageSquareText
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.SlidersHorizontal
 import com.composables.icons.lucide.Trash2
@@ -69,10 +70,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.preset.PresetRepository
+import me.rerere.fawntavern.data.settings.CharacterModelStore
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
+import me.rerere.fawntavern.ui.chat.ModelPickerSheet
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
@@ -80,6 +84,7 @@ import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
+import me.rerere.fawntavern.ui.settings.ModelCard
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -114,6 +119,10 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     }
 
     var showAddTagDialog by remember { mutableStateOf(false) }
+    var showModelPicker by remember { mutableStateOf(false) }
+    val charModelStore = remember { CharacterModelStore }
+    val charModelKey = card.name.ifBlank { cardFileName }
+    var charModel by remember { mutableStateOf(charModelStore.get(context, charModelKey)) }
     var showGreetingDialog by remember { mutableStateOf(false) }
     var editingGreetingIdx by remember { mutableStateOf<Int?>(null) }
     var deletingGreetingIdx by remember { mutableStateOf<Int?>(null) }
@@ -245,6 +254,9 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
             onBack()
         }
     }
+
+    // API 配置：角色卡模型选择器和模型选择面板都要用
+    val apiConfig = remember { ApiConfigStore.loadConfig(context) }
 
     BackHandler { saveAndBack() }
 
@@ -522,6 +534,23 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 })
             }
 
+            // 角色默认聊天模型（未设置时使用全局默认）
+            ModelCard(
+                icon = Lucide.MessageSquareText,
+                title = stringResource(R.string.char_default_model),
+                subtitle = stringResource(R.string.char_default_model_desc),
+                iconKey = charModel.substringAfter("::", "").takeIf { charModel.isNotBlank() } ?: "",
+                displayName = if (charModel.isNotBlank()) {
+                    val p = apiConfig.providers.find { it.id == charModel.substringBefore("::") && it.enabled }
+                    val mid = charModel.substringAfter("::", "")
+                    p?.models?.find { it.id == mid }?.name ?: mid.ifBlank { charModel }
+                } else stringResource(R.string.default_model_use_global),
+                showReset = charModel.isNotBlank(),
+                showBolt = false,
+                onPick = { showModelPicker = true },
+                onReset = { charModelStore.set(context, charModelKey, ""); charModel = "" },
+            )
+
             WorldBookSelector(
                 enabledNames = enabledWb,
                 onToggle = { wbName ->
@@ -539,6 +568,21 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 }
             )
         }
+    }
+
+    // 角色默认模型选择面板
+    if (showModelPicker) {
+        ModelPickerSheet(
+            providers = apiConfig.providers,
+            currentModel = charModel,
+            onSelect = { providerId, modelId ->
+                val spec = "$providerId::$modelId"
+                charModelStore.set(context, charModelKey, spec)
+                charModel = spec
+                showModelPicker = false
+            },
+            onDismiss = { showModelPicker = false },
+        )
     }
 }
 

@@ -397,7 +397,35 @@
     <string name="test_failed_fmt">连接失败：%s</string>
     <string name="edit_model">编辑模型</string>
     <string name="model_id_label">模型 ID</string>
-    <string name="chat_model_label">对话模型</string>
+    <string name="chat_model_label">聊天</string>
+
+    <!-- 模型详情面板 -->
+    <string name="model_basic_tab">基本设置</string>
+    <string name="model_advanced_tab">高级设置</string>
+    <string name="model_builtin_tools_tab">内置工具</string>
+    <string name="model_name_label">模型名称</string>
+    <string name="model_input_modality">输入模态</string>
+    <string name="model_output_modality">输出模态</string>
+    <string name="model_abilities">模型能力</string>
+    <string name="model_abilities_hint">添加模型时按 ID 自动识别，仅用于列表展示，可手动修正。</string>
+    <string name="modality_text">文本</string>
+    <string name="modality_image">图片</string>
+    <string name="ability_tool">工具</string>
+    <string name="ability_reasoning">推理</string>
+    <string name="custom_request_hint">只对该模型生效，同名字段会覆盖协议默认填入的值。</string>
+    <string name="custom_headers">自定义请求头</string>
+    <string name="custom_bodies">自定义请求体</string>
+    <string name="add_header">添加请求头</string>
+    <string name="add_body_field">添加字段</string>
+    <string name="kv_key">键</string>
+    <string name="kv_value">值</string>
+    <string name="custom_body_value_hint">JSON 值，如 true、1024、{"a":1}</string>
+    <string name="builtin_tools_hint">由 API 服务端自带、无需本 App 实现的工具。能不能用取决于协议与端点：同一个模型被 OpenAI 兼容网关代理后，请求体里往往就没有对应字段了，置灰的项可改用高级设置里的自定义请求体下发。</string>
+    <string name="builtin_tool_unsupported">当前提供商不支持</string>
+    <string name="builtin_tool_search">联网搜索</string>
+    <string name="builtin_tool_search_desc">让模型带着搜索结果作答</string>
+    <string name="builtin_tool_url_context">URL 上下文</string>
+    <string name="builtin_tool_url_context_desc">允许模型读取对话中出现的网页链接</string>
     <string name="delete_provider_title">删除提供商</string>
     <string name="delete_provider_msg_fmt">确定要删除「%s」吗？</string>
     <string name="test_connection">测试连接</string>
@@ -433,4 +461,25 @@
     <string name="ext_qr_label">按钮文字</string>
     <string name="ext_qr_text">内容</string>
     <string name="ext_qr_send">直接发送</string>
+
+    <!-- 默认模型 -->
+    <string name="default_model_title">默认模型</string>
+    <string name="default_model_chat">聊天模型</string>
+    <string name="default_model_chat_desc">全局默认聊天模型，未指定其它模型时生效</string>
+    <string name="default_model_title_role">标题模型</string>
+    <string name="default_model_title_desc">首轮对话后自动生成会话标题，显示在抽屉中</string>
+    <string name="default_model_summary">摘要模型</string>
+    <string name="default_model_summary_desc">对话摘要扩展使用的模型，长对话超出上下文时自动压缩</string>
+    <string name="default_model_use_global">使用当前对话模型</string>
+    <string name="default_model_prompt_config">提示词</string>
+    <string name="default_model_reset_model">重置模型</string>
+    <string name="default_model_reset_prompt">重置为默认</string>
+    <string name="default_model_prompt_title">标题模型 · 自定义提示词</string>
+    <string name="default_model_prompt_summary">摘要模型 · 自定义提示词</string>
+    <string name="default_model_prompt_title_hint">生成标题的提示词。可用 {{charName}}、{{userName}} 及 {{history}}（前几轮对话）。</string>
+    <string name="default_model_prompt_summary_hint">摘要压缩的提示词。可用 {{charName}}、{{userName}}。</string>
+    <!-- 角色卡默认模型 -->
+    <string name="char_default_model">聊天模型</string>
+    <string name="char_default_model_desc">为该角色卡设置默认聊天模型（未设置时使用全局默认）</string>
+
 </resources>

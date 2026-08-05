@@ -35,6 +35,8 @@ object ChatApi {
         isCancelled: () -> Boolean,
         onDelta: (content: String, reasoning: String) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
+        // 调用方只给模型 ID；自定义请求头/请求体、内置工具等元数据在这里从提供商配置里找回
+        val model = provider.model(modelId) ?: ModelInfo(id = modelId)
         val stopped: () -> Unit = { if (isCancelled()) throw Stopped() }
         val callRef = AtomicReference<okhttp3.Call?>(null)
         val watcher = launch {
@@ -48,7 +50,7 @@ object ChatApi {
         }
         try {
             adapterFor(provider.type).stream(
-                provider, modelId, messages, params, onDelta, stopped,
+                provider, model, messages, params, onDelta, stopped,
                 onCall = { callRef.set(it) },
             )
         } catch (e: IOException) {

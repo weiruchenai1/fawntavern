@@ -8,13 +8,13 @@ import org.json.JSONObject
 internal object OpenAiAdapter : ProviderAdapter {
 
     override fun stream(
-        provider: ApiProvider, modelId: String,
+        provider: ApiProvider, model: ModelInfo,
         messages: List<ApiMessage>, params: GenParams?,
         onDelta: (String, String) -> Unit,
         stopped: () -> Unit, onCall: (okhttp3.Call) -> Unit,
     ) {
         val body = JSONObject().apply {
-            put("model", modelId)
+            put("model", model.id)
             put("stream", true)
             params?.temperature?.let { put("temperature", it.toDouble()) }
             params?.topP?.let { put("top_p", it.toDouble()) }
@@ -23,13 +23,15 @@ internal object OpenAiAdapter : ProviderAdapter {
             params?.presencePenalty?.let { put("presence_penalty", it.toDouble()) }
             params?.seed?.let { put("seed", it) }
             putReasoning(provider.baseUrl, params?.reasoning ?: ReasoningLevel.AUTO)
+            putSearch(provider.baseUrl, BuiltInTool.SEARCH in model.tools)
             put("messages", JSONArray().apply {
                 messages.forEach { m -> put(encodeMessage(m)) }
             })
+            applyCustomBodies(model)
         }
         SseClient.post(
             url = "${provider.baseUrl.trimEnd('/')}/chat/completions",
-            headers = mapOf("Authorization" to "Bearer ${provider.apiKey}"),
+            headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
             body = body,
             stopped = stopped,
             onCall = onCall,
@@ -73,6 +75,23 @@ internal object OpenAiAdapter : ProviderAdapter {
                 ReasoningLevel.XHIGH -> "high"
                 else -> level.effort
             })
+        }
+    }
+
+    /**
+     * 服务端联网搜索：OpenAI 兼容阵营同样没有统一字段，按主机名分流；
+     * 认不出的主机在模型详情里就开不了这个开关（[openAiSearchStyle]），故这里必然是已知的一种。
+     */
+    private fun JSONObject.putSearch(baseUrl: String, enabled: Boolean) {
+        if (!enabled) return
+        when (openAiSearchStyle(baseUrl)) {
+            OpenAiSearchStyle.OPENROUTER ->
+                put("plugins", JSONArray().put(JSONObject().put("id", "web")))
+            OpenAiSearchStyle.DASHSCOPE -> put("enable_search", true)
+            OpenAiSearchStyle.ZHIPU -> put("tools", JSONArray().put(JSONObject()
+                .put("type", "web_search")
+                .put("web_search", JSONObject().put("enable", true))))
+            null -> {}
         }
     }
 

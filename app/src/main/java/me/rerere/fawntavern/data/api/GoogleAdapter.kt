@@ -8,7 +8,7 @@ import org.json.JSONObject
 internal object GoogleAdapter : ProviderAdapter {
 
     override fun stream(
-        provider: ApiProvider, modelId: String,
+        provider: ApiProvider, model: ModelInfo,
         messages: List<ApiMessage>, params: GenParams?,
         onDelta: (String, String) -> Unit,
         stopped: () -> Unit, onCall: (okhttp3.Call) -> Unit,
@@ -36,7 +36,7 @@ internal object GoogleAdapter : ProviderAdapter {
                 cfg.put("thinkingConfig", JSONObject().apply {
                     // 不打开 includeThoughts 就收不到思考内容（Gemini 默认不回传）
                     put("includeThoughts", level.isEnabled)
-                    if (modelId.contains("gemini-3", ignoreCase = true)) {
+                    if (model.id.contains("gemini-3", ignoreCase = true)) {
                         // Gemini 3 起用 thinkingLevel 枚举取代 token 预算
                         put("thinkingLevel", when (level) {
                             ReasoningLevel.OFF -> "minimal"
@@ -46,13 +46,20 @@ internal object GoogleAdapter : ProviderAdapter {
                         })
                     } else if (level.isEnabled) {
                         put("thinkingBudget", level.budgetTokens)
-                    } else if (!modelId.contains("2.5-pro", ignoreCase = true)) {
+                    } else if (!model.id.contains("2.5-pro", ignoreCase = true)) {
                         // 2.5 Pro 根本不允许关掉思考（budget 0 会被拒），只能不发预算、单纯不回传思考内容
                         put("thinkingBudget", 0)
                     }
                 })
             }
             if (cfg.length() > 0) put("generationConfig", cfg)
+            // 服务端内置工具（搜索 / URL 上下文），由模型详情逐个开关
+            if (model.tools.isNotEmpty()) {
+                put("tools", JSONArray().apply {
+                    if (BuiltInTool.SEARCH in model.tools) put(JSONObject().put("google_search", JSONObject()))
+                    if (BuiltInTool.URL_CONTEXT in model.tools) put(JSONObject().put("url_context", JSONObject()))
+                })
+            }
             put("contents", JSONArray().apply {
                 merged.forEach { m ->
                     put(JSONObject().apply {
@@ -61,10 +68,11 @@ internal object GoogleAdapter : ProviderAdapter {
                     })
                 }
             })
+            applyCustomBodies(model)
         }
         SseClient.post(
-            url = "${provider.baseUrl.trimEnd('/')}/models/$modelId:streamGenerateContent?alt=sse&key=${provider.apiKey}",
-            headers = emptyMap(),
+            url = "${provider.baseUrl.trimEnd('/')}/models/${model.id}:streamGenerateContent?alt=sse&key=${provider.apiKey}",
+            headers = model.applyHeaders(emptyMap()),
             body = body,
             stopped = stopped,
             onCall = onCall,

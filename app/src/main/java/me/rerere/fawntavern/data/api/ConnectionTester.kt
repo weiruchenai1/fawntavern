@@ -44,18 +44,21 @@ object ConnectionTester {
         ) { content, _ -> if (content.isNotEmpty()) onDelta(content) }
     }
 
-    private fun generate(provider: ApiProvider, modelId: String, withTool: Boolean): ToolCallResult =
-        when (provider.type) {
-            "google" -> google(provider, modelId, withTool)
-            "claude" -> claude(provider, modelId, withTool)
-            else -> openAi(provider, modelId, withTool)
+    private fun generate(provider: ApiProvider, modelId: String, withTool: Boolean): ToolCallResult {
+        // 测试请求也套上该模型的自定义请求头/请求体，否则会出现「测试通过但聊天失败」这类误导
+        val model = provider.model(modelId) ?: ModelInfo(id = modelId)
+        return when (provider.type) {
+            "google" -> google(provider, model, withTool)
+            "claude" -> claude(provider, model, withTool)
+            else -> openAi(provider, model, withTool)
         }
+    }
 
     // ── OpenAI 兼容: POST {base}/chat/completions（stream=false） ──
 
-    private fun openAi(provider: ApiProvider, modelId: String, withTool: Boolean): ToolCallResult {
+    private fun openAi(provider: ApiProvider, model: ModelInfo, withTool: Boolean): ToolCallResult {
         val body = JSONObject().apply {
-            put("model", modelId)
+            put("model", model.id)
             put("stream", false)
             put("messages", JSONArray()
                 .put(JSONObject().put("role", "system").put("content", TEST_SYSTEM))
@@ -68,9 +71,10 @@ object ConnectionTester {
                         .put("description", TOOL_DESC)
                         .put("parameters", JSONObject().put("type", "object").put("properties", JSONObject())))))
             }
+            applyCustomBodies(model)
         }
         val resp = post("${provider.baseUrl.trimEnd('/')}/chat/completions",
-            mapOf("Authorization" to "Bearer ${provider.apiKey}"), body)
+            model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")), body)
         val msg = resp.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")
         val fn = msg?.optJSONArray("tool_calls")?.optJSONObject(0)?.optJSONObject("function")
         return ToolCallResult(
@@ -82,7 +86,7 @@ object ConnectionTester {
 
     // ── Google Gemini: POST {base}/models/{m}:generateContent ──
 
-    private fun google(provider: ApiProvider, modelId: String, withTool: Boolean): ToolCallResult {
+    private fun google(provider: ApiProvider, model: ModelInfo, withTool: Boolean): ToolCallResult {
         val body = JSONObject().apply {
             put("systemInstruction", JSONObject().put("parts",
                 JSONArray().put(JSONObject().put("text", TEST_SYSTEM))))
@@ -93,9 +97,10 @@ object ConnectionTester {
                 put("tools", JSONArray().put(JSONObject().put("functionDeclarations",
                     JSONArray().put(JSONObject().put("name", TOOL_NAME).put("description", TOOL_DESC)))))
             }
+            applyCustomBodies(model)
         }
-        val resp = post("${provider.baseUrl.trimEnd('/')}/models/$modelId:generateContent?key=${provider.apiKey}",
-            emptyMap(), body)
+        val resp = post("${provider.baseUrl.trimEnd('/')}/models/${model.id}:generateContent?key=${provider.apiKey}",
+            model.applyHeaders(emptyMap()), body)
         val parts = resp.optJSONArray("candidates")?.optJSONObject(0)
             ?.optJSONObject("content")?.optJSONArray("parts")
         var text = ""; var name = ""; var args = ""
@@ -112,9 +117,9 @@ object ConnectionTester {
 
     // ── Claude: POST {base}/messages（不带 stream） ──
 
-    private fun claude(provider: ApiProvider, modelId: String, withTool: Boolean): ToolCallResult {
+    private fun claude(provider: ApiProvider, model: ModelInfo, withTool: Boolean): ToolCallResult {
         val body = JSONObject().apply {
-            put("model", modelId)
+            put("model", model.id)
             put("max_tokens", 1024)
             put("system", TEST_SYSTEM)
             put("messages", JSONArray().put(JSONObject()
@@ -126,9 +131,13 @@ object ConnectionTester {
                     .put("description", TOOL_DESC)
                     .put("input_schema", JSONObject().put("type", "object").put("properties", JSONObject()))))
             }
+            applyCustomBodies(model)
         }
         val resp = post("${provider.baseUrl.trimEnd('/')}/messages",
-            mapOf("x-api-key" to provider.apiKey, "anthropic-version" to "2023-06-01"), body)
+            model.applyHeaders(mapOf(
+                "x-api-key" to provider.apiKey,
+                "anthropic-version" to "2023-06-01",
+            )), body)
         val content = resp.optJSONArray("content")
         var text = ""; var name = ""; var args = ""
         for (i in 0 until (content?.length() ?: 0)) {

@@ -1,0 +1,12 @@
+* text=auto
+*.kt text diff=kotlin
+*.xml text
+*.gradle text
+*.toml text
+*.properties text
+*.md text
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.keystore binary
+*.jks binary

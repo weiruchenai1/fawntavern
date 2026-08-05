@@ -8,7 +8,7 @@ import org.json.JSONObject
 internal object ClaudeAdapter : ProviderAdapter {
 
     override fun stream(
-        provider: ApiProvider, modelId: String,
+        provider: ApiProvider, model: ModelInfo,
         messages: List<ApiMessage>, params: GenParams?,
         onDelta: (String, String) -> Unit,
         stopped: () -> Unit, onCall: (okhttp3.Call) -> Unit,
@@ -19,13 +19,13 @@ internal object ClaudeAdapter : ProviderAdapter {
         // Claude 要求消息以 user 开头，去掉开头的 assistant 消息（如角色开场白）
         val msgs = merged.dropWhile { it.role != "user" }
         val level = params?.reasoning ?: ReasoningLevel.AUTO
-        val adaptive = useAdaptiveThinking(modelId)
+        val adaptive = useAdaptiveThinking(model.id)
         // budget_tokens 必须小于 max_tokens，预算比上限还大时把上限抬起来（否则整个请求被拒）
         val maxTokens = params?.maxTokens ?: 8192
         val effMaxTokens =
             if (level.isEnabled && !adaptive) maxOf(maxTokens, level.budgetTokens + 4096) else maxTokens
         val body = JSONObject().apply {
-            put("model", modelId)
+            put("model", model.id)
             put("max_tokens", effMaxTokens)
             put("stream", true)
             // 开启思考时 Claude 不接受自定义采样参数（temperature 必须为 1、top_k 直接被拒），全部略过
@@ -45,16 +45,23 @@ internal object ClaudeAdapter : ProviderAdapter {
                     .put("type", "enabled").put("budget_tokens", level.budgetTokens))
             }
             if (system.isNotBlank()) put("system", system)
+            // Anthropic 的服务端搜索工具：结果由服务端消化，流里仍只回文本/思考块，无需 App 处理工具回合
+            if (BuiltInTool.SEARCH in model.tools) {
+                put("tools", JSONArray().put(JSONObject()
+                    .put("type", "web_search_20250305")
+                    .put("name", "web_search")))
+            }
             put("messages", JSONArray().apply {
                 msgs.forEach { m -> put(encodeMessage(m)) }
             })
+            applyCustomBodies(model)
         }
         SseClient.post(
             url = "${provider.baseUrl.trimEnd('/')}/messages",
-            headers = mapOf(
+            headers = model.applyHeaders(mapOf(
                 "x-api-key" to provider.apiKey,
                 "anthropic-version" to "2023-06-01",
-            ),
+            )),
             body = body,
             stopped = stopped,
             onCall = onCall,

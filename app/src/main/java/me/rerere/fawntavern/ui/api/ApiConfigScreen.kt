@@ -31,6 +31,8 @@ import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ConnectionTester
 import me.rerere.fawntavern.data.api.ModelApi
+import me.rerere.fawntavern.data.api.ModelInfo
+import me.rerere.fawntavern.data.api.modelInfoOf
 import me.rerere.fawntavern.data.api.withValidCurrentModel
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -400,6 +402,7 @@ private fun ProviderConfigTab(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, modifier: Modifier = Modifier) {
     var adding by remember { mutableStateOf(false) }
@@ -408,37 +411,29 @@ private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, m
     var showPicker by remember { mutableStateOf(false) }
 
     // 拉取该提供商的可用模型（null = 加载中，Result 承载成功/失败）
-    var loadResult by remember(prov.id) { mutableStateOf<Result<List<String>>?>(null) }
+    var loadResult by remember(prov.id) { mutableStateOf<Result<List<ModelInfo>>?>(null) }
     var reloadKey by remember { mutableIntStateOf(0) }
     LaunchedEffect(prov.id, prov.type, prov.baseUrl, prov.apiKey, reloadKey) {
         loadResult = null
         loadResult = runCatching { ModelApi.listModels(prov) }
     }
 
-    if (adding || editingIdx != null) {
-        val idx = editingIdx
-        val initial = if (idx != null) prov.models.getOrElse(idx) { "" } else ""
-        var modelName by remember { mutableStateOf(initial) }
-        AlertDialog(
-            onDismissRequest = { adding = false; editingIdx = null },
-            title = { Text(if (idx != null) stringResource(R.string.edit_model) else stringResource(R.string.add_model)) },
-            text = {
-                OutlinedTextField(modelName, { modelName = it },
-                    label = { Text(stringResource(R.string.model_id_label)) }, singleLine = true,
-                    placeholder = { Text("gpt-4o") }, modifier = Modifier.fillMaxWidth())
+    // 新增与编辑共用同一个底部面板；编辑目标按下标现取（列表随时可增删，不缓存 ModelInfo）
+    val editing = editingIdx?.let { prov.models.getOrNull(it) }
+    if (adding || editing != null) {
+        ModelDetailSheet(
+            model = editing ?: ModelInfo(),
+            provider = prov,
+            isNew = editing == null,
+            onConfirm = { model ->
+                val models = prov.models.toMutableList()
+                // 手动添加了已存在的 ID 时覆盖原条目，避免同一模型出现两张卡片
+                val idx = editingIdx ?: models.indexOfFirst { it.id == model.id }.takeIf { it >= 0 }
+                if (idx != null) models[idx] = model else models.add(model)
+                update(prov.copy(models = models))
+                adding = false; editingIdx = null
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    val trimmed = modelName.trim()
-                    if (trimmed.isNotBlank()) {
-                        val models = prov.models.toMutableList()
-                        if (idx != null) models[idx] = trimmed else models.add(trimmed)
-                        update(prov.copy(models = models))
-                    }
-                    adding = false; editingIdx = null
-                }) { Text(stringResource(R.string.confirm)) }
-            },
-            dismissButton = { TextButton(onClick = { adding = false; editingIdx = null }) { Text(stringResource(R.string.cancel)) } }
+            onDismiss = { adding = false; editingIdx = null },
         )
     }
 
@@ -446,7 +441,7 @@ private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, m
         AlertDialog(
             onDismissRequest = { deletingIdx = null },
             title = { Text(stringResource(R.string.delete_model_title)) },
-            text = { Text(stringResource(R.string.delete_model_msg_fmt, prov.models[idx])) },
+            text = { Text(stringResource(R.string.delete_model_msg_fmt, prov.models[idx].name)) },
             confirmButton = {
                 TextButton(onClick = {
                     update(prov.copy(models = prov.models.toMutableList().also { it.removeAt(idx) }))
@@ -498,16 +493,18 @@ private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, m
                                 color = MaterialTheme.colorScheme.secondaryContainer,
                                 shape = MaterialTheme.shapes.small,
                             ) {
-                                ProviderIcon(model, size = 24.dp, modifier = Modifier.padding(6.dp))
+                                ProviderIcon(model.id, size = 24.dp, modifier = Modifier.padding(6.dp))
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {
-                                Text(model, style = MaterialTheme.typography.titleSmall,
+                                Text(model.name, style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Row(horizontalArrangement = Arrangement.spacedBy(Space4)) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(Space4),
+                                    verticalArrangement = Arrangement.spacedBy(Space4)) {
                                     Tag(type = TagType.INFO) {
                                         Text(stringResource(R.string.chat_model_label))
                                     }
+                                    ModelCapabilityTags(model)
                                 }
                             }
                             IconButton(onClick = { deletingIdx = idx }) {
@@ -552,11 +549,11 @@ private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, m
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ModelPickerSheet(
     prov: ApiProvider,
-    loadResult: Result<List<String>>?,
+    loadResult: Result<List<ModelInfo>>?,
     onRetry: () -> Unit,
     update: (ApiProvider) -> Unit,
     onDismiss: () -> Unit,
@@ -564,7 +561,7 @@ private fun ModelPickerSheet(
     var filter by remember { mutableStateOf("") }
 
     val allModels = loadResult?.getOrNull() ?: emptyList()
-    val filtered = allModels.filter { filter.isBlank() || it.contains(filter.trim(), ignoreCase = true) }
+    val filtered = allModels.filter { filter.isBlank() || it.id.contains(filter.trim(), ignoreCase = true) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -580,16 +577,17 @@ private fun ModelPickerSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(stringResource(R.string.available_models), style = MaterialTheme.typography.titleMedium)
-                val unselected = filtered.count { it !in prov.models }
+                val unselected = filtered.filter { m -> prov.models.none { it.id == m.id } }
                 if (allModels.isNotEmpty()) {
                     TextButton(onClick = {
-                        if (unselected > 0) {
-                            update(prov.copy(models = prov.models + filtered.filter { it !in prov.models }))
+                        if (unselected.isNotEmpty()) {
+                            update(prov.copy(models = prov.models + unselected))
                         } else {
-                            update(prov.copy(models = prov.models.filter { it !in filtered }))
+                            val ids = filtered.map { it.id }.toSet()
+                            update(prov.copy(models = prov.models.filter { it.id !in ids }))
                         }
                     }) {
-                        Text(if (unselected > 0) stringResource(R.string.add_all_fmt, unselected)
+                        Text(if (unselected.isNotEmpty()) stringResource(R.string.add_all_fmt, unselected.size)
                              else stringResource(R.string.remove_all))
                     }
                 }
@@ -609,7 +607,7 @@ private fun ModelPickerSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                loadResult?.isFailure == true -> {
+                loadResult.isFailure -> {
                     Column(
                         Modifier.fillMaxWidth().weight(1f).padding(Space16),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -619,7 +617,7 @@ private fun ModelPickerSheet(
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.height(Space8))
-                        Text(loadResult?.exceptionOrNull()?.message ?: "",
+                        Text(loadResult.exceptionOrNull()?.message ?: "",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center)
@@ -633,7 +631,7 @@ private fun ModelPickerSheet(
                         verticalArrangement = Arrangement.spacedBy(Space8),
                     ) {
                         itemsIndexed(filtered) { _, model ->
-                            val selected = model in prov.models
+                            val selected = prov.models.any { it.id == model.id }
                             Row(
                                 Modifier.fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
@@ -642,13 +640,18 @@ private fun ModelPickerSheet(
                                 horizontalArrangement = Arrangement.spacedBy(Space12),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                ProviderIcon(model, size = 32.dp)
-                                Text(model, style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                ProviderIcon(model.id, size = 32.dp)
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {
+                                    Text(model.id, style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Space4),
+                                        verticalArrangement = Arrangement.spacedBy(Space4)) {
+                                        ModelCapabilityTags(model)
+                                    }
+                                }
                                 IconButton(onClick = {
-                                    if (selected) update(prov.copy(models = prov.models - model))
+                                    if (selected) update(prov.copy(models = prov.models.filter { it.id != model.id }))
                                     else update(prov.copy(models = prov.models + model))
                                 }) {
                                     Icon(if (selected) Lucide.X else Lucide.Plus, null, Modifier.size(20.dp),
@@ -686,7 +689,7 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var selectedModel by remember(prov.id) { mutableStateOf(prov.models.firstOrNull() ?: "") }
+    var selectedModel by remember(prov.id) { mutableStateOf(prov.models.firstOrNull()?.id ?: "") }
     var showModelPicker by remember { mutableStateOf(false) }
     var nonStreaming by remember { mutableStateOf<TestState>(TestState.Idle) }
     var streaming by remember { mutableStateOf<TestState>(TestState.Idle) }

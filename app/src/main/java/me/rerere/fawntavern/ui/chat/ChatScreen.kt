@@ -69,6 +69,7 @@ import me.rerere.fawntavern.ui.settings.DataManagementScreen
 import me.rerere.fawntavern.ui.settings.FontSizeScreen
 import me.rerere.fawntavern.ui.settings.PromptLogScreen
 import me.rerere.fawntavern.ui.settings.AboutScreen
+import me.rerere.fawntavern.ui.settings.DefaultModelPage
 import me.rerere.fawntavern.ui.settings.SettingsScreen
 import me.rerere.fawntavern.ui.extension.ExtensionsScreen
 import me.rerere.fawntavern.ui.hooks.ImeLazyListAutoScroller
@@ -78,7 +79,7 @@ import me.rerere.fawntavern.ui.components.Space16
 
 /** 聊天之上的全屏页面，以返回栈方式叠放（栈顶显示，返回键弹出） */
 private enum class Screen {
-    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, PromptLog, Search, Extensions, About,
+    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, PromptLog, Search, Extensions, About, DefaultModel,
 }
 
 @Composable
@@ -253,6 +254,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     onNavigateToFontSize = { nav.add(Screen.FontSize) },
                     onNavigateToPromptLog = { nav.add(Screen.PromptLog) },
                     onNavigateToExtensions = { nav.add(Screen.Extensions) },
+                    onNavigateToDefaultModel = { nav.add(Screen.DefaultModel) },
                     onNavigateToAbout = { nav.add(Screen.About) },
                 )
             }
@@ -273,13 +275,19 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
             }
             return
         }
+        Screen.DefaultModel -> {
+            screenStateHolder.SaveableStateProvider("DefaultModel") {
+                DefaultModelPage(onBack = ::navBack)
+            }
+            return
+        }
         null -> {}
     }
 
-    val curProv = vm.apiConfig.providers.find {
-        it.id == vm.apiConfig.currentModel.substringBefore("::") && it.enabled
-    }
-    val curModelId = if (curProv != null) vm.apiConfig.currentModel.substringAfter("::", "") else ""
+    val displaySpec = vm.displayModelSpec()
+    val displayProvId = displaySpec?.substringBefore("::") ?: ""
+    val displayModelId = displaySpec?.substringAfter("::", "") ?: ""
+    val displayProv = if (displaySpec != null) vm.apiConfig.providers.find { it.id == displayProvId && it.enabled } else null
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -312,8 +320,8 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                 topBar = {
                     ChatTopBar(
                         title = (vm.session?.charName ?: "").ifBlank { stringResource(R.string.default_character) },
-                        subtitle = if (curModelId.isBlank()) stringResource(R.string.no_model_selected)
-                                   else "$curModelId (${curProv?.name ?: ""})",
+                        subtitle = if (displaySpec == null) stringResource(R.string.no_model_selected)
+                                   else "${displayProv?.models?.find { it.id == displayModelId }?.name ?: displayModelId} (${displayProv?.name ?: ""})",
                         onDrawer = { scope.launch { drawerState.open() } },
                         onNewChat = { vm.newChat() },
                     )
@@ -326,7 +334,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                         onRemoveAttachment = { vm.attachments = vm.attachments - it },
                         showAttachment = showAttachment,
                         onToggleAttachment = { showAttachment = !showAttachment },
-                        currentModelId = curModelId,
+                        currentModelId = displayModelId,
                         reasoning = vm.reasoning,
                         generating = vm.generating,
                         onStop = { vm.stopGenerate() },
@@ -625,7 +633,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     if (showModelPicker) {
         ModelPickerSheet(
             providers = vm.apiConfig.providers,
-            currentModel = vm.apiConfig.currentModel,
+            currentModel = displaySpec ?: "",
             onSelect = { providerId, modelId ->
                 vm.selectModel(providerId, modelId)
                 showModelPicker = false

@@ -7,11 +7,13 @@ data class ApiProvider(
     val baseUrl: String = "",
     val apiKey: String = "",
     val enabled: Boolean = true,
-    val models: List<String> = emptyList(),  // 模型 ID
+    val models: List<ModelInfo> = emptyList(),
     val balanceEnabled: Boolean = false,     // 余额查询
     val balancePath: String = "",            // 余额 API 路径，如 /user/balance
     val balanceJsonKey: String = "",         // 余额结果 JSON 键，如 balance_infos[0].total_balance
-)
+) {
+    fun model(modelId: String): ModelInfo? = models.find { it.id == modelId }
+}
 
 data class ApiConfig(
     val providers: List<ApiProvider> = emptyList(),
@@ -26,6 +28,6 @@ fun ApiConfig.withValidCurrentModel(): ApiConfig {
     if (currentModel.isBlank()) return this
     val prov = providers.find { it.id == currentModel.substringBefore("::") }
     val model = currentModel.substringAfter("::", "")
-    return if (prov != null && prov.enabled && model in prov.models) this
+    return if (prov != null && prov.enabled && prov.model(model) != null) this
            else copy(currentModel = "")
 }

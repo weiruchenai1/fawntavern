@@ -30,6 +30,7 @@ internal data class SessionEntity(
     val updatedAt: Long,
     @ColumnInfo(defaultValue = "") val timedWiJson: String = "",  // 世界书定时效果状态 JSON
     @ColumnInfo(defaultValue = "") val extStateJson: String = "",  // 每扩展会话级状态 JSON（extId → blob）
+    @ColumnInfo(defaultValue = "") val title: String = "",  // 会话标题（标题模型自动生成）
 )
 
 /** (sessionId, ts) 为主键：ts 在会话内严格递增，天然唯一且保序 */
@@ -127,16 +128,16 @@ internal interface ChatDao {
     @Query("DELETE FROM sessions")
     suspend fun clearSessions()
 
-    /** 批量改会话归属（默认角色卡首次播种时，把 charFile 为空的旧会话归入该卡） */
-    @Query("UPDATE sessions SET charFile = :to WHERE charFile = :from")
-    suspend fun migrateCharFile(from: String, to: String)
-
     /** 单会话消息的分页数据源（Paging 3），按 ts 升序 */
     @Query("SELECT * FROM messages WHERE sessionId = :id ORDER BY ts ASC")
     fun messagesPaged(id: String): PagingSource<Int, MessageEntity>
+
+    /** 回写会话标题 */
+    @Query("UPDATE sessions SET title = :title, updatedAt = :t WHERE id = :id")
+    suspend fun updateTitle(id: String, title: String, t: Long)
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 4, exportSchema = false)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 5, exportSchema = false)
 internal abstract class ChatDatabase : RoomDatabase() {
 
     abstract fun dao(): ChatDao
@@ -166,11 +167,18 @@ internal abstract class ChatDatabase : RoomDatabase() {
             }
         }
 
+        /** v5：会话表增加标题列 */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE sessions ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile private var instance: ChatDatabase? = null
 
         fun get(context: Context): ChatDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, ChatDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build().also { instance = it }
         }
     }

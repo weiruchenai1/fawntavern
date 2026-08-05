@@ -14,7 +14,7 @@ import me.rerere.fawntavern.data.chat.ChatSession
  * （ApiConfig 会随设置变化，故在每次生成/回调时用最新值新建一个）。
  */
 class HostServices(
-    private val ctx: Context,
+    val ctx: Context,
     private val config: ApiConfig,
 ) : ExtensionServices {
 

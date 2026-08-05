@@ -8,12 +8,6 @@ object ApiConfigStore {
     private const val PREFS = "api_config"
     private const val KEY_PROVIDERS = "providers"
     private const val KEY_CURRENT = "current_model"
-    private const val KEY_PRESETS_VERSION = "presets_version"
-    private const val PRESETS_VERSION = 5
-
-    /** 已从预设中移除的提供商（迁移时若用户未配置密钥则一并删除） */
-    private val retiredPresetNames = setOf("groq", "mistral")
-
     /** 预置的常见模型提供商（默认全部禁用、不带模型） */
     private fun defaultProviders(): List<ApiProvider> = listOf(
         ApiProvider(
@@ -80,10 +74,8 @@ object ApiConfigStore {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val raw = p.getString(KEY_PROVIDERS, null)
         if (raw == null) {
-            // 首次启动 —— 写入预设提供商作为初始配置
             val config = ApiConfig(providers = defaultProviders())
             saveConfig(context, config)
-            p.edit().putInt(KEY_PRESETS_VERSION, PRESETS_VERSION).apply()
             return config
         }
 
@@ -92,9 +84,11 @@ object ApiConfigStore {
             val arr = JSONArray(raw)
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
-                val models = mutableListOf<String>()
+                val models = mutableListOf<ModelInfo>()
                 obj.optJSONArray("models")?.let { ma ->
-                    for (j in 0 until ma.length()) models.add(ma.getString(j))
+                    for (j in 0 until ma.length()) {
+                        ma.optJSONObject(j)?.let { models.add(modelFromJson(it)) }
+                    }
                 }
                 providers.add(ApiProvider(
                     id = obj.optString("id", java.util.UUID.randomUUID().toString()),
@@ -111,36 +105,6 @@ object ApiConfigStore {
             }
         } catch (_: Exception) {}
 
-        // 一次性迁移：刷新未配置的预设提供商 + 补充新增预设（不覆盖用户已配置密钥的提供商）
-        if (p.getInt(KEY_PRESETS_VERSION, 1) < PRESETS_VERSION) {
-            val presetByName = defaultProviders().associateBy { it.name.lowercase() }
-            val refreshed = providers.map { prov ->
-                val preset = presetByName[prov.name.lowercase()] ?: return@map prov
-                if (prov.apiKey.isBlank()) {
-                    // 未填过密钥 → 整体刷新为最新预设（保留 id）
-                    preset.copy(id = prov.id)
-                } else {
-                    // 已填密钥 → 仅补齐缺失的预设字段
-                    prov.copy(
-                        baseUrl = prov.baseUrl.ifBlank { preset.baseUrl },
-                        balanceEnabled = if (prov.balancePath.isBlank()) preset.balanceEnabled else prov.balanceEnabled,
-                        balancePath = prov.balancePath.ifBlank { preset.balancePath },
-                        balanceJsonKey = prov.balanceJsonKey.ifBlank { preset.balanceJsonKey },
-                    )
-                }
-            }.toMutableList()
-            // 移除已下架的预设提供商（用户填过密钥的保留）
-            refreshed.removeAll { it.name.lowercase() in retiredPresetNames && it.apiKey.isBlank() }
-            val existingNames = refreshed.map { it.name.lowercase() }.toSet()
-            refreshed.addAll(defaultProviders().filter { it.name.lowercase() !in existingNames })
-            val merged = ApiConfig(providers = refreshed, currentModel = p.getString(KEY_CURRENT, "") ?: "")
-                .withValidCurrentModel()
-            saveConfig(context, merged)
-            p.edit().putInt(KEY_PRESETS_VERSION, PRESETS_VERSION).apply()
-            return merged
-        }
-
-        // 读取即校正：历史遗留的悬空选择（指向已禁用/已删提供商）在这里被清掉
         return ApiConfig(
             providers = providers,
             currentModel = p.getString(KEY_CURRENT, "") ?: "",
@@ -163,7 +127,7 @@ object ApiConfigStore {
             obj.put("baseUrl", p.baseUrl)
             obj.put("apiKey", p.apiKey)
             obj.put("enabled", p.enabled)
-            obj.put("models", JSONArray(p.models))
+            obj.put("models", JSONArray().apply { p.models.forEach { put(modelToJson(it)) } })
             obj.put("balanceEnabled", p.balanceEnabled)
             obj.put("balancePath", p.balancePath)
             obj.put("balanceJsonKey", p.balanceJsonKey)
@@ -173,5 +137,53 @@ object ApiConfigStore {
             .putString(KEY_PROVIDERS, arr.toString())
             .putString(KEY_CURRENT, config.currentModel)
             .apply()
+    }
+
+    // ── 模型元数据的 JSON 编解码 ──
+
+    private fun modelToJson(m: ModelInfo): JSONObject = JSONObject().apply {
+        put("id", m.id)
+        put("displayName", m.displayName)
+        put("input", JSONArray(m.inputModalities.map { it.name }))
+        put("output", JSONArray(m.outputModalities.map { it.name }))
+        put("abilities", JSONArray(m.abilities.map { it.name }))
+        put("tools", JSONArray(m.tools.map { it.name }))
+        put("headers", kvToJson(m.headers))
+        put("bodies", kvToJson(m.bodies))
+    }
+
+    private fun modelFromJson(obj: JSONObject): ModelInfo {
+        val id = obj.optString("id")
+        return ModelInfo(
+            id = id,
+            displayName = obj.optString("displayName", id),
+            inputModalities = obj.enums("input", Modality.entries).ifEmpty { listOf(Modality.TEXT) },
+            outputModalities = obj.enums("output", Modality.entries).ifEmpty { listOf(Modality.TEXT) },
+            abilities = obj.enums("abilities", ModelAbility.entries),
+            tools = obj.enums("tools", BuiltInTool.entries).toSet(),
+            headers = obj.kvList("headers"),
+            bodies = obj.kvList("bodies"),
+        )
+    }
+
+    private fun kvToJson(list: List<KeyValue>) = JSONArray().apply {
+        list.forEach { put(JSONObject().put("key", it.key).put("value", it.value)) }
+    }
+
+    /** 读枚举数组，认不出的名字跳过 */
+    private fun <T : Enum<T>> JSONObject.enums(key: String, values: List<T>): List<T> {
+        val arr = optJSONArray(key) ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val name = arr.optString(i)
+            values.find { it.name == name }
+        }
+    }
+
+    private fun JSONObject.kvList(key: String): List<KeyValue> {
+        val arr = optJSONArray(key) ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            KeyValue(o.optString("key"), o.optString("value"))
+        }
     }
 }

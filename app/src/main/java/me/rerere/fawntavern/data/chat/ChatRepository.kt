@@ -39,6 +39,7 @@ object ChatRepository {
                 createdAt = session.createdAt, updatedAt = session.updatedAt,
                 timedWiJson = if (session.timedWi.isEmpty()) "" else json.encodeToString(session.timedWi),
                 extStateJson = if (session.extState.isEmpty()) "" else json.encodeToString(session.extState),
+                title = session.title,
             ),
             ms = session.messages.map { it.toEntity(session.id) },
         )
@@ -56,10 +57,6 @@ object ChatRepository {
         }
     }
 
-    /** 把 charFile 为 [from] 的会话归入 [to]（默认角色卡首次播种时的一次性迁移） */
-    suspend fun migrateCharFile(context: Context, from: String, to: String) {
-        dao(context).migrateCharFile(from, to)
-    }
 
     /** 单会话消息的分页流（Paging 3），供海量消息场景按需加载。
      *  [initialKey] 为初始加载偏移（一般传 count-pageSize 让最新一页先加载、天然停在底部）。 */
@@ -131,6 +128,11 @@ object ChatRepository {
     fun storageDir(context: Context): File? =
         context.getDatabasePath(ChatDatabase.NAME).parentFile
 
+    /** 回写会话标题（标题模型自动命名用） */
+    suspend fun updateTitle(context: Context, sessionId: String, title: String) {
+        dao(context).updateTitle(sessionId, title, System.currentTimeMillis())
+    }
+
     private fun SessionWithMessages.toModel() = ChatSession(
         id = session.id,
         charFile = session.charFile,
@@ -142,6 +144,7 @@ object ChatRepository {
                   else try { json.decodeFromString<Map<String, Int>>(session.timedWiJson) } catch (_: Exception) { emptyMap() },
         extState = if (session.extStateJson.isBlank()) emptyMap()
                    else try { json.decodeFromString<Map<String, String>>(session.extStateJson) } catch (_: Exception) { emptyMap() },
+        title = session.title,
     )
 
     private fun MessageEntity.toModel() = ChatMessage(

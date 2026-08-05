@@ -397,7 +397,35 @@
     <string name="test_failed_fmt">Connection failed: %s</string>
     <string name="edit_model">Edit Model</string>
     <string name="model_id_label">Model ID</string>
-    <string name="chat_model_label">Chat model</string>
+    <string name="chat_model_label">Chat</string>
+
+    <!-- Model detail sheet -->
+    <string name="model_basic_tab">Basic</string>
+    <string name="model_advanced_tab">Advanced</string>
+    <string name="model_builtin_tools_tab">Built-in Tools</string>
+    <string name="model_name_label">Model name</string>
+    <string name="model_input_modality">Input</string>
+    <string name="model_output_modality">Output</string>
+    <string name="model_abilities">Abilities</string>
+    <string name="model_abilities_hint">Detected from the model ID when added. Display only — edit if wrong.</string>
+    <string name="modality_text">Text</string>
+    <string name="modality_image">Image</string>
+    <string name="ability_tool">Tools</string>
+    <string name="ability_reasoning">Reasoning</string>
+    <string name="custom_request_hint">Applied to this model only; keys here override the protocol defaults.</string>
+    <string name="custom_headers">Custom headers</string>
+    <string name="custom_bodies">Custom body fields</string>
+    <string name="add_header">Add header</string>
+    <string name="add_body_field">Add field</string>
+    <string name="kv_key">Key</string>
+    <string name="kv_value">Value</string>
+    <string name="custom_body_value_hint">JSON value, e.g. true, 1024, {"a":1}</string>
+    <string name="builtin_tools_hint">Tools served by the API itself — nothing to implement in the app. Availability depends on the protocol and endpoint: once a model is proxied behind an OpenAI-compatible gateway the request body usually has no field for them. Greyed-out ones can still be sent via a custom body field under Advanced.</string>
+    <string name="builtin_tool_unsupported">Not available on this provider</string>
+    <string name="builtin_tool_search">Web search</string>
+    <string name="builtin_tool_search_desc">Let the model answer with search results</string>
+    <string name="builtin_tool_url_context">URL context</string>
+    <string name="builtin_tool_url_context_desc">Let the model read links that appear in the chat</string>
     <string name="delete_provider_title">Delete Provider</string>
     <string name="delete_provider_msg_fmt">Delete \"%s\"?</string>
     <string name="test_connection">Test Connection</string>
@@ -433,4 +461,25 @@
     <string name="ext_qr_label">Button label</string>
     <string name="ext_qr_text">Text</string>
     <string name="ext_qr_send">Send immediately</string>
+
+    <!-- Default Model -->
+    <string name="default_model_title">Default Model</string>
+    <string name="default_model_chat">Chat Model</string>
+    <string name="default_model_chat_desc">Global default chat model, used when no other model is specified</string>
+    <string name="default_model_title_role">Title Model</string>
+    <string name="default_model_title_desc">Auto-generates a session title after the first exchange; shown in the drawer</string>
+    <string name="default_model_summary">Summary Model</string>
+    <string name="default_model_summary_desc">Used by the summarization extension to compress long conversations</string>
+    <string name="default_model_use_global">Use current chat model</string>
+    <string name="default_model_prompt_config">Prompt</string>
+    <string name="default_model_reset_model">Reset model</string>
+    <string name="default_model_reset_prompt">Reset to default</string>
+    <string name="default_model_prompt_title">Title model · Custom prompt</string>
+    <string name="default_model_prompt_summary">Summary model · Custom prompt</string>
+    <string name="default_model_prompt_title_hint">Prompt for generating the title. Use {{charName}}, {{userName}}, and {{history}} (first few exchanges).</string>
+    <string name="default_model_prompt_summary_hint">Prompt for summarization. Use {{charName}}, {{userName}}.</string>
+    <!-- Character card default model -->
+    <string name="char_default_model">Chat Model</string>
+    <string name="char_default_model_desc">Set the default chat model for this character (uses global default when not set)</string>
+
 </resources>

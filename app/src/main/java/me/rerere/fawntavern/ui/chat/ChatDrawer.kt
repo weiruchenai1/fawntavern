@@ -316,9 +316,11 @@ fun ChatDrawerContent(
             itemsIndexed(sessions, key = { _, s -> s.id }) { _, s ->
                 val selected = s.id == currentSessionId
                 val fallbackTitle = stringResource(R.string.new_chat)
-                // 标题总结：暂用用户第一条消息
-                val title = s.messages.firstOrNull { it.role == "user" }?.content
-                    ?.replace('\n', ' ')?.take(24) ?: fallbackTitle
+                // 标题：优先用模型生成的 title，回退到首条用户消息预览
+                val title = s.title.takeIf { it.isNotBlank() }
+                    ?: s.messages.firstOrNull { it.role == "user" }?.content
+                        ?.replace('\n', ' ')?.take(24)
+                    ?: fallbackTitle
                 Row(
                     Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))

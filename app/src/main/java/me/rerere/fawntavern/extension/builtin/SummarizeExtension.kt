@@ -1,11 +1,14 @@
 package me.rerere.fawntavern.extension.builtin
 
+import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiMessage
+import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.extension.ExtPiece
 import me.rerere.fawntavern.extension.Extension
 import me.rerere.fawntavern.extension.ExtensionInfo
 import me.rerere.fawntavern.extension.ExtensionServices
+import me.rerere.fawntavern.extension.HostServices
 import me.rerere.fawntavern.extension.GenerationContext
 import me.rerere.fawntavern.extension.GenerationLifecycle
 import me.rerere.fawntavern.extension.PromptContext
@@ -113,6 +116,11 @@ object SummarizeExtension : Extension, PromptContributor, GenerationLifecycle {
             if (state.summary.isNotBlank()) append("Previous summary:\n").append(state.summary).append("\n\n")
             append("New conversation to fold in:\n").append(convo)
         }
+        // 摘要模型：优先用 DefaultModelStore 的摘要角色，回退到扩展自身配置的 modelId
+        val hostCtx = (services as? HostServices)?.ctx
+        val resolvedModel = if (hostCtx != null)
+            DefaultModelStore.get(hostCtx, DefaultModelStore.ROLE_SUMMARY).model.takeIf { it.isNotBlank() } ?: cfg.modelId
+        else cfg.modelId
         val summary = try {
             services.callModel(
                 messages = listOf(
@@ -120,7 +128,7 @@ object SummarizeExtension : Extension, PromptContributor, GenerationLifecycle {
                     ApiMessage("user", userText),
                 ),
                 params = null,
-                modelId = cfg.modelId.ifBlank { null },
+                modelId = resolvedModel.ifBlank { null },
             ).trim()
         } catch (_: Exception) {
             return   // 摘要失败静默跳过，下次生成再试
