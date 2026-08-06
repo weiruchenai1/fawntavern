@@ -51,9 +51,8 @@ private fun PickerSheet(
     fillHeight: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    // 固定 80% 屏高并跳过半开状态，避免"半开→上划全屏"造成误触；
-    // 条目寥寥的面板（fillHeight=false）改为包裹内容，不撑出大片空白
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -179,7 +178,6 @@ internal fun CharacterPickerSheet(
         }
     }
     PickerSheet(title = stringResource(R.string.select_character), onDismiss = onDismiss) {
-        // "默认角色"是首启播种的真实空白卡文件，随其他角色卡一起出现在 charNames 里
         if (charNames.isEmpty()) {
             Text(stringResource(R.string.no_characters), style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)

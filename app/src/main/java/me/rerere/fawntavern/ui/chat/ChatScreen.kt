@@ -21,15 +21,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DrawerValue
+import me.rerere.fawntavern.ui.components.rememberInteractiveDrawerState
+import me.rerere.fawntavern.ui.components.InteractiveDrawer
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,7 +84,7 @@ private enum class Screen {
 @Composable
 fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (ThemeMode) -> Unit = {}, startAtSettings: Boolean = false) {
     val vm: ChatViewModel = viewModel()
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val drawerState = rememberInteractiveDrawerState()
     val scope = rememberCoroutineScope()
     // ── 页面返回栈（纯 UI 状态） ──
     val nav = remember {
@@ -144,8 +143,8 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     }
     // 打开抽屉（按钮或边缘手势）即收起键盘
     LaunchedEffect(drawerState) {
-        snapshotFlow { drawerState.targetValue }.collect {
-            if (it == DrawerValue.Open) keyboardController?.hide()
+        snapshotFlow { drawerState.isOpen }.collect {
+            if (it) keyboardController?.hide()
         }
     }
 
@@ -170,7 +169,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     onBack = ::navBack,
                     onOpenSession = { id ->
                         vm.openSession(id)
-                        scope.launch { drawerState.snapTo(DrawerValue.Closed) }
+                        drawerState.snapClose()
                         navBack()
                     },
                 )
@@ -289,10 +288,11 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     val displayModelId = displaySpec?.substringAfter("::", "") ?: ""
     val displayProv = if (displaySpec != null) vm.apiConfig.providers.find { it.id == displayProvId && it.enabled } else null
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet(drawerState = drawerState, drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+    Box(Modifier.fillMaxSize()) {
+        InteractiveDrawer(
+            state = drawerState,
+            drawerContent = {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 ChatDrawerContent(
                     onClose = { scope.launch { drawerState.close() } },
                     // 从抽屉进入的页面/弹层不关抽屉：返回（或收起面板）后仍停在抽屉
@@ -311,9 +311,9 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     },
                     onDeleteSession = { id -> deleteSessionId = id },
                 )
-            }
-        }
-    ) {
+                }
+            },
+            content = {
         Scaffold(
             modifier = Modifier.imePadding(),
             containerColor = MaterialTheme.colorScheme.background,
@@ -538,6 +538,8 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     )
                 }
             }
+            }
+        )
     }
 
     // ── 消息操作菜单 ──
