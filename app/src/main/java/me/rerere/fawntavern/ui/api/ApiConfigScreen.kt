@@ -490,7 +490,7 @@ private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, m
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
                                 shape = MaterialTheme.shapes.small,
                             ) {
                                 ProviderIcon(model.id, size = 24.dp, modifier = Modifier.padding(6.dp))

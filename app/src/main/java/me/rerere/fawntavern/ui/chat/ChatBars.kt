@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.AlignLeft
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.Camera
+import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCirclePlus
@@ -57,6 +58,7 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.extension.QuickReply
 import me.rerere.fawntavern.ui.api.ProviderIcon
+import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.reasoningIcon
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
@@ -104,9 +106,12 @@ internal fun ChatBottomArea(
     currentModelId: String = "",
     reasoning: ReasoningLevel = ReasoningLevel.AUTO,
     generating: Boolean = false,
+    searchEnabled: Boolean = false,
+    searchProvider: String = "",
     onStop: () -> Unit = {},
     onSelectModel: () -> Unit = {},
     onSelectReasoning: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
     onCamera: () -> Unit = {},
     onGallery: () -> Unit = {},
     onFile: () -> Unit = {},
@@ -206,12 +211,12 @@ internal fun ChatBottomArea(
                 },
             )
             Row(Modifier.fillMaxWidth().padding(start = Space12, end = Space12, bottom = Space8), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // 左侧工具图标组：统一 spacedBy(Space8) 间距，AppIconButton 点击时显示圆形按压背景
+                Row(horizontalArrangement = Arrangement.spacedBy(Space8), verticalAlignment = Alignment.CenterVertically) {
                     // 模型选择器：只显示提供商图标（随所选模型变化）。
-                    // 该插槽不带 start padding：让这组图标的左缘与输入框文本的 12dp 内边距对齐
+                    // AppIconButton 只接受固定 ImageVector，这里手工包一层圆形可点击区以承载 ProviderIcon
                     Box(
-                        Modifier.noRippleClickable { onSelectModel() }
-                            .padding(top = Space12, bottom = Space12, end = Space16).size(24.dp),
+                        Modifier.size(36.dp).clip(CircleShape).clickable { onSelectModel() },
                         contentAlignment = Alignment.Center,
                     ) {
                         if (currentModelId.isNotBlank()) {
@@ -221,20 +226,40 @@ internal fun ChatBottomArea(
                                 Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    // 联网搜索：开启时显示当前搜索提供商图标，关闭时显示默认地球图标
+                    if (searchEnabled && searchProvider.isNotBlank()) {
+                        Box(
+                            Modifier.size(36.dp).clip(CircleShape).clickable { onOpenSearch() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            ProviderIcon(searchProvider, size = 24.dp)
+                        }
+                    } else {
+                        AppIconButton(
+                            icon = Lucide.Earth,
+                            contentDescription = stringResource(R.string.web_search),
+                            onClick = onOpenSearch,
+                            size = 36.dp,
+                            iconSize = 24.dp,
+                        )
+                    }
                     // 思考预算：灯泡光线数量即档位，着色与输入区其它图标一致
-                    Icon(
-                        reasoningIcon(reasoning), stringResource(R.string.thinking_budget),
-                        Modifier.noRippleClickable { onSelectReasoning() }
-                            .padding(vertical = Space12).size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    AppIconButton(
+                        icon = reasoningIcon(reasoning),
+                        contentDescription = stringResource(R.string.thinking_budget),
+                        onClick = onSelectReasoning,
+                        size = 36.dp,
+                        iconSize = 24.dp,
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Space8), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (showAttachment) Lucide.X else Lucide.Plus, if (showAttachment) "Close" else "Add",
-                        Modifier.noRippleClickable { onToggleAttachment() }
-                            .padding(vertical = Space12, horizontal = Space8).size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    // 附件展开/折叠（Plus ↔ X）
+                    AppIconButton(
+                        icon = if (showAttachment) Lucide.X else Lucide.Plus,
+                        contentDescription = if (showAttachment) "Close" else "Add",
+                        onClick = onToggleAttachment,
+                        size = 36.dp,
+                        iconSize = 24.dp,
                     )
                     Box(
                         Modifier.size(36.dp)

@@ -48,6 +48,8 @@ FawnTavern — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3�
 
 **已接线的生成参数**：采样参数下发覆盖 temperature/topP/topK/maxTokens 与 frequency/presence penalty、seed（各 provider 按官方支持度路由，Claude 不支持 penalty/seed）；思考预算档位由聊天输入区模型按钮右侧的按钮切换（`ReasoningPickerSheet` → `ThinkingStore` 按 `"providerId::modelId"` 分模型记忆 → `PromptBuilder` 打进 `GenParams.reasoning` → `data/api/Reasoning.kt` 按 provider 下发）。
 
+**品牌图标统一走 SVG**：提供商（聊天/搜索/TTS）图标是 `assets/icons/{slug}.svg`，全部归一化为 `viewBox="0 0 24 24"` + `width/height="1em"`；用 Coil 渲染（依赖 `coil-compose` + `coil-svg`，`MainActivity` 的 `setSingletonImageLoaderFactory` 注册 `SvgDecoder.Factory(scaleToDensity = true)`）。`ui/api/ProviderIcon.kt` 的 `iconSlug(name)` 把提供商名映射成 slug，`AsyncImage` 加载 `file:///android_asset/icons/{slug}.svg` 并带 `.css("svg { fill: <主题前景色> }")` —— 单色图标（`fill="currentColor"` 或无 fill 继承）按深浅色模式自动染色，彩色图标 path 自带 fill 不受影响；无匹配 slug 时回退首字头像。**新增图标**：去 `https://lobehub.com/zh/icons` 找品牌名，从 `@lobehub/icons-static-svg` 的 CDN 拉 SVG —— `https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/{name}.svg`（单色）/`{name}-color.svg`（彩色），国外可换 `cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/`。要点：① `icons.lobehub.com/icons/*.png` 返回的是网站 HTML 不是真图；② 部分品牌 lobehub 只有单色（openai/groq/ollama/jina/xiaomimimo/moonshot 无 `-color`），lobehub 没有的（duckduckgo/linkup/metaso/serper/querit）在 `D:\kaifa\kelivo\assets\icons\` 有；③ viewBox 非 24×24 时用 `<g transform="translate(tx ty) scale(s)">` 包一层居中缩放（`s=24/max(W,H)`、`tx=(24−W·s)/2−minX·s`），且根节点 `fill` 要留在 `<svg>` 上、别挪进 `<g>`（否则 CSS 染色失效）；④ `fill="black"` 深色模式会隐形，改成 `fill="currentColor"` 或无 fill。
+
 ## 约定
 
 - **注释**：一律用简体中文，且尽量精简。只写代码本身读不出来的「为什么」——踩过的坑、竞态与时序、看似多余的写法为何必要；不要复述代码在做什么，不要留框架常识、外部项目对比、TODO 式旁白和过时描述。改了实现就同步改注释，宁可删掉也不要留错的。

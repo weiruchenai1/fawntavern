@@ -37,6 +37,13 @@ import me.rerere.fawntavern.data.chat.MsgFile
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
+import me.rerere.fawntavern.data.search.SearchCommonOptions
+import me.rerere.fawntavern.data.search.createSearchService
+import me.rerere.fawntavern.data.search.formatSearchResultForPrompt
+import me.rerere.fawntavern.data.settings.SearchStore
+import me.rerere.fawntavern.data.settings.TtsStore
+import me.rerere.fawntavern.data.speech.TtsEngine
+import me.rerere.fawntavern.data.speech.TtsUiState
 import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.data.settings.PromptLogStore
 import me.rerere.fawntavern.data.settings.CharacterModelStore
@@ -103,6 +110,20 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 启用的快捷回复（UI 插槽扩展提供），随扩展配置刷新 */
     var quickReplies by mutableStateOf<List<QuickReply>>(emptyList()); private set
+
+    /** 联网搜索开关（开启后发送时注入搜索结果） */
+    var searchEnabled by mutableStateOf(SearchStore.isEnabled(app)); private set
+    var searchProviderIndex by mutableStateOf(SearchStore.getSelectedIndex(app)); private set
+    /** 正在朗读的 AI 消息 ts（点击朗读图标后置位，读完/停止时清空） */
+    var speakingTs by mutableStateOf<Long?>(null); private set
+    /** TTS 朗读实时状态（悬浮工具栏展示/控制用），随引擎播放同步更新 */
+    var ttsUi by mutableStateOf(TtsUiState()); private set
+
+    private val ttsEngine by lazy {
+        TtsEngine(ctx) { TtsStore.getSetting(ctx) }.also { engine ->
+            viewModelScope.launch { engine.ui.collect { ttsUi = it } }
+        }
+    }
 
     /** 当前预设私有的正则（关联该预设的聊天才生效），转成引擎统一类型 */
     private val presetRegex: List<CharRegex>
@@ -175,6 +196,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             snapshotFlow { session?.id }.collect { overlays = emptyMap() }
         }
         reloadUserProfile()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        ttsEngine.release()
     }
 
     // ── 配置 / 用户资料 ──
@@ -268,6 +294,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openSession(id: String) {
         if (generating) return
+        // 悬浮窗是系统级、独立于会话：切换会话不停朗读
         session = sessions.firstOrNull { it.id == id } ?: session
     }
 
@@ -382,6 +409,57 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun stopGenerate() {
         generation.stop()
+    }
+
+    /** 切换联网搜索开关（持久化，面板开关据此点亮/熄灭） */
+    fun toggleSearch() {
+        searchEnabled = !searchEnabled
+        SearchStore.setEnabled(ctx, searchEnabled)
+    }
+
+    /** 选择搜索服务商（面板卡片点击，按下标） */
+    fun selectSearchProvider(index: Int) {
+        SearchStore.setSelectedIndex(ctx, index)
+        searchProviderIndex = index
+    }
+
+    /** 朗读/停止朗读指定 AI 消息：同一消息再次点击即停止，换消息则打断旧朗读 */
+    fun speakMessage(ts: Long) {
+        if (speakingTs == ts) {
+            stopSpeaking()
+            return
+        }
+        val s = session ?: return
+        val msg = overlays[ts] ?: s.messages.firstOrNull { it.ts == ts } ?: return
+        val text = msg.content.trim()
+        if (text.isBlank()) return
+        stopSpeaking()
+        speakingTs = ts
+        ttsEngine.speak(text) {
+            // 朗读完成（含被新朗读打断/手动停止）：仍是本条才复位，避免误清新条目的状态
+            if (speakingTs == ts) speakingTs = null
+        }
+    }
+
+    fun stopSpeaking() {
+        ttsEngine.stop()
+        speakingTs = null
+    }
+
+    fun pauseTts() = ttsEngine.pause()
+    fun resumeTts() = ttsEngine.resume()
+    fun fastForwardTts() = ttsEngine.fastForward()
+
+    /** 循环切换朗读速度：0.8x → 1.0x → 1.2x → 1.5x → 0.8x */
+    fun cycleTtsSpeed() {
+        val next = when (ttsUi.speed) {
+            0.8f -> 1.0f
+            1.0f -> 1.2f
+            1.2f -> 1.5f
+            1.5f -> 0.8f
+            else -> 1.0f
+        }
+        ttsEngine.setSpeed(next)
     }
 
     /** 重新计算 UI 插槽类扩展的产出（快捷回复等）。扩展配置变更后调用（如从扩展设置返回）。 */
@@ -516,6 +594,23 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             buildHistory.drop(historySkip) else buildHistory
         val slicedPromptHistory = if (mode == GenMode.SEND && historySkip > 0 && historySkip < promptHistory.size)
             promptHistory.drop(historySkip) else promptHistory
+        // 联网搜索：开关开启时以最近一条用户消息为查询发起搜索，结果作为固定提示块注入
+        //（history 之外、不被预算裁剪）；失败静默跳过，不阻塞生成
+        if (SearchStore.isEnabled(ctx)) {
+            val query = slicedPromptHistory.lastOrNull { it.role == "user" }?.content?.take(200)
+            if (!query.isNullOrBlank()) {
+                val block = runCatching {
+                    val options = SearchStore.getSelected(ctx)
+                    val result = createSearchService(options)
+                        .search(query, SearchCommonOptions(SearchStore.getResultSize(ctx)), options)
+                        .getOrThrow()
+                    formatSearchResultForPrompt(query, result)
+                }.getOrNull()
+                if (block != null) {
+                    extraPre += PromptBuilder.Piece("system", block, PromptBuilder.PromptSource.WEB_SEARCH, "联网搜索")
+                }
+            }
+        }
         val built = PromptBuilder.build(
             card = currentCard,
             userName = userName,

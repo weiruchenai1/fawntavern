@@ -36,12 +36,14 @@ import android.graphics.BitmapFactory
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.CircleStop
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.EllipsisVertical
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Paperclip
 import com.composables.icons.lucide.RotateCcw
 import com.composables.icons.lucide.UserPen
+import com.composables.icons.lucide.Volume2
 import java.io.File
 import kotlin.math.roundToInt
 import me.rerere.fawntavern.R
@@ -179,6 +181,8 @@ internal fun AIMsg(
     onMore: () -> Unit,
     onPrevAlt: () -> Unit = {},
     onNextAlt: () -> Unit = {},
+    onSpeak: () -> Unit = {},
+    speaking: Boolean = false,
     scale: Float = 1.0f,
     regexScripts: List<CharRegex> = emptyList(),
     depth: Int? = null,
@@ -249,6 +253,14 @@ internal fun AIMsg(
                         Modifier.noRippleClickable { onRegenerate() }
                             .padding(horizontal = s8, vertical = s8).size(iconSz),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // 朗读：播放中变停止图标，点击停止
+                    Icon(
+                        if (speaking) Lucide.CircleStop else Lucide.Volume2,
+                        stringResource(if (speaking) R.string.stop_speaking else R.string.speak),
+                        Modifier.noRippleClickable { onSpeak() }
+                            .padding(horizontal = s8, vertical = s8).size(iconSz),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Icon(Lucide.EllipsisVertical, stringResource(R.string.more),
                         Modifier.noRippleClickable { onMore() }
                             .padding(horizontal = s8, vertical = s8).size(iconSz),

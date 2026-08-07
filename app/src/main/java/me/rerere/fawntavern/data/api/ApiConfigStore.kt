@@ -68,6 +68,18 @@ object ApiConfigStore {
             name = "01.AI", type = "openai",
             baseUrl = "https://api.lingyiwanwu.com/v1", enabled = false,
         ),
+        ApiProvider(
+            name = "阿里云百炼", type = "openai",
+            baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1", enabled = false,
+        ),
+        ApiProvider(
+            name = "火山引擎", type = "openai",
+            baseUrl = "https://ark.cn-beijing.volces.com/api/v3", enabled = false,
+        ),
+        ApiProvider(
+            name = "智谱AI开放平台", type = "openai",
+            baseUrl = "https://open.bigmodel.cn/api/paas/v4", enabled = false,
+        ),
     )
 
     fun loadConfig(context: Context): ApiConfig {

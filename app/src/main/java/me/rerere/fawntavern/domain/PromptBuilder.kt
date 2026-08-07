@@ -41,6 +41,7 @@ internal object PromptBuilder {
         PRESET,             // 预设条目
         USER_PERSONA,       // 用户人设描述
         EXTENSION,          // 扩展注入（摘要等）
+        WEB_SEARCH,         // 联网搜索结果
         OTHER,
     }
 

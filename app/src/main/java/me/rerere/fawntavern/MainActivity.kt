@@ -12,6 +12,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.os.LocaleListCompat
+import coil3.ImageLoader
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.svg.SvgDecoder
 import me.rerere.fawntavern.data.settings.LanguageStore
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.data.settings.ThemeStore
@@ -43,6 +46,15 @@ class MainActivity : ComponentActivity() {
         val startAtSettings = LanguageStore.consumePendingChange(this)
 
         setContent {
+            // Coil 单例注册 SVG 解码器（品牌图标 assets/icons/*.svg）
+            setSingletonImageLoaderFactory { context ->
+                ImageLoader.Builder(context)
+                    .components {
+                        add(SvgDecoder.Factory(scaleToDensity = true))
+                    }
+                    .build()
+            }
+
             var themeMode by remember { mutableStateOf(ThemeStore.getMode(this)) }
             FawnTavernTheme(themeMode = themeMode) {
                 ChatScreen(

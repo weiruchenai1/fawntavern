@@ -51,10 +51,12 @@ import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Package
 import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.ScrollText
+import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.Smile
 import com.composables.icons.lucide.SlidersHorizontal
 import com.composables.icons.lucide.SquareLibrary
 import com.composables.icons.lucide.Sun
+import com.composables.icons.lucide.Volume2
 import me.rerere.fawntavern.data.settings.LanguageStore
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -75,6 +77,8 @@ fun SettingsScreen(
     onNavigateToPromptLog: () -> Unit = {},
     onNavigateToExtensions: () -> Unit = {},
     onNavigateToDefaultModel: () -> Unit = {},
+    onNavigateToWebSearch: () -> Unit = {},
+    onNavigateToTts: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -277,6 +281,14 @@ fun SettingsScreen(
                     { Icon(Lucide.Puzzle, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     stringResource(R.string.extensions), onClick = onNavigateToExtensions)
+                SettingsRow(
+                    { Icon(Lucide.Earth, null, Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    stringResource(R.string.search_service), onClick = onNavigateToWebSearch)
+                SettingsRow(
+                    { Icon(Lucide.Volume2, null, Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    stringResource(R.string.tts), onClick = onNavigateToTts)
             }
             SettingsSection(stringResource(R.string.about)) {
                 SettingsRow(

@@ -108,6 +108,14 @@ dependencies {
     // 网络（SSE 流式 + 模型列表/余额查询）
     implementation(libs.okhttp)
 
+    // 联网搜索：Bing 爬虫解析；品牌图标用 Coil 渲染 assets/icons/*.svg
+    implementation(libs.jsoup)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
+
+    // TTS 悬浮窗
+    implementation(libs.floatingx)
+
     // 聊天记录存储：Room + Paging；alts 列用 kotlinx.serialization 编码
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

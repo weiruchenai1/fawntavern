@@ -290,7 +290,7 @@ private fun ModelSelectorRow(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(if (selected) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceContainer)
+                        else MaterialTheme.colorScheme.surface)
             .clickable { onClick() }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),

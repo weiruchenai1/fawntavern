@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import me.rerere.fawntavern.ui.components.FloatingWindow
 import me.rerere.fawntavern.ui.components.rememberInteractiveDrawerState
 import me.rerere.fawntavern.ui.components.InteractiveDrawer
 import me.rerere.fawntavern.ui.components.ModelSelectorSheet
@@ -45,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -62,6 +64,7 @@ import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.settings.FontSizeStore
+import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.ui.api.ApiConfigScreen
 import me.rerere.fawntavern.ui.character.CharacterListScreen
@@ -72,6 +75,8 @@ import me.rerere.fawntavern.ui.settings.PromptLogScreen
 import me.rerere.fawntavern.ui.settings.AboutScreen
 import me.rerere.fawntavern.ui.settings.DefaultModelPage
 import me.rerere.fawntavern.ui.settings.SettingsScreen
+import me.rerere.fawntavern.ui.settings.TtsConfigScreen
+import me.rerere.fawntavern.ui.settings.WebSearchConfigScreen
 import me.rerere.fawntavern.ui.extension.ExtensionsScreen
 import me.rerere.fawntavern.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.fawntavern.ui.worldbook.WorldBookListScreen
@@ -80,7 +85,7 @@ import me.rerere.fawntavern.ui.components.Space16
 
 /** 聊天之上的全屏页面，以返回栈方式叠放（栈顶显示，返回键弹出） */
 private enum class Screen {
-    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, PromptLog, Search, Extensions, About, DefaultModel,
+    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, PromptLog, Search, Extensions, About, DefaultModel, WebSearch, Tts,
 }
 
 @Composable
@@ -97,6 +102,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     var showAttachment by remember { mutableStateOf(false) }
     val modelSelector = rememberModelSelectorState(vm.displayModelSpec() ?: "", vm.apiConfig.providers)
     var showReasoningPicker by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
     var showCharPicker by remember { mutableStateOf(false) }
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
     // ── 消息操作弹窗状态（按消息 ts 定位，与分页/内存窗口无关） ──
@@ -157,6 +163,28 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     val scrollCtrl = rememberChatScrollController()
     // 记录上次因为"开/切会话"钉底的 session id，切换全屏页返回不触发重钉
     var lastPinnedSessionId by remember { mutableStateOf<String?>(null) }
+
+    // ── TTS 悬浮窗：挂在 App 窗口之上，朗读时悬浮于屏幕任意页面；初始位置在顶栏下方左缘 ──
+    val density = LocalDensity.current
+    val ttsBarOffset = with(density) {
+        Offset(Space16.toPx(), statusBarHeightPx(ctx).toFloat() + 48.dp.toPx())
+    }
+    FloatingWindow(
+        tag = "tts_controller",
+        themeMode = themeMode,
+        visibility = vm.ttsUi.speaking,
+        initialOffsetX = ttsBarOffset.x,
+        initialOffsetY = ttsBarOffset.y,
+    ) {
+        TtsFloatingBar(
+            state = vm.ttsUi,
+            onPause = vm::pauseTts,
+            onResume = vm::resumeTts,
+            onStop = { vm.stopSpeaking() },
+            onFastForward = vm::fastForwardTts,
+            onCycleSpeed = vm::cycleTtsSpeed,
+        )
+    }
 
     // ── 全屏页面：渲染栈顶 ──
     // SaveableStateProvider 包裹每个分支：从 Settings 进入 Characters 再返回时，
@@ -256,6 +284,8 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     onNavigateToPromptLog = { nav.add(Screen.PromptLog) },
                     onNavigateToExtensions = { nav.add(Screen.Extensions) },
                     onNavigateToDefaultModel = { nav.add(Screen.DefaultModel) },
+                    onNavigateToWebSearch = { nav.add(Screen.WebSearch) },
+                    onNavigateToTts = { nav.add(Screen.Tts) },
                     onNavigateToAbout = { nav.add(Screen.About) },
                 )
             }
@@ -279,6 +309,18 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
         Screen.DefaultModel -> {
             screenStateHolder.SaveableStateProvider("DefaultModel") {
                 DefaultModelPage(onBack = ::navBack)
+            }
+            return
+        }
+        Screen.WebSearch -> {
+            screenStateHolder.SaveableStateProvider("WebSearch") {
+                WebSearchConfigScreen(onBack = ::navBack)
+            }
+            return
+        }
+        Screen.Tts -> {
+            screenStateHolder.SaveableStateProvider("Tts") {
+                TtsConfigScreen(onBack = ::navBack)
             }
             return
         }
@@ -340,6 +382,8 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                         currentModelId = displayModelId,
                         reasoning = vm.reasoning,
                         generating = vm.generating,
+                        searchEnabled = vm.searchEnabled,
+                        searchProvider = SearchStore.getSelected(ctx).displayName,
                         onStop = { vm.stopGenerate() },
                         onSend = {
                             val outcome = vm.sendMessage()
@@ -348,6 +392,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                         },
                         onSelectModel = { modelSelector.open() },
                         onSelectReasoning = { showReasoningPicker = true },
+                        onOpenSearch = { showSearch = true },
                         onCamera = {
                             val photoFile = File(ctx.cacheDir, "photos/photo_${System.currentTimeMillis()}.jpg")
                             photoFile.parentFile?.mkdirs()
@@ -512,6 +557,8 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                         onMore = { menuTargetIdx = msg.ts },
                                         onPrevAlt = { switchAltAnchored(-1) },
                                         onNextAlt = { switchAltAnchored(+1) },
+                                        onSpeak = { vm.speakMessage(msg.ts) },
+                                        speaking = vm.speakingTs == msg.ts,
                                         scale = fontScale,
                                         regexScripts = vm.displayRegexScripts,
                                         depth = msgs.size - 1 - i,
@@ -539,6 +586,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                             // Scaffold 的 content 铺满全屏、底栏叠在上层：必须加上底栏高度才不会被盖住
                             .padding(end = Space8, bottom = Space16 + padding.calculateBottomPadding()),
                     )
+
                 }
             }
             }
@@ -665,5 +713,29 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
             onDismiss = { showCharPicker = false },
         )
     }
+
+    // ── 联网搜索面板 ──
+    if (showSearch) {
+        val searchServices = SearchStore.getServices(ctx)
+        SearchPickerSheet(
+            searchEnabled = vm.searchEnabled,
+            services = searchServices,
+            // 用 VM 的响应式下标做高亮；配置页删过提供商后可能越界，收敛回有效范围
+            selectedIndex = vm.searchProviderIndex.coerceIn(0, searchServices.lastIndex.coerceAtLeast(0)),
+            onToggleSearch = { vm.toggleSearch() },
+            onSelectProvider = { vm.selectSearchProvider(it) },
+            onOpenConfig = {
+                showSearch = false
+                nav.add(Screen.WebSearch)
+            },
+            onDismiss = { showSearch = false },
+        )
+    }
+}
+
+/** 状态栏高度（px），用于把悬浮窗初始位置放到顶栏之下 */
+private fun statusBarHeightPx(context: android.content.Context): Int {
+    val resId = context.resources.getIdentifier("status_bar_height", "dimen", "android")
+    return if (resId > 0) context.resources.getDimensionPixelSize(resId) else 0
 }
 
