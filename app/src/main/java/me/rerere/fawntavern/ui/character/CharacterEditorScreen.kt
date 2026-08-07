@@ -76,7 +76,8 @@ import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.settings.CharacterModelStore
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
-import me.rerere.fawntavern.ui.chat.ModelPickerSheet
+import me.rerere.fawntavern.ui.components.ModelSelectorSheet
+import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
@@ -119,7 +120,6 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     }
 
     var showAddTagDialog by remember { mutableStateOf(false) }
-    var showModelPicker by remember { mutableStateOf(false) }
     val charModelStore = remember { CharacterModelStore }
     val charModelKey = card.name.ifBlank { cardFileName }
     var charModel by remember { mutableStateOf(charModelStore.get(context, charModelKey)) }
@@ -257,6 +257,9 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
 
     // API 配置：角色卡模型选择器和模型选择面板都要用
     val apiConfig = remember { ApiConfigStore.loadConfig(context) }
+
+    // 角色默认模型选择面板
+    val modelSelector = rememberModelSelectorState(charModel, apiConfig.providers)
 
     BackHandler { saveAndBack() }
 
@@ -547,7 +550,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 } else stringResource(R.string.default_model_use_global),
                 showReset = charModel.isNotBlank(),
                 showBolt = false,
-                onPick = { showModelPicker = true },
+                onPick = { modelSelector.open() },
                 onReset = { charModelStore.set(context, charModelKey, ""); charModel = "" },
             )
 
@@ -571,19 +574,14 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     }
 
     // 角色默认模型选择面板
-    if (showModelPicker) {
-        ModelPickerSheet(
-            providers = apiConfig.providers,
-            currentModel = charModel,
-            onSelect = { providerId, modelId ->
-                val spec = "$providerId::$modelId"
-                charModelStore.set(context, charModelKey, spec)
-                charModel = spec
-                showModelPicker = false
-            },
-            onDismiss = { showModelPicker = false },
-        )
-    }
+    ModelSelectorSheet(
+        state = modelSelector,
+        onSelect = { providerId, modelId ->
+            val spec = "$providerId::$modelId"
+            charModelStore.set(context, charModelKey, spec)
+            charModel = spec
+        },
+    )
 }
 
 @Composable

@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,8 +44,11 @@ fun ProviderIcon(name: String, size: Dp = 40.dp, modifier: Modifier = Modifier) 
             modifier = modifier.size(size).clip(shape).background(color),
             contentAlignment = Alignment.Center,
         ) {
+            // lineHeight 须等于 fontSize：否则继承全局 typography 的大行高，glyph 在行内偏上不居中
             Text(name.take(1).uppercase(), color = androidx.compose.ui.graphics.Color.White,
-                fontSize = (size.value * 0.45f).sp)
+                fontSize = (size.value * 0.45f).sp,
+                lineHeight = (size.value * 0.45f).sp,
+                textAlign = TextAlign.Center)
         }
     }
 }

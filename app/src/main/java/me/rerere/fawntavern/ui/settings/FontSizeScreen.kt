@@ -36,6 +36,7 @@ import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.chat.ChatMessage
+import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.ui.chat.AIMsg
 import me.rerere.fawntavern.ui.chat.UserMsg
@@ -90,7 +91,12 @@ fun FontSizeScreen(onBack: () -> Unit, currentScale: Float = 1.0f) {
                         try { BitmapFactory.decodeFile(path) } catch (_: Exception) { null }
                     }
                 }
-                val modelId = remember { ApiConfigStore.loadConfig(context).currentModel.substringAfter("::", "") }
+                // 优先取默认聊天模型，与聊天页 displayModelSpec 的兜底一致；只读全局 currentModel 会漏掉聊天里选的模型
+                val modelSpec = remember {
+                    DefaultModelStore.get(context, DefaultModelStore.ROLE_CHAT).model
+                        .ifBlank { ApiConfigStore.loadConfig(context).currentModel }
+                }
+                val modelId = modelSpec.substringAfter("::", "")
                     .ifBlank { stringResource(R.string.no_model_selected) }
 
                 UserMsg(

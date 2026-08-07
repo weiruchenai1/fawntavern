@@ -88,6 +88,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * 并让滚动锚定像旧同步逻辑一样在下一帧就能读到新内容。
      */
     var overlays by mutableStateOf<Map<Long, ChatMessage>>(emptyMap()); private set
+    // selectModel 写的是持久化 store，displayModelSpec 读 store，二者非 state——自增它以强制 UI 刷新
+    var modelRevision by mutableStateOf(0); private set
     /** 当前/最近一次生成的目标消息 ts（重答时指向被重答的消息），null = 尚未生成过 */
     var genTargetTs by mutableStateOf<Long?>(null); private set
     var userName by mutableStateOf(UserProfileStore.getName(app)); private set
@@ -203,6 +205,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             DefaultModelStore.setModel(ctx, DefaultModelStore.ROLE_CHAT, spec)
         }
         reasoning = ThinkingStore.get(ctx, spec)
+        modelRevision++
     }
 
     fun updateReasoning(level: ReasoningLevel) {

@@ -16,7 +16,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,10 +37,8 @@ import com.composables.icons.lucide.Smile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.character.CharacterRepository
-import me.rerere.fawntavern.ui.components.ModelPickerList
 import me.rerere.fawntavern.ui.components.PickerRow
 import me.rerere.fawntavern.ui.components.reasoningIcon
 
@@ -51,7 +50,10 @@ private fun PickerSheet(
     fillHeight: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -76,24 +78,6 @@ private fun PickerSheet(
                 content()
             }
         }
-    }
-}
-
-@Composable
-internal fun ModelPickerSheet(
-    providers: List<ApiProvider>,
-    currentModel: String,
-    filterEnabled: Boolean = true,
-    onSelect: (providerId: String, modelId: String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    PickerSheet(title = stringResource(R.string.select_model), onDismiss = onDismiss) {
-        ModelPickerList(
-            providers = providers,
-            currentModel = currentModel,
-            filterEnabled = filterEnabled,
-            onSelect = onSelect,
-        )
     }
 }
 

@@ -23,6 +23,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import me.rerere.fawntavern.ui.components.rememberInteractiveDrawerState
 import me.rerere.fawntavern.ui.components.InteractiveDrawer
+import me.rerere.fawntavern.ui.components.ModelSelectorSheet
+import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
@@ -93,7 +95,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     fun navBack() { nav.removeLastOrNull() }
     // ── 弹层标志 ──
     var showAttachment by remember { mutableStateOf(false) }
-    var showModelPicker by remember { mutableStateOf(false) }
+    val modelSelector = rememberModelSelectorState(vm.displayModelSpec() ?: "", vm.apiConfig.providers)
     var showReasoningPicker by remember { mutableStateOf(false) }
     var showCharPicker by remember { mutableStateOf(false) }
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -120,7 +122,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
             ChatViewModel.SendOutcome.STARTED -> if (scroll) scrollToBottomTrigger++
             ChatViewModel.SendOutcome.NO_MODEL -> {
                 Toast.makeText(ctx, ctx.getString(R.string.select_model_first), Toast.LENGTH_SHORT).show()
-                showModelPicker = true
+                modelSelector.open()
             }
             ChatViewModel.SendOutcome.SKIPPED -> {}
         }
@@ -283,6 +285,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
         null -> {}
     }
 
+    vm.modelRevision // 读 state 建依赖：selectModel 后重读 displayModelSpec，刷新选中图标
     val displaySpec = vm.displayModelSpec()
     val displayProvId = displaySpec?.substringBefore("::") ?: ""
     val displayModelId = displaySpec?.substringAfter("::", "") ?: ""
@@ -343,7 +346,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                             if (outcome != ChatViewModel.SendOutcome.SKIPPED) keyboardController?.hide()
                             handleOutcome(outcome)
                         },
-                        onSelectModel = { showModelPicker = true },
+                        onSelectModel = { modelSelector.open() },
                         onSelectReasoning = { showReasoningPicker = true },
                         onCamera = {
                             val photoFile = File(ctx.cacheDir, "photos/photo_${System.currentTimeMillis()}.jpg")
@@ -632,17 +635,12 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     }
 
     // ── 模型选择面板 ──
-    if (showModelPicker) {
-        ModelPickerSheet(
-            providers = vm.apiConfig.providers,
-            currentModel = displaySpec ?: "",
-            onSelect = { providerId, modelId ->
-                vm.selectModel(providerId, modelId)
-                showModelPicker = false
-            },
-            onDismiss = { showModelPicker = false },
-        )
-    }
+    ModelSelectorSheet(
+        state = modelSelector,
+        onSelect = { providerId, modelId ->
+            vm.selectModel(providerId, modelId)
+        },
+    )
 
     // ── 思考预算面板 ──
     if (showReasoningPicker) {

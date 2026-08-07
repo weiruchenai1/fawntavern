@@ -56,3 +56,4 @@ FawnTavern — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3�
 - **图标**：使用 Lucide 图标（`com.composables.icons.lucide`），不要使用 Material 图标 — UI 遵循基于 Lucide 的 Figma 设计稿。
 - **Markdown**：消息正文用 mikepenz `multiplatform-markdown-renderer-m3`（纯 Compose）渲染。**流式生成期间也实时走同一条 Markdown 管线**（`MessageContent` 不再区分流式/结束——都套正则+宏后同步解析渲染，正文尚空的纯思考阶段显示 `StreamingDots` 呼吸点），每 60ms 节流帧解析一次；同步解析保证内容一变即同帧成型到真实高度，流式增长平滑跟随、切分支/重试的同帧锚定不抖。
 - **主题**：浅色/深色模式通过 `data/settings/ThemeStore`（`ThemeMode`）实现，在 `ui/theme/Theme.kt` 中应用；全局字体缩放通过 `data/settings/FontSizeStore` 实现。
+- **提交消息**：描述当前代码实现了什么（最终状态，如「新增 X」「统一 Y」「升级 Z」），不要罗列开发过程中遇到的问题或修复的 bug。

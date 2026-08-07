@@ -41,12 +41,12 @@ import me.rerere.fawntavern.ui.components.draggableLiftScale
 import sh.calvin.reorderable.ReorderableItem
 import me.rerere.fawntavern.ui.components.rememberReorderableList
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
-import me.rerere.fawntavern.ui.components.ModelPickerList
+import me.rerere.fawntavern.ui.components.ModelSelectorSheet
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
-import me.rerere.fawntavern.ui.chat.ModelPickerSheet
+import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 
 val API_TYPES = listOf("openai" to "OpenAI", "google" to "Google", "claude" to "Claude")
 
@@ -565,7 +565,10 @@ private fun ModelPickerSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+        ),
     ) {
         Column(
             Modifier.fillMaxWidth().fillMaxHeight(0.8f).padding(horizontal = Space16).imePadding(),
@@ -690,7 +693,9 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
 
     var selectedModel by remember(prov.id) { mutableStateOf(prov.models.firstOrNull()?.id ?: "") }
-    var showModelPicker by remember { mutableStateOf(false) }
+    // filterEnabled=false —— 提供商还没启用时也要能先测通
+    // currentModel 须带 "providerId::" 前缀，行内才按此匹配选中态
+    val modelSelector = rememberModelSelectorState("${prov.id}::$selectedModel", listOf(prov), filterEnabled = false)
     var nonStreaming by remember { mutableStateOf<TestState>(TestState.Idle) }
     var streaming by remember { mutableStateOf<TestState>(TestState.Idle) }
     var streamingText by remember { mutableStateOf("") }
@@ -728,16 +733,10 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
     }
 
     // 模型选择底板：从屏幕底部滑出，点击模型后自动关闭并把选中模型带回弹窗
-    // filterEnabled=false —— 提供商还没启用时也要能先测通
-    if (showModelPicker) {
-        ModelPickerSheet(
-            providers = listOf(prov),
-            currentModel = "${prov.id}::$selectedModel",
-            filterEnabled = false,
-            onSelect = { _, modelId -> selectedModel = modelId; showModelPicker = false },
-            onDismiss = { showModelPicker = false },
-        )
-    }
+    ModelSelectorSheet(
+        state = modelSelector,
+        onSelect = { _, modelId -> selectedModel = modelId },
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -749,7 +748,7 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
                     Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainer)
-                        .clickable { showModelPicker = true }
+                        .clickable { modelSelector.open() }
                         .padding(horizontal = Space12, vertical = Space8),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Space8),

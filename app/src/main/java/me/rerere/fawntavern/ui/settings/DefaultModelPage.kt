@@ -25,7 +25,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -50,8 +51,9 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.ui.api.ProviderIcon
-import me.rerere.fawntavern.ui.chat.ModelPickerSheet
 import me.rerere.fawntavern.ui.components.AppIconButton
+import me.rerere.fawntavern.ui.components.ModelSelectorSheet
+import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
@@ -71,6 +73,10 @@ fun DefaultModelPage(onBack: () -> Unit) {
     var version by remember { mutableIntStateOf(0) }
     var pickingRole by remember { mutableStateOf<String?>(null) }
     var promptRole by remember { mutableStateOf<String?>(null) }
+
+    // 三张卡片共用同一个模型选择器；pickingRole 决定当前在给哪个角色选模型
+    val pickCurrent = pickingRole?.let { DefaultModelStore.get(context, it).model } ?: ""
+    val modelSelector = rememberModelSelectorState(pickCurrent, apiConfig.providers)
 
     val chatEntry = remember(version) { DefaultModelStore.get(context, DefaultModelStore.ROLE_CHAT) }
     val titleEntry = remember(version) { DefaultModelStore.get(context, DefaultModelStore.ROLE_TITLE) }
@@ -120,7 +126,7 @@ fun DefaultModelPage(onBack: () -> Unit) {
                 displayName = chName,
                 showReset = chatEntry.model.isNotBlank(),
                 showBolt = false,
-                onPick = { pickingRole = DefaultModelStore.ROLE_CHAT },
+                onPick = { pickingRole = DefaultModelStore.ROLE_CHAT; modelSelector.open() },
                 onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_CHAT); version++ },
             )
 
@@ -133,7 +139,7 @@ fun DefaultModelPage(onBack: () -> Unit) {
                 displayName = tiName,
                 showReset = titleEntry.model.isNotBlank(),
                 showBolt = true,
-                onPick = { pickingRole = DefaultModelStore.ROLE_TITLE },
+                onPick = { pickingRole = DefaultModelStore.ROLE_TITLE; modelSelector.open() },
                 onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_TITLE); version++ },
                 onConfig = { promptRole = DefaultModelStore.ROLE_TITLE },
             )
@@ -147,7 +153,7 @@ fun DefaultModelPage(onBack: () -> Unit) {
                 displayName = suName,
                 showReset = summaryEntry.model.isNotBlank(),
                 showBolt = true,
-                onPick = { pickingRole = DefaultModelStore.ROLE_SUMMARY },
+                onPick = { pickingRole = DefaultModelStore.ROLE_SUMMARY; modelSelector.open() },
                 onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_SUMMARY); version++ },
                 onConfig = { promptRole = DefaultModelStore.ROLE_SUMMARY },
             )
@@ -159,10 +165,8 @@ fun DefaultModelPage(onBack: () -> Unit) {
     // ── 模型选择器（三张卡片共用） ──
     val pickRole = pickingRole
     if (pickRole != null) {
-        val current = DefaultModelStore.get(context, pickRole).model
-        ModelPickerSheet(
-            providers = apiConfig.providers,
-            currentModel = current,
+        ModelSelectorSheet(
+            state = modelSelector,
             onSelect = { providerId, modelId ->
                 DefaultModelStore.setModel(context, pickRole, "$providerId::$modelId")
                 version++
@@ -291,7 +295,10 @@ private fun PromptSheet(
     val hint = if (role == DefaultModelStore.ROLE_TITLE) stringResource(R.string.default_model_prompt_title_hint)
         else stringResource(R.string.default_model_prompt_summary_hint)
     var text by remember { mutableStateOf(currentPrompt.ifBlank { defaultPrompt }) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
