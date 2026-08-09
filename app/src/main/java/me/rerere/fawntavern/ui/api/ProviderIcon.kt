@@ -39,7 +39,7 @@ fun ProviderIcon(name: String, size: Dp = 40.dp, modifier: Modifier = Modifier) 
     val model = remember(slug, contentColor, context) {
         ImageRequest.Builder(context)
             .data("file:///android_asset/icons/$slug.svg")
-            .css("svg { fill: ${contentColor.toCssHex()}; }")
+            .css("svg { fill: ${contentColor.toCssHex()}; color: ${contentColor.toCssHex()}; }")
             .build()
     }
     AsyncImage(
@@ -94,7 +94,8 @@ private fun iconSlug(name: String): String {
         n.contains("阿里") || n.contains("百炼") || n.contains("alibabacloud") -> "alibabacloud_color"
         n.contains("火山") || n.contains("volcengine") || n.contains("volces") -> "volcengine_color"
         n.contains("kling") || n.contains("可灵") -> "kling_color"
-        n.contains("moonshot") || n.contains("kimi") || n.contains("月之暗面") -> "moonshot_color"
+        n.contains("moonshot") || n.contains("月之暗面") -> "moonshot"
+        n.contains("kimi") -> "kimi_color"
         n.contains("01.ai") || n.contains("01ai") || n.contains("yi-") || n.contains("lingyi") || n.contains("零一") -> "yi_color"
         n.contains("bing") -> "bing_color"
         n.contains("tavily") -> "tavily_color"
