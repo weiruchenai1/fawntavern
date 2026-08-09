@@ -61,6 +61,7 @@
     <string name="debug_log_wi_count">%1$d world info</string>
     <string name="debug_log_msg_count">%1$d messages</string>
     <string name="debug_log_tokens">≈%1$d tokens</string>
+    <string name="debug_log_reasoning">Reasoning %1$s</string>
     <string name="debug_log_images">%1$d image(s)</string>
 
     <!-- Chat -->
@@ -368,7 +369,19 @@
     <string name="edit_message">Edit message</string>
     <string name="thinking_label">Thinking</string>
     <string name="thinking_running">Thinking…</string>
-    <string name="thinking_took_fmt">Thought for %1$.2fs</string>
+    <string name="cot_deep_thinking">Deep thinking</string>
+    <string name="cot_web_search_fmt">Web search: %1$s</string>
+    <string name="cot_citations_fmt">%1$d citations</string>
+    <string name="cot_search_results">Search results</string>
+    <string name="cot_search_detail_params">Parameters</string>
+    <string name="cot_search_detail_results">Results</string>
+    <string name="cot_search_detail_query">Query</string>
+    <string name="cot_search_detail_provider">Provider</string>
+    <string name="cot_search_detail_count">Result count</string>
+    <string name="cot_searching">Searching…</string>
+    <string name="cot_search_no_results">No results</string>
+    <string name="cot_search_view_detail">Details</string>
+    <string name="cot_search_view_json">JSON</string>
     <string name="thinking_budget">Thinking budget</string>
     <string name="thinking_budget_hint">Remembered per model. Reasoning models only — raising it on a regular model may make requests fail.</string>
     <string name="reasoning_off">Off</string>

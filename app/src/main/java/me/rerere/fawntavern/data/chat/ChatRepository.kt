@@ -161,6 +161,11 @@ object ChatRepository {
                  else try { json.decodeFromString<List<String>>(imagesJson) } catch (_: Exception) { emptyList() },
         files = if (filesJson.isBlank()) emptyList()
                 else try { json.decodeFromString<List<MsgFile>>(filesJson) } catch (_: Exception) { emptyList() },
+        // 列格式为 List<MsgSearch> JSON；早期开发版存过单对象，解码失败时按单对象兜底
+        searches = if (searchJson.isBlank()) emptyList()
+                   else try { json.decodeFromString<List<MsgSearch>>(searchJson) } catch (_: Exception) {
+                       try { listOf(json.decodeFromString<MsgSearch>(searchJson)) } catch (_: Exception) { emptyList() }
+                   },
     )
 
     private fun ChatMessage.toEntity(sessionId: String) = MessageEntity(
@@ -175,5 +180,6 @@ object ChatRepository {
         altsJson = if (alts.isEmpty()) "" else json.encodeToString(alts),
         imagesJson = if (images.isEmpty()) "" else json.encodeToString(images),
         filesJson = if (files.isEmpty()) "" else json.encodeToString(files),
+        searchJson = if (searches.isEmpty()) "" else json.encodeToString(searches),
     )
 }

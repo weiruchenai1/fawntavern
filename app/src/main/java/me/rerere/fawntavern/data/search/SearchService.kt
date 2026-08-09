@@ -19,8 +19,8 @@ import kotlin.coroutines.resumeWithException
  * 联网搜索服务。
  *
  * 每个 provider 是一个无状态的 Kotlin `object`（无 DI），复用全局 [Http.client]。
- * 搜索由 App 直接发起并把结果注入 prompt，故接口只保留按 query 搜索，
- * 去掉 parameters/Description/scrape。
+ * 搜索以 search_web 函数工具暴露给模型（关键词由模型决定），App 负责执行并回传结果，
+ * 故接口只保留按 query 搜索。
  */
 interface SearchService<T : SearchServiceOptions> {
     val name: String
@@ -47,18 +47,6 @@ data class SearchResult(
         val url: String,
         val text: String,
     )
-}
-
-/** 把搜索结果格式化为注入 prompt 的文本块（联网搜索开启时随请求进入上下文） */
-fun formatSearchResultForPrompt(query: String, result: SearchResult): String = buildString {
-    appendLine("【联网搜索结果 · 查询：$query】")
-    appendLine("以下是本次搜索到的公开资料，请优先依据这些资料回答；若无相关信息，请如实说明。")
-    result.items.forEachIndexed { i, it ->
-        appendLine("${i + 1}. ${it.title}")
-        appendLine("   ${it.url}")
-        if (it.text.isNotBlank()) appendLine("   ${it.text}")
-    }
-    result.answer?.takeIf { it.isNotBlank() }?.let { appendLine("摘要：$it") }
 }
 
 /**

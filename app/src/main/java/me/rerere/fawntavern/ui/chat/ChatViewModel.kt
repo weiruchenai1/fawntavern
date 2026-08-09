@@ -25,7 +25,10 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
+import me.rerere.fawntavern.data.api.ApiToolCall
+import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.ReasoningLevel
+import me.rerere.fawntavern.data.api.ToolSpec
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
@@ -34,12 +37,13 @@ import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.chat.MsgFile
+import me.rerere.fawntavern.data.chat.MsgSearch
+import me.rerere.fawntavern.data.chat.SearchCitation
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
 import me.rerere.fawntavern.data.search.SearchCommonOptions
 import me.rerere.fawntavern.data.search.createSearchService
-import me.rerere.fawntavern.data.search.formatSearchResultForPrompt
 import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.data.settings.TtsStore
 import me.rerere.fawntavern.data.speech.TtsEngine
@@ -594,23 +598,15 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             buildHistory.drop(historySkip) else buildHistory
         val slicedPromptHistory = if (mode == GenMode.SEND && historySkip > 0 && historySkip < promptHistory.size)
             promptHistory.drop(historySkip) else promptHistory
-        // 联网搜索：开关开启时以最近一条用户消息为查询发起搜索，结果作为固定提示块注入
-        //（history 之外、不被预算裁剪）；失败静默跳过，不阻塞生成
-        if (SearchStore.isEnabled(ctx)) {
-            val query = slicedPromptHistory.lastOrNull { it.role == "user" }?.content?.take(200)
-            if (!query.isNullOrBlank()) {
-                val block = runCatching {
-                    val options = SearchStore.getSelected(ctx)
-                    val result = createSearchService(options)
-                        .search(query, SearchCommonOptions(SearchStore.getResultSize(ctx)), options)
-                        .getOrThrow()
-                    formatSearchResultForPrompt(query, result)
-                }.getOrNull()
-                if (block != null) {
-                    extraPre += PromptBuilder.Piece("system", block, PromptBuilder.PromptSource.WEB_SEARCH, "联网搜索")
-                }
-            }
-        }
+        // 联网搜索：开关开启时注册 search_web 函数工具，由模型思考后自行决定是否搜索、
+        // 用什么关键词、搜几次（不再拿用户原话直搜）；模型内置搜索开启时不下发
+        //（结果重复，且 Gemini 不允许内置搜索与函数工具并存）。搜索过程以时间线步骤
+        // 展示（searching 状态只进 overlay），结果引用随消息落盘；失败回传错误给模型自行处理
+        var msgForGen = if (mode == GenMode.REGEN) genMessage.copy(searches = emptyList()) else genMessage
+        // 重答清掉旧引用后立即刷 overlay，避免生成期间残留上一版的引用胶囊
+        if (mode == GenMode.REGEN) overlays = overlays + (genMessage.ts to msgForGen)
+        val builtInSearch = prov.model(modelId)?.tools?.contains(BuiltInTool.SEARCH) == true
+        val webSearchOn = SearchStore.isEnabled(ctx) && !builtInSearch
         val built = PromptBuilder.build(
             card = currentCard,
             userName = userName,
@@ -629,12 +625,14 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         )
         val finalMsg = generation.run(
             promptHistory = slicedPromptHistory,
-            genMessage = genMessage,
+            genMessage = msgForGen,
             provider = prov,
             modelId = modelId,
             built = built,
             filesDir = ctx.filesDir,
             streaming = currentCard?.streaming ?: true,
+            tools = if (webSearchOn) listOf(webSearchToolSpec()) else emptyList(),
+            toolExecutor = if (webSearchOn) searchToolExecutor() else null,
             errorText = { e -> ctx.getString(R.string.chat_error_fmt, e.message ?: "") },
             onUpdate = { overlays = overlays + (it.ts to it) },
         )
@@ -650,6 +648,68 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (session?.id == sessionId) session = done
             runExtensionLifecycle(done)
             maybeGenerateTitle(done)
+        }
+    }
+
+    /**
+     * search_web 工具声明：描述里要求模型自行提炼关键词（而非照抄用户原话）、
+     * 必要时换关键词多搜几次。参数只有一个 query，各协议 Adapter 自行包装 schema。
+     */
+    private fun webSearchToolSpec(): ToolSpec {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+        return ToolSpec(
+            name = "search_web",
+            description = """
+                Search the web for up-to-date or specific information.
+                Use this when the conversation needs current facts, news, or verification.
+                Think first, then distill focused search keywords yourself - do NOT copy the user's message verbatim.
+                If results are insufficient, refine the keywords and search again (multiple calls allowed).
+                Today is $today.
+            """.trimIndent(),
+            parametersSchema = """{"type":"object","properties":{"query":{"type":"string","description":"Focused search keywords"}},"required":["query"]}""",
+        )
+    }
+
+    /** search_web 的执行器：跑当前选中的搜索服务，产出回传给模型的 JSON 与时间线步骤状态 */
+    private fun searchToolExecutor() = object : GenerationController.ToolExecutor {
+        fun queryOf(call: ApiToolCall): String =
+            runCatching { org.json.JSONObject(call.arguments).optString("query") }
+                .getOrDefault("").trim()
+
+        override fun describe(call: ApiToolCall): MsgSearch? {
+            if (call.name != "search_web") return null
+            val q = queryOf(call)
+            if (q.isBlank()) return null
+            return MsgSearch(query = q, provider = SearchStore.getSelected(ctx).displayName, searching = true)
+        }
+
+        override suspend fun execute(call: ApiToolCall): Pair<String, MsgSearch?> {
+            if (call.name != "search_web") return """{"error":"unknown tool"}""" to null
+            val q = queryOf(call)
+            if (q.isBlank()) return """{"error":"missing query"}""" to null
+            val options = SearchStore.getSelected(ctx)
+            // 失败直接抛给 GenerationController：包装成错误 JSON 回传模型，时间线步骤落回非搜索态
+            val result = createSearchService(options)
+                .search(q, SearchCommonOptions(SearchStore.getResultSize(ctx)), options)
+                .getOrThrow()
+            val items = org.json.JSONArray()
+            result.items.forEachIndexed { i, item ->
+                items.put(org.json.JSONObject()
+                    .put("index", i + 1)
+                    .put("title", item.title)
+                    .put("url", item.url)
+                    .put("content", item.text))
+            }
+            val payload = org.json.JSONObject().apply {
+                put("query", q)
+                result.answer?.takeIf { it.isNotBlank() }?.let { put("answer", it) }
+                put("items", items)
+            }
+            return payload.toString() to MsgSearch(
+                query = q,
+                provider = options.displayName,
+                items = result.items.map { SearchCitation(it.title, it.url, it.text) },
+            )
         }
     }
 

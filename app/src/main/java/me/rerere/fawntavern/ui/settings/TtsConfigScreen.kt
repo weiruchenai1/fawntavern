@@ -60,6 +60,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ChevronLeft
+import com.composables.icons.lucide.Eye
+import com.composables.icons.lucide.EyeOff
 import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.PencilLine
@@ -539,7 +541,7 @@ private fun SliderLabel(
     }
 }
 
-/** 配置表单字段：本地暂存 + 变更即落盘 */
+/** 配置表单字段：本地暂存 + 变更即落盘；secret 字段默认掩码、尾部眼睛按钮切换可见 */
 @Composable
 private fun ConfigField(
     label: String,
@@ -549,14 +551,23 @@ private fun ConfigField(
 ) {
     // 以 value 为 key：切换提供商类型后外部值变化时，本地暂存同步重置
     var text by remember(value) { mutableStateOf(value) }
+    var visible by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = text,
         onValueChange = { text = it; onChange(it) },
         label = { Text(label) },
         singleLine = true,
-        visualTransformation = if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        visualTransformation = if (secret && !visible) PasswordVisualTransformation()
+                               else androidx.compose.ui.text.input.VisualTransformation.None,
         keyboardOptions = if (secret) KeyboardOptions(keyboardType = KeyboardType.Password)
                           else KeyboardOptions.Default,
+        trailingIcon = if (!secret) null else {
+            {
+                androidx.compose.material3.IconButton(onClick = { visible = !visible }) {
+                    Icon(if (visible) Lucide.EyeOff else Lucide.Eye, null, Modifier.size(20.dp))
+                }
+            }
+        },
         modifier = Modifier.fillMaxWidth(),
     )
 }

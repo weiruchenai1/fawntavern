@@ -18,9 +18,11 @@ object ChatApi {
     class Stopped : Exception()
 
     /**
-     * 流式聊天补全。messages 为拼装完成的完整消息数组（PromptBuilder 产出），
-     * params 为采样参数（来自关联预设，null = 服务端默认）。
+     * 流式聊天补全（单轮）。messages 为拼装完成的完整消息数组（PromptBuilder 产出，
+     * 多轮工具循环时含工具调用轮次），params 为采样参数（来自关联预设，null = 服务端默认），
+     * tools 为下发给模型的函数工具（空 = 不发）。
      * onDelta 在 IO 线程回调增量 (正文, 思考内容)。
+     * 返回本轮收尾信息（含模型发起的工具调用，由调用方执行并续轮）；
      * 返回前保证连接已关闭；HTTP 错误抛 IllegalStateException；用户停止抛 [Stopped]。
      *
      * 停止有两条路径：读循环每收到一行检查一次 isCancelled（快路径）；
@@ -32,9 +34,10 @@ object ChatApi {
         modelId: String,
         messages: List<ApiMessage>,
         params: GenParams?,
+        tools: List<ToolSpec> = emptyList(),
         isCancelled: () -> Boolean,
         onDelta: (content: String, reasoning: String) -> Unit,
-    ): Unit = withContext(Dispatchers.IO) {
+    ): StreamEnd = withContext(Dispatchers.IO) {
         // 调用方只给模型 ID；自定义请求头/请求体、内置工具等元数据在这里从提供商配置里找回
         val model = provider.model(modelId) ?: ModelInfo(id = modelId)
         val stopped: () -> Unit = { if (isCancelled()) throw Stopped() }
@@ -50,7 +53,7 @@ object ChatApi {
         }
         try {
             adapterFor(provider.type).stream(
-                provider, model, messages, params, onDelta, stopped,
+                provider, model, messages, params, tools, onDelta, stopped,
                 onCall = { callRef.set(it) },
             )
         } catch (e: IOException) {

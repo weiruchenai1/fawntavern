@@ -56,6 +56,7 @@ internal data class MessageEntity(
     val altsJson: String,  // List<MsgAlt> 的 kotlinx.serialization JSON，空串 = 无多版本
     @ColumnInfo(defaultValue = "") val imagesJson: String = "",  // List<String> JSON，空串 = 无图片附件
     @ColumnInfo(defaultValue = "") val filesJson: String = "",   // List<MsgFile> JSON，空串 = 无文件附件
+    @ColumnInfo(defaultValue = "") val searchJson: String = "",  // List<MsgSearch> JSON，空串 = 无联网搜索
 )
 
 internal data class SessionWithMessages(
@@ -137,7 +138,7 @@ internal interface ChatDao {
     suspend fun updateTitle(id: String, title: String, t: Long)
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 5, exportSchema = false)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 6, exportSchema = false)
 internal abstract class ChatDatabase : RoomDatabase() {
 
     abstract fun dao(): ChatDao
@@ -174,11 +175,18 @@ internal abstract class ChatDatabase : RoomDatabase() {
             }
         }
 
+        /** v6：消息表增加联网搜索引用列 */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN searchJson TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile private var instance: ChatDatabase? = null
 
         fun get(context: Context): ChatDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, ChatDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build().also { instance = it }
         }
     }

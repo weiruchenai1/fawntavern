@@ -15,6 +15,28 @@ data class MsgAlt(
     val reasoningMs: Long = 0,
 )
 
+/** 联网搜索的单条引用来源（展示"N个引用"胶囊卡与来源列表用） */
+@Serializable
+data class SearchCitation(
+    val title: String = "",
+    val url: String = "",
+    val text: String = "",
+)
+
+/** 一次搜索工具调用：query 为模型自行决定的查询词，provider 为搜索服务商显示名，
+ *  items 为引用来源。[reasoningChars]/[reasoningMs] 记录搜索发起时已产生的思考字符数与
+ *  已累计思考耗时 —— 时间线卡片按此把整段思考切成"思考→搜索→思考"的交错步骤。
+ *  [searching] 仅流式 overlay 用（搜索进行中的时间线状态），不落盘 */
+@Serializable
+data class MsgSearch(
+    val query: String = "",
+    val provider: String = "",
+    val items: List<SearchCitation> = emptyList(),
+    val reasoningChars: Int = 0,
+    val reasoningMs: Long = 0,
+    @kotlinx.serialization.Transient val searching: Boolean = false,
+)
+
 /** 非图片附件：name 为原始文件名（显示用），path 为 filesDir 相对路径 */
 @Serializable
 data class MsgFile(
@@ -35,6 +57,7 @@ data class ChatMessage(
     val altIdx: Int = 0,
     val images: List<String> = emptyList(),   // 图片附件（filesDir 相对路径，发送时编码为 base64）
     val files: List<MsgFile> = emptyList(),   // 其它文件附件（发送时尝试以文本内联进 prompt）
+    val searches: List<MsgSearch> = emptyList(),  // 本次生成的搜索工具调用（仅 assistant；按调用顺序，重答会覆盖）
 )
 
 /** 聊天会话：每个角色卡对应独立的聊天列表 */

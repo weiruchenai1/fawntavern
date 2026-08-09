@@ -61,6 +61,7 @@
     <string name="debug_log_wi_count">世界书 %1$d 条</string>
     <string name="debug_log_msg_count">消息 %1$d 条</string>
     <string name="debug_log_tokens">≈%1$d tokens</string>
+    <string name="debug_log_reasoning">思考档位 %1$s</string>
     <string name="debug_log_images">%1$d 张图片</string>
 
     <!-- Chat -->
@@ -368,7 +369,19 @@
     <string name="edit_message">编辑消息</string>
     <string name="thinking_label">思考过程</string>
     <string name="thinking_running">思考中…</string>
-    <string name="thinking_took_fmt">思考了%1$.2f秒</string>
+    <string name="cot_deep_thinking">深度思考</string>
+    <string name="cot_web_search_fmt">网络搜索：%1$s</string>
+    <string name="cot_citations_fmt">%1$d个引用</string>
+    <string name="cot_search_results">搜索结果</string>
+    <string name="cot_search_detail_params">参数</string>
+    <string name="cot_search_detail_results">结果</string>
+    <string name="cot_search_detail_query">关键词</string>
+    <string name="cot_search_detail_provider">搜索服务</string>
+    <string name="cot_search_detail_count">结果条数</string>
+    <string name="cot_searching">搜索中…</string>
+    <string name="cot_search_no_results">暂无结果</string>
+    <string name="cot_search_view_detail">详情</string>
+    <string name="cot_search_view_json">JSON</string>
     <string name="thinking_budget">思考预算</string>
     <string name="thinking_budget_hint">按模型分别记忆。仅推理模型支持，对普通模型调档可能导致请求失败。</string>
     <string name="reasoning_off">关闭</string>

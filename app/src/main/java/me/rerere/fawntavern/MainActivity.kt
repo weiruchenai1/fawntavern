@@ -14,7 +14,9 @@ import androidx.compose.runtime.setValue
 import androidx.core.os.LocaleListCompat
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.svg.SvgDecoder
+import me.rerere.fawntavern.data.api.Http
 import me.rerere.fawntavern.data.settings.LanguageStore
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.data.settings.ThemeStore
@@ -46,11 +48,13 @@ class MainActivity : ComponentActivity() {
         val startAtSettings = LanguageStore.consumePendingChange(this)
 
         setContent {
-            // Coil 单例注册 SVG 解码器（品牌图标 assets/icons/*.svg）
+            // Coil 单例：SVG 解码器（品牌图标 assets/icons/*.svg）+ 网络加载（引用 favicon），
+            // 网络请求复用全局 OkHttp 连接池
             setSingletonImageLoaderFactory { context ->
                 ImageLoader.Builder(context)
                     .components {
                         add(SvgDecoder.Factory(scaleToDensity = true))
+                        add(OkHttpNetworkFetcherFactory(callFactory = { Http.client }))
                     }
                     .build()
             }

@@ -183,15 +183,19 @@ private fun LogEntryCard(entry: PromptLogEntry) {
             )
         }
 
-        // 摘要行：角色 / 预设 / 世界书条数 / 消息条数 / token 估算
+        // 摘要行：角色 / 预设 / 世界书条数 / 消息条数 / token 估算 / 思考档位（非 AUTO 才显示）
         val noPreset = stringResource(R.string.debug_log_no_preset)
         val wi = stringResource(R.string.debug_log_wi_count, entry.worldInfoCount)
         val msgs = stringResource(R.string.debug_log_msg_count, entry.messages.size)
         val tok = stringResource(R.string.debug_log_tokens, entry.approxTokens)
+        val reasoning = entry.params?.reasoning
+            ?.takeIf { it != me.rerere.fawntavern.data.api.ReasoningLevel.AUTO }
+            ?.let { stringResource(R.string.debug_log_reasoning, it.name) }
         val summary = buildList {
             if (entry.charName.isNotBlank()) add(entry.charName)
             add(entry.presetName ?: noPreset)
             add(wi); add(msgs); add(tok)
+            reasoning?.let { add(it) }
         }.joinToString("  ·  ")
         Text(
             summary,

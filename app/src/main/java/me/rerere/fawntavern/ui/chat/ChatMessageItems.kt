@@ -33,7 +33,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import android.graphics.BitmapFactory
-import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.CircleStop
@@ -192,7 +191,6 @@ internal fun AIMsg(
     val s8 = (Space8.value * scale).dp
     val iconSz = (18f * scale).dp
     val textStyle = MaterialTheme.typography.titleMedium.scaledBy(scale)
-    val reasoningStyle = MaterialTheme.typography.bodySmall.scaledBy(scale)
 
     val modelIconSz = (24f * scale).dp
 
@@ -204,33 +202,8 @@ internal fun AIMsg(
                 Text(msg.model, style = textStyle, color = MaterialTheme.colorScheme.onSurface)
             }
         }
-        if (msg.reasoning.isNotBlank()) {
-            // rememberSaveable + 条目 key（msg.ts）：滚出屏幕被回收再滚回来，展开状态不丢，
-            // 条目高度也不会因此在回来时和离开时不一致
-            var expanded by rememberSaveable { mutableStateOf(false) }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(s8),
-                modifier = Modifier.noRippleClickable { expanded = !expanded },
-            ) {
-                Text(
-                    stringResource(R.string.thinking_took_fmt, msg.reasoningMs / 1000.0f),
-                    style = textStyle, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Icon(if (expanded) Lucide.ChevronDown else Lucide.ChevronRight, null,
-                    Modifier.size(iconSz), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (expanded) {
-                Text(
-                    msg.reasoning, style = reasoningStyle,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(s8))
-                        .background(MaterialTheme.colorScheme.surfaceContainer)
-                        .padding(s8),
-                )
-            }
-        }
+        // 深度思考 / 联网搜索时间线卡片（Kelivo 风格 Chain of Thought）
+        ThoughtTimelineCard(msg = msg, isStreaming = isStreaming, scale = scale)
         MessageContent(
             content = msg.content,
             isStreaming = isStreaming,
@@ -240,6 +213,18 @@ internal fun AIMsg(
             userName = userName,
             charName = charName,
         )
+        // 引用胶囊卡：流式结束后显示在正文之后，点击弹出来源列表。
+        // 聚合本条消息全部搜索调用的结果，按 URL 去重（多次搜索可能命中同一页面）
+        val citations = remember(msg.searches) {
+            msg.searches.flatMap { it.items }.distinctBy { it.url }
+        }
+        if (!isStreaming && citations.isNotEmpty()) {
+            var showCitations by rememberSaveable { mutableStateOf(false) }
+            CitationsPill(items = citations, scale = scale) { showCitations = true }
+            if (showCitations) {
+                CitationsSheet(items = citations, scale = scale) { showCitations = false }
+            }
+        }
         // 操作栏（复制/重答/翻译/更多 + 多版本切换）：流式生成中不显示，生成结束才出现
         if (!isStreaming) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
