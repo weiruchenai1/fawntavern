@@ -29,6 +29,7 @@ import me.rerere.fawntavern.data.api.ApiToolCall
 import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.api.ToolSpec
+import me.rerere.fawntavern.data.api.supportsBuiltInTool
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
@@ -118,6 +119,18 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 联网搜索开关（开启后发送时注入搜索结果） */
     var searchEnabled by mutableStateOf(SearchStore.isEnabled(app)); private set
     var searchProviderIndex by mutableStateOf(SearchStore.getSelectedIndex(app)); private set
+    val builtInSearchAvailable: Boolean
+        get() {
+            modelRevision
+            val (provider, modelId) = currentProviderAndModel() ?: return false
+            return provider.model(modelId)?.supportsBuiltInTool(BuiltInTool.SEARCH, provider) == true
+        }
+    val builtInSearchEnabled: Boolean
+        get() {
+            modelRevision
+            val (provider, modelId) = currentProviderAndModel() ?: return false
+            return BuiltInTool.SEARCH in (provider.model(modelId)?.tools ?: emptySet())
+        }
     /** 正在朗读的 AI 消息 ts（点击朗读图标后置位，读完/停止时清空） */
     var speakingTs by mutableStateOf<Long?>(null); private set
     /** TTS 朗读实时状态（悬浮工具栏展示/控制用），随引擎播放同步更新 */
@@ -421,6 +434,25 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         SearchStore.setEnabled(ctx, searchEnabled)
     }
 
+    fun toggleBuiltInSearch() {
+        val (provider, modelId) = currentProviderAndModel() ?: return
+        val modelIndex = provider.models.indexOfFirst { it.id == modelId }
+        if (modelIndex < 0) return
+        val model = provider.models[modelIndex]
+        if (!model.supportsBuiltInTool(BuiltInTool.SEARCH, provider)) return
+        val updated = model.copy(tools = if (BuiltInTool.SEARCH in model.tools) {
+            model.tools - BuiltInTool.SEARCH
+        } else {
+            model.tools + BuiltInTool.SEARCH
+        })
+        val updatedProvider = provider.copy(models = provider.models.toMutableList().also { it[modelIndex] = updated })
+        apiConfig = apiConfig.copy(providers = apiConfig.providers.map {
+            if (it.id == provider.id) updatedProvider else it
+        })
+        ApiConfigStore.saveConfig(ctx, apiConfig)
+        modelRevision++
+    }
+
     /** 选择搜索服务商（面板卡片点击，按下标） */
     fun selectSearchProvider(index: Int) {
         SearchStore.setSelectedIndex(ctx, index)
@@ -605,8 +637,10 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         var msgForGen = if (mode == GenMode.REGEN) genMessage.copy(searches = emptyList()) else genMessage
         // 重答清掉旧引用后立即刷 overlay，避免生成期间残留上一版的引用胶囊
         if (mode == GenMode.REGEN) overlays = overlays + (genMessage.ts to msgForGen)
-        val builtInSearch = prov.model(modelId)?.tools?.contains(BuiltInTool.SEARCH) == true
-        val webSearchOn = SearchStore.isEnabled(ctx) && !builtInSearch
+        // 内置搜索开启时只走模型侧搜索，App 不再注入外部搜索结果，避免两种搜索同时执行；
+        // 仅开启 URL 上下文不影响 App 网络搜索（与搜索面板的显隐逻辑保持一致）。
+        val builtInSearchOn = prov.model(modelId)?.tools?.contains(BuiltInTool.SEARCH) == true
+        val webSearchOn = SearchStore.isEnabled(ctx) && !builtInSearchOn
         val built = PromptBuilder.build(
             card = currentCard,
             userName = userName,

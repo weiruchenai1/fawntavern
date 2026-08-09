@@ -410,7 +410,6 @@
     <string name="test_failed_fmt">连接失败：%s</string>
     <string name="edit_model">编辑模型</string>
     <string name="model_id_label">模型 ID</string>
-    <string name="chat_model_label">聊天</string>
 
     <!-- 模型详情面板 -->
     <string name="model_basic_tab">基本设置</string>
@@ -433,7 +432,7 @@
     <string name="kv_key">键</string>
     <string name="kv_value">值</string>
     <string name="custom_body_value_hint">JSON 值，如 true、1024、{"a":1}</string>
-    <string name="builtin_tools_hint">由 API 服务端自带、无需本 App 实现的工具。能不能用取决于协议与端点：同一个模型被 OpenAI 兼容网关代理后，请求体里往往就没有对应字段了，置灰的项可改用高级设置里的自定义请求体下发。</string>
+    <string name="builtin_tools_hint">由 API 服务端自带、无需本 App 实现的工具。当前功能只支持 Gemini 官方 API。</string>
     <string name="builtin_tool_unsupported">当前提供商不支持</string>
     <string name="builtin_tool_search">联网搜索</string>
     <string name="builtin_tool_search_desc">让模型带着搜索结果作答</string>
@@ -497,6 +496,7 @@
 
     <!-- 联网搜索 -->
     <string name="web_search">网络搜索</string>
+    <string name="model_builtin_search">模型内置搜索</string>
     <string name="search_service">搜索服务</string>
     <string name="web_search_enabled">已开启</string>
     <string name="web_search_disabled">已关闭</string>

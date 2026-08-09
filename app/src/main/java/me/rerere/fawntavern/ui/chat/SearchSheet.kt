@@ -38,9 +38,12 @@ import me.rerere.fawntavern.ui.api.ProviderIcon
 @Composable
 internal fun SearchPickerSheet(
     searchEnabled: Boolean,
+    builtInSearchAvailable: Boolean,
+    builtInSearchEnabled: Boolean,
     services: List<SearchServiceOptions>,
     selectedIndex: Int,
     onToggleSearch: () -> Unit,
+    onToggleBuiltInSearch: () -> Unit,
     onSelectProvider: (Int) -> Unit,
     onOpenConfig: () -> Unit,
     onDismiss: () -> Unit,
@@ -54,62 +57,94 @@ internal fun SearchPickerSheet(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // 顶部：globe 图标 + 网络搜索标题 + 设置入口（bolt）+ 总开关
-            Card {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Lucide.Earth, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Column(
-                        Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+            if (builtInSearchAvailable) {
+                Card {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(stringResource(R.string.web_search), style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface)
-                        Text(stringResource(if (searchEnabled) R.string.web_search_enabled else R.string.web_search_disabled),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Lucide.Earth, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            stringResource(R.string.model_builtin_search),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Switch(
+                            checked = builtInSearchEnabled,
+                            onCheckedChange = { onToggleBuiltInSearch() },
+                        )
                     }
-                    IconButton(onClick = onOpenConfig) {
-                        Icon(Lucide.Bolt, stringResource(R.string.search_open_config),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(
-                        checked = searchEnabled,
-                        onCheckedChange = { onToggleSearch() },
-                    )
                 }
             }
 
-            // 可选搜索服务商卡片：图标 + 名称，点击选中
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(1),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                itemsIndexed(services, key = { _, s -> s.id }) { index, opt ->
-                    val sel = index == selectedIndex
-                    Card(
-                        onClick = { onSelectProvider(index) },
-                        shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (sel) MaterialTheme.colorScheme.primaryContainer
-                                             else MaterialTheme.colorScheme.surface,
-                            contentColor = if (sel) MaterialTheme.colorScheme.onPrimaryContainer
-                                           else MaterialTheme.colorScheme.onSurface,
-                        ),
+            // 模型内置搜索开启后，不再呈现 App 网络搜索的开关和服务选择，避免两种搜索同时下发。
+            if (!builtInSearchEnabled) {
+                Card {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        Icon(Lucide.Earth, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(
+                            Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            // 无具体图标，用首字图标（ProviderIcon 的回退样式）
-                            ProviderIcon(opt.displayName, size = 28.dp)
-                            Text(opt.displayName, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                stringResource(R.string.web_search),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                stringResource(if (searchEnabled) R.string.web_search_enabled else R.string.web_search_disabled),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(onClick = onOpenConfig) {
+                            Icon(
+                                Lucide.Bolt,
+                                stringResource(R.string.search_open_config),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = searchEnabled,
+                            onCheckedChange = { onToggleSearch() },
+                        )
+                    }
+                }
+
+                // 可选搜索服务商卡片：图标 + 名称，点击选中
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(1),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    itemsIndexed(services, key = { _, s -> s.id }) { index, opt ->
+                        val sel = index == selectedIndex
+                        Card(
+                            onClick = { onSelectProvider(index) },
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (sel) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surface,
+                                contentColor = if (sel) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurface,
+                            ),
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // 无具体图标，用首字图标（ProviderIcon 的回退样式）
+                                ProviderIcon(opt.displayName, size = 28.dp)
+                                Text(opt.displayName, style = MaterialTheme.typography.titleMedium)
+                            }
                         }
                     }
                 }
@@ -117,4 +152,3 @@ internal fun SearchPickerSheet(
         }
     }
 }
-

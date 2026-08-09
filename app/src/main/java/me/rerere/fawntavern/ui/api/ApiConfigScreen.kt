@@ -501,9 +501,6 @@ private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, m
                                     maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(Space4),
                                     verticalArrangement = Arrangement.spacedBy(Space4)) {
-                                    Tag(type = TagType.INFO) {
-                                        Text(stringResource(R.string.chat_model_label))
-                                    }
                                     ModelCapabilityTags(model)
                                 }
                             }

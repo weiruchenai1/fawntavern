@@ -61,10 +61,12 @@ internal object ConversationOps {
         val newAlts = m.alts.toMutableList()
         // 镜像字段先写回当前版本：编辑过的内容切走再切回不丢
         newAlts[m.altIdx] = newAlts[m.altIdx].copy(
-            content = m.content, reasoning = m.reasoning, model = m.model, reasoningMs = m.reasoningMs)
+            content = m.content, reasoning = m.reasoning, model = m.model,
+            reasoningMs = m.reasoningMs, searches = m.searches)
         val target = newAlts[ni]
         return m.copy(content = target.content, reasoning = target.reasoning,
-            model = target.model, reasoningMs = target.reasoningMs, alts = newAlts, altIdx = ni)
+            model = target.model, reasoningMs = target.reasoningMs, searches = target.searches,
+            alts = newAlts, altIdx = ni)
     }
 
     /**
@@ -78,7 +80,7 @@ internal object ConversationOps {
         val single = newAlts.size == 1
         return m.copy(
             content = cur.content, reasoning = cur.reasoning,
-            model = cur.model, reasoningMs = cur.reasoningMs,
+            model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
             alts = if (single) emptyList() else newAlts,
             altIdx = if (single) 0 else newIdx,
         )
@@ -89,7 +91,7 @@ internal object ConversationOps {
         val alts = m.alts.ifEmpty { listOf(MsgAlt()) }.toMutableList()
         val ai = m.altIdx.coerceIn(0, alts.lastIndex)
         alts[ai] = alts[ai].copy(content = m.content, reasoning = m.reasoning,
-            model = m.model, reasoningMs = m.reasoningMs)
+            model = m.model, reasoningMs = m.reasoningMs, searches = m.searches)
         alts += MsgAlt(model = modelId)
         return m.copy(content = "", reasoning = "", model = modelId, reasoningMs = 0,
             alts = alts, altIdx = alts.lastIndex)

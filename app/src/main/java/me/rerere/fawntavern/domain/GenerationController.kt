@@ -193,7 +193,7 @@ internal class GenerationController {
             val alts = cur.alts.toMutableList()
             alts[cur.altIdx] = alts[cur.altIdx].copy(
                 content = cur.content, reasoning = cur.reasoning,
-                model = cur.model, reasoningMs = cur.reasoningMs)
+                model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches)
             cur = cur.copy(alts = alts)
         }
         onUpdate(cur)

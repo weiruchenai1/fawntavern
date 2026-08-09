@@ -13,6 +13,8 @@ data class MsgAlt(
     val reasoning: String = "",
     val model: String = "",
     val reasoningMs: Long = 0,
+    /** 此版本生成期间产生的联网搜索步骤与引用。 */
+    val searches: List<MsgSearch> = emptyList(),
 )
 
 /** 联网搜索的单条引用来源（展示"N个引用"胶囊卡与来源列表用） */
@@ -44,7 +46,7 @@ data class MsgFile(
     val path: String = "",
 )
 
-/** 单条聊天消息。content/reasoning/model/reasoningMs 始终镜像 alts[altIdx]（alts 为空表示只有单版本） */
+/** 单条聊天消息。版本相关字段始终镜像 alts[altIdx]（alts 为空表示只有单版本） */
 @Serializable
 data class ChatMessage(
     val role: String,             // "user" | "assistant"
@@ -57,7 +59,7 @@ data class ChatMessage(
     val altIdx: Int = 0,
     val images: List<String> = emptyList(),   // 图片附件（filesDir 相对路径，发送时编码为 base64）
     val files: List<MsgFile> = emptyList(),   // 其它文件附件（发送时尝试以文本内联进 prompt）
-    val searches: List<MsgSearch> = emptyList(),  // 本次生成的搜索工具调用（仅 assistant；按调用顺序，重答会覆盖）
+    val searches: List<MsgSearch> = emptyList(),  // 当前版本的搜索工具调用（仅 assistant；按调用顺序）
 )
 
 /** 聊天会话：每个角色卡对应独立的聊天列表 */

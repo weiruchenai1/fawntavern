@@ -719,10 +719,13 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
         val searchServices = SearchStore.getServices(ctx)
         SearchPickerSheet(
             searchEnabled = vm.searchEnabled,
+            builtInSearchAvailable = vm.builtInSearchAvailable,
+            builtInSearchEnabled = vm.builtInSearchEnabled,
             services = searchServices,
             // 用 VM 的响应式下标做高亮；配置页删过提供商后可能越界，收敛回有效范围
             selectedIndex = vm.searchProviderIndex.coerceIn(0, searchServices.lastIndex.coerceAtLeast(0)),
             onToggleSearch = { vm.toggleSearch() },
+            onToggleBuiltInSearch = { vm.toggleBuiltInSearch() },
             onSelectProvider = { vm.selectSearchProvider(it) },
             onOpenConfig = {
                 showSearch = false

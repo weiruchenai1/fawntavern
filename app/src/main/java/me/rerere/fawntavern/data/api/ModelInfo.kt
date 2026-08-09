@@ -63,7 +63,7 @@ internal fun JSONObject.applyCustomBodies(model: ModelInfo) {
 
 /**
  * 该内置工具能否在这个提供商上真的下发。内置工具是**协议**能力而非模型能力：
- * 同一个 Gemini 模型，走 Google 原生协议能带 google_search，被 OpenAI 兼容网关代理后
+ * 同一个 Gemini 模型，走 Google 原生协议能带 googleSearch，被 OpenAI 兼容网关代理后
  * 请求体里就没有对应字段了。OpenAI 兼容阵营各家的联网开关也互不相同（无统一标准），
  * 只能按主机名分流，认不出的主机不给开关 —— 那种情况用高级设置里的自定义请求体自行下发。
  */
@@ -74,6 +74,10 @@ fun BuiltInTool.supportedBy(provider: ApiProvider): Boolean = when (this) {
         else -> openAiSearchStyle(provider.baseUrl) != null
     }
 }
+
+/** Gemini 模型可配置 Google 官方内置工具；其他模型按当前提供商的协议能力判断。 */
+fun ModelInfo.supportsBuiltInTool(tool: BuiltInTool, provider: ApiProvider): Boolean =
+    id.contains("gemini", ignoreCase = true) || tool.supportedBy(provider)
 
 /** OpenAI 兼容端点的联网搜索写法 */
 internal enum class OpenAiSearchStyle { OPENROUTER, DASHSCOPE, ZHIPU }

@@ -14,9 +14,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Image
-import com.composables.icons.lucide.Link
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Type
 import com.composables.icons.lucide.Wrench
@@ -29,7 +27,7 @@ import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.ui.components.reasoningIcon
 
 /**
- * 模型能力标签组：模态（输入→输出）、能力、已开启的内置工具，各占一枚 [Tag]。
+ * 模型能力标签组：模态（输入→输出）、能力，各占一枚 [Tag]。
  * 会连续发出多个标签，调用方把它放进 FlowRow 之类的容器里。
  */
 @Composable
@@ -50,9 +48,6 @@ fun ModelCapabilityTags(model: ModelInfo) {
         Tag(type = TagType.INFO) {
             TagIcon(reasoningIcon(ReasoningLevel.AUTO), stringResource(R.string.ability_reasoning))
         }
-    }
-    model.tools.forEach { tool ->
-        Tag(type = TagType.DEFAULT) { TagIcon(tool.icon(), tool.label()) }
     }
 }
 
@@ -82,12 +77,6 @@ fun Modality.label(): String = stringResource(
         Modality.IMAGE -> R.string.modality_image
     }
 )
-
-@Composable
-private fun BuiltInTool.icon() = when (this) {
-    BuiltInTool.SEARCH -> Lucide.Globe
-    BuiltInTool.URL_CONTEXT -> Lucide.Link
-}
 
 @Composable
 fun BuiltInTool.label(): String = stringResource(

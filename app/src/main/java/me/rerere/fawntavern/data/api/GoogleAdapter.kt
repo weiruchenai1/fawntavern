@@ -56,8 +56,13 @@ internal object GoogleAdapter : ProviderAdapter {
             }
             if (cfg.length() > 0) put("generationConfig", cfg)
             // 函数工具与服务端内置工具互斥（Gemini 不允许 googleSearch 与 functionDeclarations 并存），
-            // 上层保证开启函数工具时不再传内置搜索
-            if (tools.isNotEmpty()) {
+            // 内置工具开启时以它为准，直接原样下发 googleSearch / urlContext
+            if (model.tools.isNotEmpty()) {
+                put("tools", JSONArray().apply {
+                    if (BuiltInTool.SEARCH in model.tools) put(JSONObject().put("googleSearch", JSONObject()))
+                    if (BuiltInTool.URL_CONTEXT in model.tools) put(JSONObject().put("urlContext", JSONObject()))
+                })
+            } else if (tools.isNotEmpty()) {
                 put("tools", JSONArray().put(JSONObject().put("functionDeclarations", JSONArray().apply {
                     tools.forEach { t ->
                         put(JSONObject()
@@ -66,11 +71,6 @@ internal object GoogleAdapter : ProviderAdapter {
                             .put("parameters", JSONObject(t.parametersSchema)))
                     }
                 })))
-            } else if (model.tools.isNotEmpty()) {
-                put("tools", JSONArray().apply {
-                    if (BuiltInTool.SEARCH in model.tools) put(JSONObject().put("google_search", JSONObject()))
-                    if (BuiltInTool.URL_CONTEXT in model.tools) put(JSONObject().put("url_context", JSONObject()))
-                })
             }
             put("contents", JSONArray().apply {
                 merged.forEach { m -> encodeContents(m).forEach { put(it) } }

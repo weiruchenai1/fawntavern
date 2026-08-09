@@ -410,7 +410,6 @@
     <string name="test_failed_fmt">Connection failed: %s</string>
     <string name="edit_model">Edit Model</string>
     <string name="model_id_label">Model ID</string>
-    <string name="chat_model_label">Chat</string>
 
     <!-- Model detail sheet -->
     <string name="model_basic_tab">Basic</string>
@@ -433,7 +432,7 @@
     <string name="kv_key">Key</string>
     <string name="kv_value">Value</string>
     <string name="custom_body_value_hint">JSON value, e.g. true, 1024, {"a":1}</string>
-    <string name="builtin_tools_hint">Tools served by the API itself — nothing to implement in the app. Availability depends on the protocol and endpoint: once a model is proxied behind an OpenAI-compatible gateway the request body usually has no field for them. Greyed-out ones can still be sent via a custom body field under Advanced.</string>
+    <string name="builtin_tools_hint">Tools served by the API itself — nothing to implement in the app. This feature currently supports only the official Gemini API.</string>
     <string name="builtin_tool_unsupported">Not available on this provider</string>
     <string name="builtin_tool_search">Web search</string>
     <string name="builtin_tool_search_desc">Let the model answer with search results</string>
@@ -497,6 +496,7 @@
 
     <!-- Web search -->
     <string name="web_search">Web Search</string>
+    <string name="model_builtin_search">Model built-in search</string>
     <string name="search_service">Search service</string>
     <string name="web_search_enabled">Enabled</string>
     <string name="web_search_disabled">Disabled</string>

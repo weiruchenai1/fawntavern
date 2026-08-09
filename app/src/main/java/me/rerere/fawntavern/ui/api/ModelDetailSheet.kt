@@ -55,7 +55,7 @@ import me.rerere.fawntavern.data.api.Modality
 import me.rerere.fawntavern.data.api.ModelAbility
 import me.rerere.fawntavern.data.api.ModelInfo
 import me.rerere.fawntavern.data.api.ModelRegistry
-import me.rerere.fawntavern.data.api.supportedBy
+import me.rerere.fawntavern.data.api.supportsBuiltInTool
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
@@ -226,9 +226,10 @@ private fun BuiltInToolsTab(model: ModelInfo, provider: ApiProvider, update: (Mo
     Text(stringResource(R.string.builtin_tools_hint),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
+
     BuiltInTool.entries.forEach { tool ->
         // 能不能开取决于协议/端点而非模型：同一个模型换个网关就没有对应字段了
-        val supported = tool.supportedBy(provider)
+        val supported = model.supportsBuiltInTool(tool, provider)
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainer,
             shape = RoundedCornerShape(12.dp),
