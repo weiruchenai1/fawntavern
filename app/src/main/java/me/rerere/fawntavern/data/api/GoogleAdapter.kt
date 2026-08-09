@@ -79,8 +79,9 @@ internal object GoogleAdapter : ProviderAdapter {
         }
         val toolCalls = mutableListOf<ApiToolCall>()
         SseClient.post(
-            url = "${provider.baseUrl.trimEnd('/')}/models/${model.id}:streamGenerateContent?alt=sse&key=${provider.apiKey}",
-            headers = model.applyHeaders(emptyMap()),
+            url = "${provider.baseUrl.trimEnd('/')}/models/${model.id}:streamGenerateContent?alt=sse",
+            // 密钥走 x-goog-api-key 请求头，不再拼进 URL
+            headers = model.applyHeaders(mapOf("x-goog-api-key" to provider.apiKey)),
             body = body,
             stopped = stopped,
             onCall = onCall,

@@ -108,6 +108,7 @@ internal fun ChatBottomArea(
     generating: Boolean = false,
     searchEnabled: Boolean = false,
     searchProvider: String = "",
+    builtInSearchEnabled: Boolean = false,
     onStop: () -> Unit = {},
     onSelectModel: () -> Unit = {},
     onSelectReasoning: () -> Unit = {},
@@ -226,8 +227,16 @@ internal fun ChatBottomArea(
                                 Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    // 联网搜索：开启时显示当前搜索提供商图标，关闭时显示默认地球图标
-                    if (searchEnabled && searchProvider.isNotBlank()) {
+                    // 模型内置搜索开启时显示内置搜索图标；否则外部搜索开启时显示所选提供商图标，关闭时显示默认地球图标
+                    if (builtInSearchEnabled) {
+                        AppIconButton(
+                            icon = Lucide.Earth,
+                            contentDescription = stringResource(R.string.model_builtin_search),
+                            onClick = onOpenSearch,
+                            size = 36.dp,
+                            iconSize = 24.dp,
+                        )
+                    } else if (searchEnabled && searchProvider.isNotBlank()) {
                         Box(
                             Modifier.size(36.dp).clip(CircleShape).clickable { onOpenSearch() },
                             contentAlignment = Alignment.Center,

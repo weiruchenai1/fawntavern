@@ -384,6 +384,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                         generating = vm.generating,
                         searchEnabled = vm.searchEnabled,
                         searchProvider = SearchStore.getSelected(ctx).displayName,
+                        builtInSearchEnabled = vm.builtInSearchEnabled,
                         onStop = { vm.stopGenerate() },
                         onSend = {
                             val outcome = vm.sendMessage()

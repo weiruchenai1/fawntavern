@@ -72,7 +72,8 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.MsgSearch
 import me.rerere.fawntavern.data.chat.SearchCitation
-import me.rerere.fawntavern.ui.components.ReasoningMediumIcon
+import me.rerere.fawntavern.data.api.ReasoningLevel
+import me.rerere.fawntavern.ui.components.reasoningIcon
 import me.rerere.fawntavern.ui.components.noRippleClickable
 import org.json.JSONArray
 import org.json.JSONObject
@@ -280,7 +281,7 @@ private fun ReasoningTimelineStep(
     TimelineStepShell(
         isFirst = isFirst, isLast = isLast, scale = scale,
         icon = {
-            Icon(ReasoningMediumIcon, null, Modifier.size(TimelineIconSize * scale),
+            Icon(reasoningIcon(ReasoningLevel.MEDIUM), null, Modifier.size(TimelineIconSize * scale),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
         },
     ) {
