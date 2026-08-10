@@ -53,6 +53,19 @@ import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.noRippleClickable
+import me.rerere.fawntavern.domain.PromptBuilder
+
+/** 消息时间戳的显示格式：xxxx-xx-xx 08:12:04 */
+private fun formatMsgTime(ts: Long): String = try {
+    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+        .withZone(java.time.ZoneId.systemDefault())
+        .format(java.time.Instant.ofEpochMilli(ts))
+} catch (_: Exception) { "" }
+
+/** 单条消息（正文 + 思考）的粗略 token 估算，用于 token 统计显示 */
+private fun estimateMsgTokens(msg: ChatMessage): Int =
+    PromptBuilder.estTokens(msg.content) +
+        (if (msg.reasoning.isNotBlank()) PromptBuilder.estTokens(msg.reasoning) else 0)
 
 /** 把内容的最大宽度限制为父约束的 [fraction]（用户气泡不超过行宽的 ~80%） */
 private fun Modifier.maxWidthFraction(fraction: Float): Modifier = layout { measurable, constraints ->
@@ -119,54 +132,80 @@ internal fun UserMsg(
     avatarBitmap: android.graphics.Bitmap? = null,
     images: List<String> = emptyList(),
     files: List<MsgFile> = emptyList(),
+    showAvatar: Boolean = true,
+    showName: Boolean = true,
+    showTimestamp: Boolean = false,
+    showActions: Boolean = true,
+    timestamp: Long = 0L,
+    renderPrefs: RenderPrefs = RenderPrefs(),
 ) {
     val s8 = (Space8.value * scale).dp
     val s12 = (Space12.value * scale).dp
     val iconSz = (18f * scale).dp
     val textStyle = MaterialTheme.typography.titleMedium.scaledBy(scale)
+    val timeStyle = MaterialTheme.typography.labelSmall.scaledBy(scale)
 
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(s8)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(s8)) {
-            val avatarSz = (24f * scale).dp
-            Text(name, style = textStyle, color = MaterialTheme.colorScheme.onSurface)
-            Box(
-                Modifier.size(avatarSz).clip(RoundedCornerShape(50)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (avatarBitmap != null) {
-                    Image(
-                        bitmap = avatarBitmap.asImageBitmap(),
-                        contentDescription = "avatar",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                    )
-                } else {
-                    Icon(Lucide.UserPen, null, Modifier.size(avatarSz * 0.75f),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (showName || showAvatar || showTimestamp) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(s8)) {
+                val avatarSz = (24f * scale).dp
+                // 时间戳显示在名称下方，不是右侧
+                if (showName || showTimestamp) {
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        if (showName) Text(name, style = textStyle, color = MaterialTheme.colorScheme.onSurface)
+                        if (showTimestamp) Text(formatMsgTime(timestamp), style = timeStyle,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (showAvatar) {
+                    Box(
+                        Modifier.size(avatarSz).clip(RoundedCornerShape(50)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (avatarBitmap != null) {
+                            Image(
+                                bitmap = avatarBitmap.asImageBitmap(),
+                                contentDescription = "avatar",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            Icon(Lucide.UserPen, null, Modifier.size(avatarSz * 0.75f),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
             }
         }
         images.forEach { rel -> AttachedImage(rel, s12) }
         files.forEach { f -> AttachedFileCard(f) }
         if (text.isNotBlank()) {
+            // 气泡拥抱内容（markdown 走 fillWidth=false 让正文按内容撑宽，而不是固定铺满 80%）
             Box(Modifier.maxWidthFraction(0.8f).clip(RoundedCornerShape(s12)).background(MaterialTheme.colorScheme.primaryContainer).padding(s8)) {
-                Text(text, style = textStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                if (renderPrefs.markdown) {
+                    MessageContent(content = text, isStreaming = false, textStyle = textStyle,
+                        renderPrefs = renderPrefs, fillWidth = false)
+                } else {
+                    Text(text, style = textStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Lucide.Copy, stringResource(R.string.copy),
-                Modifier.noRippleClickable { onCopy() }
-                    .padding(horizontal = s8, vertical = s8).size(iconSz),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Icon(Lucide.RotateCcw, stringResource(R.string.regenerate),
-                Modifier.noRippleClickable { onRegenerate() }
-                    .padding(horizontal = s8, vertical = s8).size(iconSz),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            // 末位插槽不带 end padding，让图形与气泡右缘对齐
-            Icon(Lucide.EllipsisVertical, stringResource(R.string.more),
-                Modifier.noRippleClickable { onMore() }
-                    .padding(start = s8, top = s8, bottom = s8).size(iconSz),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (showActions) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Lucide.Copy, stringResource(R.string.copy),
+                    Modifier.noRippleClickable { onCopy() }
+                        .padding(horizontal = s8, vertical = s8).size(iconSz),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Lucide.RotateCcw, stringResource(R.string.regenerate),
+                    Modifier.noRippleClickable { onRegenerate() }
+                        .padding(horizontal = s8, vertical = s8).size(iconSz),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                // 末位插槽不带 end padding，让图形与气泡右缘对齐
+                Icon(Lucide.EllipsisVertical, stringResource(R.string.more),
+                    Modifier.noRippleClickable { onMore() }
+                        .padding(start = s8, top = s8, bottom = s8).size(iconSz),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
@@ -187,23 +226,48 @@ internal fun AIMsg(
     depth: Int? = null,
     userName: String = "",
     charName: String = "",
+    showModelIcon: Boolean = true,
+    showModelName: Boolean = true,
+    showModelTimestamp: Boolean = false,
+    showTokenStats: Boolean = false,
+    autoCollapseThinking: Boolean = true,
+    thinkingMarkdown: Boolean = true,
+    renderPrefs: RenderPrefs = RenderPrefs(),
 ) {
     val s8 = (Space8.value * scale).dp
     val iconSz = (18f * scale).dp
     val textStyle = MaterialTheme.typography.titleMedium.scaledBy(scale)
+    val metaStyle = MaterialTheme.typography.labelSmall.scaledBy(scale)
 
     val modelIconSz = (24f * scale).dp
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(s8)) {
-        // 模型头部（开场白等无模型的消息不显示）
-        if (msg.model.isNotBlank()) {
+        // 模型头部（开场白等无模型的消息不显示；开关全关时不渲染整行）。时间戳显示在模型名下方。
+        if (msg.model.isNotBlank() && (showModelIcon || showModelName || showModelTimestamp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(s8)) {
-                ProviderIcon(msg.model, size = modelIconSz)
-                Text(msg.model, style = textStyle, color = MaterialTheme.colorScheme.onSurface)
+                if (showModelIcon) ProviderIcon(msg.model, size = modelIconSz)
+                if (showModelName || showModelTimestamp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        if (showModelName) {
+                            Text(msg.model, style = textStyle, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                        if (showModelTimestamp) {
+                            Text(formatMsgTime(msg.ts), style = metaStyle,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
         }
         // 深度思考 / 联网搜索时间线卡片（Kelivo 风格 Chain of Thought）
-        ThoughtTimelineCard(msg = msg, isStreaming = isStreaming, scale = scale)
+        ThoughtTimelineCard(
+            msg = msg,
+            isStreaming = isStreaming,
+            scale = scale,
+            autoCollapse = autoCollapseThinking,
+            markdown = thinkingMarkdown,
+            renderPrefs = renderPrefs,
+        )
         MessageContent(
             content = msg.content,
             isStreaming = isStreaming,
@@ -212,6 +276,7 @@ internal fun AIMsg(
             depth = depth,
             userName = userName,
             charName = charName,
+            renderPrefs = renderPrefs,
         )
         // 引用胶囊卡：流式结束后显示在正文之后，点击弹出来源列表。
         // 聚合本条消息全部搜索调用的结果，按 URL 去重（多次搜索可能命中同一页面）
@@ -250,6 +315,15 @@ internal fun AIMsg(
                         Modifier.noRippleClickable { onMore() }
                             .padding(horizontal = s8, vertical = s8).size(iconSz),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // token 统计显示在"更多"(三点)图标右侧
+                    if (showTokenStats) {
+                        Text(
+                            stringResource(R.string.token_stats_fmt, estimateMsgTokens(msg)),
+                            style = metaStyle,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 2.dp),
+                        )
+                    }
                 }
                 Spacer(Modifier.weight(1f))
                 // 多版本左右切换（重新生成的历史版本 / 备选开场白）

@@ -7,38 +7,60 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.MaterialTheme
+import com.mikepenz.markdown.compose.LocalMarkdownColors
+import com.mikepenz.markdown.compose.LocalMarkdownDimens
+import com.mikepenz.markdown.compose.LocalMarkdownPadding
+import com.mikepenz.markdown.compose.components.CurrentComponentsBridge
+import com.mikepenz.markdown.compose.components.markdownComponents
+import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
+import com.mikepenz.markdown.m3.elements.MarkdownCheckBox
 import com.mikepenz.markdown.model.DefaultMarkdownAnimation
 import com.mikepenz.markdown.model.MarkdownTypography
 import com.mikepenz.markdown.model.ReferenceLinkHandlerImpl
 import com.mikepenz.markdown.model.State
 import com.mikepenz.markdown.model.markdownPadding
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronUp
+import com.composables.icons.lucide.Lucide
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.parser.MarkdownParser
+import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.RegexEngine
+import me.rerere.fawntavern.ui.components.noRippleClickable
 
 /** 共享的 Markdown 解析器（无状态，只在组合期的主线程上使用） */
 private val markdownFlavour = GFMFlavourDescriptor()
@@ -50,6 +72,29 @@ private val markdownParser = MarkdownParser(markdownFlavour)
  * 的同帧锚定漂移（句子下滑、整体下移一截）。
  */
 private val noTextAnimations = DefaultMarkdownAnimation(animateTextSize = { this })
+
+/** 消息渲染偏好（渲染设置分组），用户 / 思维链 / 角色消息共用一套开关 */
+data class RenderPrefs(
+    /** 是否以 markdown 渲染（关闭时按纯文本） */
+    val markdown: Boolean = true,
+    /** 识别 $…$ 与 $$…$$ 包裹的公式并单独渲染 */
+    val math: Boolean = false,
+    /** 超过阈值行数的代码块自动折叠 */
+    val autoCollapseCode: Boolean = false,
+    val codeCollapseLines: Int = 5,
+)
+
+/** 数学公式预处理：把 $$…$$（块）与 $…$（行内）转成 markdown 能渲染的形态（代码块/行内代码）。 */
+private object MathFormula {
+    private val block = Regex("""\$\$([\s\S]+?)\$\$""")
+    // 行内 $…$：两侧内容以非空白收尾、紧贴 $（避免误伤 $5 这类货币），不跨行
+    private val inline = Regex("""(?<!\$)\$(?!\$)(?=\S)([^\$\n]+?)(?<=\S)\$(?!\$)""")
+
+    fun prepare(text: String): String {
+        val afterBlock = block.replace(text) { "```math\n${it.groupValues[1].trim()}\n```" }
+        return inline.replace(afterBlock) { "`${it.groupValues[1]}`" }
+    }
+}
 
 /**
  * 聊天消息正文渲染。
@@ -68,6 +113,7 @@ private val noTextAnimations = DefaultMarkdownAnimation(animateTextSize = { this
  * @param depth 消息深度（从底向上 0 递增），用于正则脚本的 minDepth/maxDepth 过滤
  * @param userName persona 名（用于 {{user}} 宏替换）
  * @param charName 角色名（用于 {{char}} 宏替换）
+ * @param renderPrefs 渲染设置分组的开关（markdown / 数学 / 代码块折叠）
  */
 @Composable
 fun MessageContent(
@@ -79,6 +125,9 @@ fun MessageContent(
     depth: Int? = null,
     userName: String = "",
     charName: String = "",
+    renderPrefs: RenderPrefs = RenderPrefs(),
+    /** 是否撑满可用宽度。AI 消息用 true（整行宽）；用户气泡内传 false 让气泡拥抱内容 */
+    fillWidth: Boolean = true,
 ) {
     if (content.isBlank()) {
         // 流式等待（还没有正文，纯思考阶段）显示呼吸点；非流式空内容不占位
@@ -101,14 +150,30 @@ fun MessageContent(
             charName = charName,
         )
     }
+
+    // markdown 关闭：按纯文本渲染（正则/宏仍套用，保证与发送侧口径一致）
+    if (!renderPrefs.markdown) {
+        Text(
+            processed,
+            style = textStyle,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = if (fillWidth) modifier.fillMaxWidth() else modifier,
+        )
+        return
+    }
+
+    // 数学公式开启时先把 $$…$$ / $…$ 转成可渲染形态，再交给 markdown 解析
+    val prepared = remember(processed, renderPrefs.math) {
+        if (renderPrefs.math) MathFormula.prepare(processed) else processed
+    }
     // 全部走 mikepenz Markdown。mikepenz 原生支持 ``` 代码围栏、**粗体**、*斜体*、链接等 GFM 语法。
     // HTML 标签（如 <b>/<i>/<StatusBlock>）如果被 mikepenz 识别为 HTML 则会渲染，否则显示源码。
     //
     // 同步解析：Markdown(content) 重载默认异步解析，消息会先以极小高度上屏、几帧后才长到真实高度，
     // 流式增长与跳转/切分支/重试后的重新定位会因此肉眼可见地抖动。此处同步解析一次成型，
     // remember(processed) 保证每段内容只解析一次（流式期间即每帧节流刷新时解析一次）。
-    val markdownState = remember(processed) {
-        val md = prepareMarkdown(processed)
+    val markdownState = remember(prepared) {
+        val md = prepareMarkdown(prepared)
         val handler = ReferenceLinkHandlerImpl()
         try {
             // linksLookedUp = false：链接定义节点由渲染器在组合期自行登记到 handler
@@ -117,12 +182,26 @@ fun MessageContent(
             State.Error(e, handler)
         }
     }
+    // 自动折叠代码块：仅覆盖 codeFence 组件（保留 m3 的 checkbox 默认），其余渲染不变
+    val components = remember(renderPrefs.autoCollapseCode, renderPrefs.codeCollapseLines) {
+        markdownComponents(
+            checkbox = { MarkdownCheckBox(it.content, it.node, it.typography.text) },
+            codeFence = if (renderPrefs.autoCollapseCode) { model ->
+                MarkdownCodeFence(model.content, model.node, model.typography.code) { code, language, style ->
+                    FoldableCodeBlock(code, language, style, renderPrefs.codeCollapseLines)
+                }
+            } else CurrentComponentsBridge.codeFence,
+        )
+    }
+    // 每个 markdown 元素前都会加 Spacer(block 高度)，AI 消息靠它撑开段落间距；
+    // 用户气泡里首元素前的 6dp Spacer 会让文字整体下移、气泡顶部空一截，故气泡内 block 用 0
     Markdown(
         state = markdownState,
         typography = chatMarkdownTypography(textStyle),
-        padding = markdownPadding(block = 6.dp),
-        modifier = modifier.fillMaxWidth(),
+        padding = markdownPadding(block = if (fillWidth) 6.dp else 0.dp),
+        modifier = if (fillWidth) modifier.fillMaxWidth() else modifier,
         animations = noTextAnimations,
+        components = components,
     )
 }
 
@@ -201,6 +280,60 @@ private fun markdownWithHardBreaks(text: String): String {
         }
     }
     return sb.toString()
+}
+
+/**
+ * 可折叠代码块：超过 [threshold] 行时默认收起（只显示前几行预览 + 行数 + 展开入口），
+ * 点击标题栏切换展开/收起。样式对齐默认代码块（同背景/圆角/等宽字体）。
+ */
+@Composable
+private fun FoldableCodeBlock(code: String, language: String?, style: TextStyle, threshold: Int) {
+    val lineCount = code.count { it == '\n' } + 1
+    var expanded by remember(code) { mutableStateOf(lineCount <= threshold) }
+    val colors = LocalMarkdownColors.current
+    val corner = LocalMarkdownDimens.current.codeBackgroundCornerSize
+    val codePad = LocalMarkdownPadding.current.codeBlock
+    val labelStyle = MaterialTheme.typography.labelSmall
+
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp)
+            .clip(RoundedCornerShape(corner))
+            .background(colors.codeBackground)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().noRippleClickable { expanded = !expanded }
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                (language?.takeIf { it.isNotBlank() } ?: stringResource(R.string.code_language_plain)),
+                style = labelStyle, color = colors.codeText,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(R.string.code_block_lines_fmt, lineCount),
+                style = labelStyle, color = colors.codeText.copy(alpha = 0.7f),
+            )
+            Icon(
+                if (expanded) Lucide.ChevronUp else Lucide.ChevronDown, null,
+                Modifier.size(14.dp), tint = colors.codeText,
+            )
+            Text(
+                stringResource(if (expanded) R.string.collapse else R.string.expand),
+                style = labelStyle, color = colors.codeText.copy(alpha = 0.7f),
+            )
+        }
+        val shown = if (expanded) code else code.lineSequence().take(threshold).joinToString("\n")
+        Box(
+            Modifier.fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(codePad)
+        ) {
+            Text(shown, style = style, color = colors.codeText)
+        }
+    }
 }
 
 /** 三个依次呼吸亮起的小圆点，用于流式生成等待状态。 */

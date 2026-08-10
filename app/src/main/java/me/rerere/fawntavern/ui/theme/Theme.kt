@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.Color
 import androidx.core.view.WindowCompat
 import me.rerere.fawntavern.data.settings.ThemeMode
 
@@ -91,6 +92,7 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun FawnTavernTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
+    solidBackground: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()
@@ -99,7 +101,15 @@ fun FawnTavernTheme(
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
+    val base = if (isDark) DarkColorScheme else LightColorScheme
+    // 纯色背景时背景/表面用纯黑纯白（卡片表面保留原值，保证层次不糊在一起）
+    val solid = if (isDark) Color(0xFF000000) else Color(0xFFFFFFFF)
+    val colorScheme = base.copy(
+        background = if (solidBackground) solid else base.background,
+        onBackground = if (solidBackground) (if (isDark) Color(0xFFE0DEDB) else Color(0xFF1C1B1F)) else base.onBackground,
+        surface = if (solidBackground) solid else base.surface,
+        onSurface = if (solidBackground) (if (isDark) Color(0xFFE0DEDB) else Color(0xFF1C1B1F)) else base.onSurface,
+    )
 
     val view = LocalView.current
     if (!view.isInEditMode) {

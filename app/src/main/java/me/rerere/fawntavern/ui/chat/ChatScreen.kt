@@ -64,6 +64,8 @@ import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.settings.FontSizeStore
+import me.rerere.fawntavern.data.settings.NavButtonsMode
+import me.rerere.fawntavern.data.settings.PreferencesStore
 import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.ui.api.ApiConfigScreen
@@ -71,6 +73,7 @@ import me.rerere.fawntavern.ui.character.CharacterListScreen
 import me.rerere.fawntavern.ui.preset.PresetListScreen
 import me.rerere.fawntavern.ui.settings.DataManagementScreen
 import me.rerere.fawntavern.ui.settings.FontSizeScreen
+import me.rerere.fawntavern.ui.settings.PreferencesScreen
 import me.rerere.fawntavern.ui.settings.PromptLogScreen
 import me.rerere.fawntavern.ui.settings.AboutScreen
 import me.rerere.fawntavern.ui.settings.DefaultModelPage
@@ -82,14 +85,21 @@ import me.rerere.fawntavern.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.fawntavern.ui.worldbook.WorldBookListScreen
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space16
+import me.rerere.fawntavern.ui.components.vibrate
 
 /** 聊天之上的全屏页面，以返回栈方式叠放（栈顶显示，返回键弹出） */
 private enum class Screen {
-    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, PromptLog, Search, Extensions, About, DefaultModel, WebSearch, Tts,
+    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, Preferences, PromptLog, Search, Extensions, About, DefaultModel, WebSearch, Tts,
 }
 
 @Composable
-fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (ThemeMode) -> Unit = {}, startAtSettings: Boolean = false) {
+fun ChatScreen(
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onThemeModeChange: (ThemeMode) -> Unit = {},
+    solidBackground: Boolean = false,
+    onSolidBackgroundChange: (Boolean) -> Unit = {},
+    startAtSettings: Boolean = false,
+) {
     val vm: ChatViewModel = viewModel()
     val drawerState = rememberInteractiveDrawerState()
     val scope = rememberCoroutineScope()
@@ -111,6 +121,8 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     var selectCopyText by remember { mutableStateOf<String?>(null) }
     var deleteSessionId by remember { mutableStateOf<String?>(null) }
     var scrollToBottomTrigger by remember { mutableStateOf(0) }
+    // 重新生成前确认：偏好开启时把待执行的重答存这里，弹框确认后执行
+    var pendingRegenerate by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -218,6 +230,16 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
             }
             return
         }
+        Screen.Preferences -> {
+            screenStateHolder.SaveableStateProvider("Preferences") {
+                PreferencesScreen(
+                    onBack = ::navBack,
+                    solidBackground = solidBackground,
+                    onSolidBackgroundChange = onSolidBackgroundChange,
+                )
+            }
+            return
+        }
         Screen.PromptLog -> {
             screenStateHolder.SaveableStateProvider("PromptLog") {
                 PromptLogScreen(onBack = ::navBack)
@@ -281,6 +303,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     onNavigateToApiConfig = { nav.add(Screen.ApiConfig) },
                     onNavigateToDataManagement = { nav.add(Screen.DataMgmt) },
                     onNavigateToFontSize = { nav.add(Screen.FontSize) },
+                    onNavigateToPreferences = { nav.add(Screen.Preferences) },
                     onNavigateToPromptLog = { nav.add(Screen.PromptLog) },
                     onNavigateToExtensions = { nav.add(Screen.Extensions) },
                     onNavigateToDefaultModel = { nav.add(Screen.DefaultModel) },
@@ -333,6 +356,26 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
     val displayModelId = displaySpec?.substringAfter("::", "") ?: ""
     val displayProv = if (displaySpec != null) vm.apiConfig.providers.find { it.id == displayProvId && it.enabled } else null
 
+    // 偏好设置（聊天项显示 / 渲染 / 行为 / 触觉）：每次重组读取，从设置页返回即生效。
+    // 不加 remember —— 否则返回聊天时读到的是旧值
+    val prefs = PreferencesStore.get(ctx)
+    val renderPrefs = RenderPrefs(
+        markdown = prefs.characterMarkdown,
+        math = prefs.mathRendering,
+        autoCollapseCode = prefs.autoCollapseCode,
+        codeCollapseLines = prefs.codeCollapseLines,
+    )
+    // 重新生成前弹出确认：偏好开启时先弹确认框，确认后再执行真正的重答
+    fun maybeRegenerate(action: () -> Unit) {
+        if (prefs.confirmRegenerate) pendingRegenerate = action else action()
+    }
+    // 侧边栏触觉反馈：抽屉打开时给一次短震动（走 Vibrator，独立于长按触觉闸门）
+    LaunchedEffect(drawerState.isOpen) {
+        if (prefs.sidebarHaptic && drawerState.isOpen) {
+            vibrate(ctx)
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         InteractiveDrawer(
             state = drawerState,
@@ -355,6 +398,8 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                         vm.openSession(id)
                     },
                     onDeleteSession = { id -> deleteSessionId = id },
+                    showChatListDate = prefs.showChatListDate,
+                    longPressHaptic = prefs.longPressHaptic,
                 )
                 }
             },
@@ -409,6 +454,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                             if (outcome != ChatViewModel.SendOutcome.SKIPPED) keyboardController?.hide()
                             handleOutcome(outcome)
                         },
+                        enterToSend = prefs.enterToSend,
                     )
                 }
             ) { padding ->
@@ -458,6 +504,7 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     bottomSlackPx = with(density) { 80.dp.toPx() }
                     touchBottomSlackPx = with(density) { 24.dp.toPx() }
                 }
+                scrollCtrl.navButtonsMode = prefs.navButtonsMode
                 // 手势订阅 + 流式跟随两个长循环：随聊天区域在屏/离屏启停，
                 // 不能提升到全屏页面切换之上（否则会对着已离开组合的列表操作）
                 LaunchedEffect(scrollCtrl) { scrollCtrl.runLoops() }
@@ -534,12 +581,20 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                         onCopy = { copyText(msg.content) },
                                         onRegenerate = {
                                             // 其后紧跟的 AI 回复在中间时原地重答，不滚到底部
-                                            val midRegen = i + 1 < msgs.lastIndex && msgs[i + 1].role == "assistant"
-                                            handleOutcome(vm.regenerateAfterUser(msg.ts), scroll = !midRegen)
+                                            maybeRegenerate {
+                                                val midRegen = i + 1 < msgs.lastIndex && msgs[i + 1].role == "assistant"
+                                                handleOutcome(vm.regenerateAfterUser(msg.ts), scroll = !midRegen)
+                                            }
                                         },
                                         onMore = { menuTargetIdx = msg.ts },
                                         scale = fontScale,
                                         avatarBitmap = vm.userAvatarBitmap,
+                                        showAvatar = prefs.showUserAvatar,
+                                        showName = prefs.showUserName,
+                                        showTimestamp = prefs.showUserTimestamp,
+                                        showActions = prefs.showUserActions,
+                                        timestamp = msg.ts,
+                                        renderPrefs = renderPrefs.copy(markdown = prefs.userMarkdown),
                                     )
                                 } else {
                                     // 切分支后的落点锚定见 ChatScrollController.switchAnchored。
@@ -554,7 +609,11 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                         msg = msg,
                                         isStreaming = vm.generating && msg.ts == genTs,
                                         onCopy = { copyText(msg.content) },
-                                        onRegenerate = { handleOutcome(vm.regenerateAi(msg.ts), scroll = i == msgs.lastIndex) },
+                                        onRegenerate = {
+                                            maybeRegenerate {
+                                                handleOutcome(vm.regenerateAi(msg.ts), scroll = i == msgs.lastIndex)
+                                            }
+                                        },
                                         onMore = { menuTargetIdx = msg.ts },
                                         onPrevAlt = { switchAltAnchored(-1) },
                                         onNextAlt = { switchAltAnchored(+1) },
@@ -565,6 +624,13 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                                         depth = msgs.size - 1 - i,
                                         userName = vm.userName,
                                         charName = vm.currentCard?.name ?: vm.session?.charName ?: "",
+                                        showModelIcon = prefs.showModelIcon,
+                                        showModelName = prefs.showModelName,
+                                        showModelTimestamp = prefs.showModelTimestamp,
+                                        showTokenStats = prefs.showTokenStats,
+                                        autoCollapseThinking = prefs.autoCollapseThinking,
+                                        thinkingMarkdown = prefs.thinkingMarkdown,
+                                        renderPrefs = renderPrefs,
                                     )
                                 }
                             }
@@ -577,8 +643,14 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
                     // ── 悬浮滚动导航按钮栏 ──
                     // msgs 为空时 LazyColumn 不在组合中，listState.layoutInfo 停留在上个会话的
                     // 旧值，contentOverflows 会误报——新建空会话（默认角色无开场白）不显示
+                    // 可见性按偏好模式：始终显示 / 滚动时显示（出现后静止两秒隐藏）/ 永不显示
+                    val navBtnVisible = when (prefs.navButtonsMode) {
+                        NavButtonsMode.ALWAYS -> msgs.isNotEmpty()
+                        NavButtonsMode.ON_SCROLL -> msgs.isNotEmpty() && scrollCtrl.showNavButtons
+                        NavButtonsMode.NEVER -> false
+                    }
                     ScrollNavButtons(
-                        visible = msgs.isNotEmpty() && scrollCtrl.showNavButtons,
+                        visible = navBtnVisible,
                         onScrollToTop = scrollCtrl::scrollToTop,
                         onPreviousMessage = { scrollCtrl.jumpToAdjacentMessage(forward = false) },
                         onNextMessage = { scrollCtrl.jumpToAdjacentMessage(forward = true) },
@@ -679,6 +751,24 @@ fun ChatScreen(themeMode: ThemeMode = ThemeMode.SYSTEM, onThemeModeChange: (Them
             },
             dismissButton = {
                 TextButton(onClick = { deleteSessionId = null }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    // ── 重新生成确认对话框 ──
+    pendingRegenerate?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingRegenerate = null },
+            title = { Text(stringResource(R.string.confirm_regenerate_title)) },
+            text = { Text(stringResource(R.string.confirm_regenerate_msg)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRegenerate = null
+                    action()
+                }) { Text(stringResource(R.string.confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRegenerate = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }

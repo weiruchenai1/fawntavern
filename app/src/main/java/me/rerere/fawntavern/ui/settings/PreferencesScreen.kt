@@ -1,0 +1,311 @@
+package me.rerere.fawntavern.ui.settings
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import com.composables.icons.lucide.Bot
+import com.composables.icons.lucide.Brain
+import com.composables.icons.lucide.Calculator
+import com.composables.icons.lucide.Calendar
+import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.CircleUser
+import com.composables.icons.lucide.Clock
+import com.composables.icons.lucide.CornerDownLeft
+import com.composables.icons.lucide.EllipsisVertical
+import com.composables.icons.lucide.FoldVertical
+import com.composables.icons.lucide.Hand
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.MessageSquarePlus
+import com.composables.icons.lucide.MessageSquareText
+import com.composables.icons.lucide.Minus
+import com.composables.icons.lucide.Navigation
+import com.composables.icons.lucide.Palette
+import com.composables.icons.lucide.PanelLeft
+import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.Rocket
+import com.composables.icons.lucide.Rows3
+import com.composables.icons.lucide.ShieldCheck
+import com.composables.icons.lucide.Sigma
+import com.composables.icons.lucide.Tag
+import com.composables.icons.lucide.Type
+import com.composables.icons.lucide.UserPlus
+import com.composables.icons.lucide.Vibrate
+import me.rerere.fawntavern.R
+import me.rerere.fawntavern.data.settings.NavButtonsMode
+import me.rerere.fawntavern.data.settings.Preferences
+import me.rerere.fawntavern.data.settings.PreferencesStore
+import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.noRippleClickable
+import me.rerere.fawntavern.ui.components.vibrate
+
+/** 偏好设置的二级页面 */
+private enum class PrefPage { THEME, CHAT_DISPLAY, RENDERING, BEHAVIOR, HAPTICS }
+
+/**
+ * 偏好设置首页：五个分组各自是独立的二级页面（主题设置 / 聊天项显示 / 渲染设置 /
+ * 行为与启动 / 触觉反馈），本组件只做列表 + 内部返回栈切换。
+ */
+@Composable
+fun PreferencesScreen(
+    onBack: () -> Unit,
+    solidBackground: Boolean,
+    onSolidBackgroundChange: (Boolean) -> Unit,
+) {
+    var page by remember { mutableStateOf<PrefPage?>(null) }
+    BackHandler { if (page != null) page = null else onBack() }
+
+    when (page) {
+        null -> PrefHomeScreen(onBack = onBack, onOpen = { page = it })
+        PrefPage.THEME -> ThemeSettingsScreen(
+            onBack = { page = null },
+            solidBackground = solidBackground,
+            onSolidBackgroundChange = onSolidBackgroundChange,
+        )
+        PrefPage.CHAT_DISPLAY -> ChatItemDisplayScreen(onBack = { page = null })
+        PrefPage.RENDERING -> RenderingSettingsScreen(onBack = { page = null })
+        PrefPage.BEHAVIOR -> BehaviorStartupScreen(onBack = { page = null })
+        PrefPage.HAPTICS -> HapticsScreen(onBack = { page = null })
+    }
+}
+
+/** 偏好设置首页：二级页入口列表 */
+@Composable
+private fun PrefHomeScreen(
+    onBack: () -> Unit,
+    onOpen: (PrefPage) -> Unit,
+) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { AppTopBar(stringResource(R.string.preferences), onBack) }
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+            ) {
+                PrefNavRow(PrefIconPalette, stringResource(R.string.theme_settings)) { onOpen(PrefPage.THEME) }
+                PrefNavRow(PrefIconMessageSquareText, stringResource(R.string.chat_item_display)) { onOpen(PrefPage.CHAT_DISPLAY) }
+                PrefNavRow(PrefIconSigma, stringResource(R.string.rendering_settings)) { onOpen(PrefPage.RENDERING) }
+                PrefNavRow(PrefIconRocket, stringResource(R.string.behavior_startup)) { onOpen(PrefPage.BEHAVIOR) }
+                PrefNavRow(PrefIconVibrate, stringResource(R.string.haptics)) { onOpen(PrefPage.HAPTICS) }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+/** 二级页入口行：图标 + 标签 + 右箭头 */
+@Composable
+private fun PrefNavRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 12.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(icon, null, Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f))
+        Icon(PrefIconChevronRight, null, Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** 偏好设置分组容器：标题 + 圆角卡片（复用设置页样式） */
+@Composable
+internal fun PrefSection(title: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 8.dp))
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+            content()
+        }
+    }
+}
+
+/** 图标 + 标签 +（可选描述）+ 右侧开关的开关行。desc 放 onCheckedChange 前面，
+ *  保证调用处尾随 lambda（{ save(...) }）正确绑定到 onCheckedChange。 */
+@Composable
+internal fun PrefToggle(
+    icon: ImageVector?,
+    label: String,
+    checked: Boolean,
+    desc: String? = null,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val context = LocalContext.current
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (icon != null) {
+            Icon(icon, null, Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface)
+            if (desc != null) {
+                Text(desc, style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = { new ->
+                // 开关触觉反馈：读旧值决定这次切换是否给反馈（切掉自己那次不反馈）
+                if (PreferencesStore.get(context).switchHaptic) {
+                    vibrate(context)
+                }
+                onCheckedChange(new)
+            },
+        )
+    }
+}
+
+/** 整数行数步进器（自动折叠代码块的行数阈值） */
+@Composable
+internal fun PrefLineStepper(
+    icon: ImageVector,
+    label: String,
+    value: Int,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(icon, null, Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            StepBtn(PrefIconMinus, onMinus)
+            Text("$value", style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 4.dp))
+            StepBtn(PrefIconPlus, onPlus)
+        }
+    }
+}
+
+@Composable
+private fun StepBtn(icon: ImageVector, onClick: () -> Unit) {
+    Box(
+        Modifier.size(28.dp).clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .noRippleClickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, null, Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/** 消息导航按钮模式的三段选择器：选中段以背景色区分，点击无波纹（noRippleClickable）。 */
+@Composable
+internal fun NavButtonsSegmented(
+    mode: NavButtonsMode,
+    onSelect: (NavButtonsMode) -> Unit,
+) {
+    val options = listOf(
+        NavButtonsMode.ALWAYS to stringResource(R.string.nav_always),
+        NavButtonsMode.ON_SCROLL to stringResource(R.string.nav_on_scroll),
+        NavButtonsMode.NEVER to stringResource(R.string.nav_never),
+    )
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(2.dp),
+    ) {
+        options.forEach { (m, label) ->
+            val sel = m == mode
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (sel) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .noRippleClickable { onSelect(m) }
+                    .padding(vertical = 8.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+    }
+}
+
+// ── 共享图标别名（Lucide 图标是 Lucide 对象的扩展属性，须逐个导入后经 Lucide.X 访问） ──
+internal val PrefIconPalette = Lucide.Palette
+internal val PrefIconMessageSquareText = Lucide.MessageSquareText
+internal val PrefIconSigma = Lucide.Sigma
+internal val PrefIconRocket = Lucide.Rocket
+internal val PrefIconVibrate = Lucide.Vibrate
+internal val PrefIconChevronRight = Lucide.ChevronRight
+internal val PrefIconCircleUser = Lucide.CircleUser
+internal val PrefIconType = Lucide.Type
+internal val PrefIconClock = Lucide.Clock
+internal val PrefIconEllipsis = Lucide.EllipsisVertical
+internal val PrefIconBot = Lucide.Bot
+internal val PrefIconTag = Lucide.Tag
+internal val PrefIconCalculator = Lucide.Calculator
+internal val PrefIconBrain = Lucide.Brain
+internal val PrefIconFold = Lucide.FoldVertical
+internal val PrefIconRows = Lucide.Rows3
+internal val PrefIconShield = Lucide.ShieldCheck
+internal val PrefIconNav = Lucide.Navigation
+internal val PrefIconCalendar = Lucide.Calendar
+internal val PrefIconUserPlus = Lucide.UserPlus
+internal val PrefIconMsgPlus = Lucide.MessageSquarePlus
+internal val PrefIconEnter = Lucide.CornerDownLeft
+internal val PrefIconPanel = Lucide.PanelLeft
+internal val PrefIconHand = Lucide.Hand
+internal val PrefIconMinus = Lucide.Minus
+internal val PrefIconPlus = Lucide.Plus

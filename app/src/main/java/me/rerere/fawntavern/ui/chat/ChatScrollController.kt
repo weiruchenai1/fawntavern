@@ -14,6 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
+import me.rerere.fawntavern.data.settings.NavButtonsMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -59,6 +60,9 @@ internal class ChatScrollController(
     /** 悬浮导航按钮栏是否可见（滚动时出现，静止 [NavButtonsHideDelayMs] 毫秒后隐藏）。 */
     var showNavButtons by mutableStateOf(false)
         private set
+
+    /** 当前消息导航按钮显示模式（偏好设置，每次重组由 ChatScreen 刷入 inputs） */
+    var navButtonsMode: NavButtonsMode = NavButtonsMode.ON_SCROLL
 
     /** 手指落下到滚动完全静止（含惯性）为止。 */
     private var dragging = false
@@ -184,12 +188,16 @@ internal class ChatScrollController(
     // ── 悬浮导航按钮栏 ──────────────────────────────────────────────────────
 
     fun revealNavButtons() {
+        if (navButtonsMode == NavButtonsMode.NEVER) return
         if (!contentOverflows()) return
         showNavButtons = true
         navHideJob?.cancel()
-        navHideJob = scope.launch {
-            delay(NavButtonsHideDelayMs)
-            showNavButtons = false
+        // 始终显示模式不安排隐藏；滚动显示模式静止 [NavButtonsHideDelayMs] 毫秒后隐藏
+        if (navButtonsMode == NavButtonsMode.ON_SCROLL) {
+            navHideJob = scope.launch {
+                delay(NavButtonsHideDelayMs)
+                showNavButtons = false
+            }
         }
     }
 

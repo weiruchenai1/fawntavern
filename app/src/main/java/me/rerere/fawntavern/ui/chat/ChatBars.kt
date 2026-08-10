@@ -26,6 +26,15 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -118,6 +127,7 @@ internal fun ChatBottomArea(
     onFile: () -> Unit = {},
     quickReplies: List<QuickReply> = emptyList(),
     onQuickReply: (QuickReply) -> Unit = {},
+    enterToSend: Boolean = true,
 ) {
     val hasContent = text.isNotBlank() || attachments.isNotEmpty()
     val context = LocalContext.current
@@ -200,7 +210,26 @@ internal fun ChatBottomArea(
                 textStyle = MaterialTheme.typography.titleSmall.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 maxLines = 6,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = Space12, vertical = if (attachments.isEmpty()) 12.dp else 8.dp).heightIn(min = 40.dp),
+                // 回车发送：软键盘用 Send 动作；硬件 Enter（非 Shift）在 modifier 里拦截为发送，Shift+Enter 保留换行
+                keyboardOptions = if (enterToSend) {
+                    KeyboardOptions(imeAction = ImeAction.Send)
+                } else {
+                    KeyboardOptions.Default
+                },
+                keyboardActions = if (enterToSend) {
+                    KeyboardActions(onSend = { onSend() })
+                } else {
+                    KeyboardActions.Default
+                },
+                modifier = Modifier.fillMaxWidth()
+                    .padding(horizontal = Space12, vertical = if (attachments.isEmpty()) 12.dp else 8.dp)
+                    .heightIn(min = 40.dp)
+                    .then(if (enterToSend) Modifier.onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyUp && event.key == Key.Enter && !event.isShiftPressed) {
+                            onSend()
+                            true
+                        } else false
+                    } else Modifier),
                 decorationBox = { inner ->
                     Box {
                         if (text.isEmpty()) {

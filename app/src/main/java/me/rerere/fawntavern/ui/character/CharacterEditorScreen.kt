@@ -341,7 +341,8 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding)
-                .verticalScroll(rememberScrollState()).padding(Space16),
+                .verticalScroll(rememberScrollState())
+                .padding(Space16),
             verticalArrangement = Arrangement.spacedBy(Space16),
         ) {
             // 角色卡图片：点击弹出编辑弹窗；无图时显示占位

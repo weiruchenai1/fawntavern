@@ -438,7 +438,7 @@ private fun OverviewCard(totalItems: Int, totalSize: String, apiCount: Int) {
         Row(verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Space12)) {
             Icon(Lucide.Database, null, Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.primary)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(stringResource(R.string.total_items_fmt, totalItems),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface)

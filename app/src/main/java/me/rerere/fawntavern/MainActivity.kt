@@ -18,9 +18,11 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.svg.SvgDecoder
 import me.rerere.fawntavern.data.api.Http
 import me.rerere.fawntavern.data.settings.LanguageStore
+import me.rerere.fawntavern.data.settings.PreferencesStore
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.data.settings.ThemeStore
 import me.rerere.fawntavern.ui.chat.ChatScreen
+import me.rerere.fawntavern.ui.components.HapticGate
 import me.rerere.fawntavern.ui.theme.FawnTavernTheme
 import java.util.Locale
 
@@ -60,15 +62,25 @@ class MainActivity : ComponentActivity() {
             }
 
             var themeMode by remember { mutableStateOf(ThemeStore.getMode(this)) }
-            FawnTavernTheme(themeMode = themeMode) {
-                ChatScreen(
-                    themeMode = themeMode,
-                    onThemeModeChange = { mode ->
-                        themeMode = mode
-                        ThemeStore.setMode(this@MainActivity, mode)
-                    },
-                    startAtSettings = startAtSettings,
-                )
+            val initialPrefs = remember { PreferencesStore.get(this) }
+            var solidBackground by remember { mutableStateOf(initialPrefs.solidBackground) }
+            FawnTavernTheme(themeMode = themeMode, solidBackground = solidBackground) {
+                // 长按触觉闸门：按"长按触觉反馈"偏好过滤系统 LongPress 触觉（角色卡片/会话长按等）
+                HapticGate {
+                    ChatScreen(
+                        themeMode = themeMode,
+                        onThemeModeChange = { mode ->
+                            themeMode = mode
+                            ThemeStore.setMode(this@MainActivity, mode)
+                        },
+                        solidBackground = solidBackground,
+                        onSolidBackgroundChange = { value ->
+                            solidBackground = value
+                            PreferencesStore.update(this@MainActivity) { it.copy(solidBackground = value) }
+                        },
+                        startAtSettings = startAtSettings,
+                    )
+                }
             }
         }
     }

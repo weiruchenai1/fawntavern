@@ -72,7 +72,8 @@ fun PromptLogScreen(onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding)) {
             // ── 开关 + 说明 ──
             Column(
-                Modifier.fillMaxWidth().padding(horizontal = Space16, vertical = Space12),
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = Space16, vertical = Space12),
                 verticalArrangement = Arrangement.spacedBy(Space8),
             ) {
                 Row(

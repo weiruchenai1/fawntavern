@@ -18,7 +18,8 @@ import androidx.compose.ui.draw.scale
 
 /**
  * 标准可点击：单击带 Material 波纹；传入 [onLongClick] 时额外支持长按，
- * 长按由 [combinedClickable] 自动触发系统 haptic（震动）。
+ * 长按由 [combinedClickable] 自动触发系统 haptic（震动），[hapticFeedbackEnabled] 可关掉
+ * 该反馈（偏好设置"长按触觉反馈"关闭时传 false）。
  *
  * 用于列表卡片、可点击行等主操作区域，取代 `pointerInput { detectTapGestures(...) }`
  * （后者既无波纹也无长按 haptic）。
@@ -27,11 +28,17 @@ fun Modifier.appClickable(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     enabled: Boolean = true,
+    hapticFeedbackEnabled: Boolean = true,
 ): Modifier =
     if (onLongClick == null) {
         clickable(enabled = enabled, onClick = onClick)
     } else {
-        combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick)
+        combinedClickable(
+            enabled = enabled,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            hapticFeedbackEnabled = hapticFeedbackEnabled,
+        )
     }
 
 /**

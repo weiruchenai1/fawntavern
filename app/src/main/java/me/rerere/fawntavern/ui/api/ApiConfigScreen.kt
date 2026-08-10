@@ -300,7 +300,8 @@ private fun ProviderConfigTab(
     )
 
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space16),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(Space16),
         verticalArrangement = Arrangement.spacedBy(Space16),
     ) {
         val types = API_TYPES

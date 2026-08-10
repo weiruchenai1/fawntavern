@@ -92,6 +92,8 @@
     <string name="greeting_afternoon">Good afternoon (っ´▽`)っ</string>
     <string name="greeting_evening">Good evening (´｡• ᵕ •｡`)</string>
     <string name="today">Today</string>
+    <string name="yesterday">Yesterday</string>
+    <string name="date_header_fmt">%1$d/%2$d</string>
     <string name="copy">Copy</string>
     <string name="select_copy">Select &amp; Copy</string>
     <string name="regenerate">Regenerate</string>
@@ -564,5 +566,52 @@
     <string name="tts_resume">Resume</string>
     <string name="tts_fast_forward">Fast forward</string>
     <string name="tts_speed_fmt">%1$.1fx</string>
+
+    <!-- Preferences -->
+    <string name="preferences">Preferences</string>
+    <string name="theme_settings">Theme settings</string>
+    <string name="solid_background">Solid background</string>
+    <string name="solid_background_desc">Use a pure black background in dark theme</string>
+    <string name="chat_item_display">Chat item display</string>
+    <string name="show_user_avatar">Show user avatar</string>
+    <string name="show_user_name">Show user name</string>
+    <string name="show_user_timestamp">Show user timestamp</string>
+    <string name="show_user_actions">Show user message actions</string>
+    <string name="show_model_icon">Show model icon in chat</string>
+    <string name="show_model_name">Show model name</string>
+    <string name="show_model_timestamp">Show model timestamp</string>
+    <string name="show_token_stats">Show token &amp; context stats</string>
+    <string name="rendering_settings">Rendering</string>
+    <string name="math_rendering">Enable math formula rendering</string>
+    <string name="math_rendering_desc">Recognize formulas wrapped in $…$ and $$…$$ and render them separately</string>
+    <string name="user_markdown">User message markdown</string>
+    <string name="thinking_markdown">Thinking chain markdown</string>
+    <string name="character_markdown">Character message markdown</string>
+    <string name="auto_collapse_code">Auto-collapse code blocks</string>
+    <string name="auto_collapse_code_lines">Collapse after how many lines</string>
+    <string name="unit_lines">lines</string>
+    <string name="behavior_startup">Behavior &amp; startup</string>
+    <string name="auto_collapse_thinking">Auto-collapse thinking</string>
+    <string name="confirm_regenerate">Confirm before regenerating</string>
+    <string name="message_nav_buttons">Message navigation buttons</string>
+    <string name="nav_always">Always show</string>
+    <string name="nav_on_scroll">Show on scroll</string>
+    <string name="nav_never">Never show</string>
+    <string name="show_chat_list_date">Show date in chat list</string>
+    <string name="new_chat_on_char_switch">New chat on character switch</string>
+    <string name="new_chat_on_delete_topic">New chat after deleting topic</string>
+    <string name="new_chat_on_launch">New chat on app launch</string>
+    <string name="enter_to_send">Enter key sends message</string>
+    <string name="haptics">Haptic feedback</string>
+    <string name="switch_haptic">Switch haptics</string>
+    <string name="sidebar_haptic">Sidebar haptics</string>
+    <string name="long_press_haptic">Long-press haptics</string>
+    <string name="confirm_regenerate_title">Confirm regeneration</string>
+    <string name="confirm_regenerate_msg">This will regenerate the reply for this message. Continue?</string>
+    <string name="token_stats_fmt">%1$d tokens</string>
+    <string name="expand">Expand</string>
+    <string name="collapse">Collapse</string>
+    <string name="code_block_lines_fmt">%1$d lines</string>
+    <string name="code_language_plain">code</string>
 
 </resources>

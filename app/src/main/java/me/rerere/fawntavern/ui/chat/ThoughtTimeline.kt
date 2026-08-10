@@ -135,6 +135,9 @@ internal fun ThoughtTimelineCard(
     msg: ChatMessage,
     isStreaming: Boolean,
     scale: Float = 1.0f,
+    autoCollapse: Boolean = true,
+    markdown: Boolean = true,
+    renderPrefs: RenderPrefs = RenderPrefs(),
 ) {
     if (msg.searches.isEmpty() && msg.reasoning.isBlank()) return
     val steps = buildSteps(msg.reasoning, msg.reasoningMs, msg.searches)
@@ -160,6 +163,10 @@ internal fun ThoughtTimelineCard(
                         loading = step.live && isStreaming && msg.content.isBlank(),
                         isFirst = i == 0, isLast = i == steps.size - 1,
                         scale = scale,
+                        isStreaming = isStreaming,
+                        autoCollapse = autoCollapse,
+                        markdown = markdown,
+                        renderPrefs = renderPrefs,
                     )
                     is SearchStep -> SearchTimelineStep(
                         search = step.search,
@@ -272,8 +279,12 @@ private fun ReasoningTimelineStep(
     isFirst: Boolean,
     isLast: Boolean,
     scale: Float,
+    isStreaming: Boolean,
+    autoCollapse: Boolean,
+    markdown: Boolean,
+    renderPrefs: RenderPrefs,
 ) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
+    var expanded by rememberSaveable { mutableStateOf(!autoCollapse) }
     val labelStyle = MaterialTheme.typography.labelLarge
         .copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold).scaledBy(scale)
     val bodyStyle = MaterialTheme.typography.bodySmall.scaledBy(scale)
@@ -311,11 +322,25 @@ private fun ReasoningTimelineStep(
             )
         }
         when {
-            expanded -> Text(
-                text, style = bodyStyle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            )
+            expanded -> {
+                // 思维链 markdown 渲染开启时走同一套 MessageContent 管线（含数学/代码折叠），
+                // 否则按纯文本展示
+                if (markdown) {
+                    MessageContent(
+                        content = text,
+                        isStreaming = isStreaming,
+                        textStyle = bodyStyle,
+                        renderPrefs = renderPrefs.copy(markdown = true),
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                } else {
+                    Text(
+                        text, style = bodyStyle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                }
+            }
             loading -> {
                 // 流式预览：限高 100dp，内容随生成自动滚到底，上下边缘渐隐
                 val scroll = rememberScrollState()

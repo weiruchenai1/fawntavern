@@ -52,6 +52,7 @@ import com.composables.icons.lucide.Package
 import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.Earth
+import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Smile
 import com.composables.icons.lucide.SlidersHorizontal
 import com.composables.icons.lucide.SquareLibrary
@@ -74,6 +75,7 @@ fun SettingsScreen(
     onNavigateToApiConfig: () -> Unit = {},
     onNavigateToDataManagement: () -> Unit = {},
     onNavigateToFontSize: () -> Unit = {},
+    onNavigateToPreferences: () -> Unit = {},
     onNavigateToPromptLog: () -> Unit = {},
     onNavigateToExtensions: () -> Unit = {},
     onNavigateToDefaultModel: () -> Unit = {},
@@ -243,6 +245,10 @@ fun SettingsScreen(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     stringResource(R.string.language), LanguageStore.getLabel(currentLang),
                     onClick = { showLangDialog = true })
+                SettingsRow(
+                    { Icon(Lucide.Settings2, null, Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    stringResource(R.string.preferences), onClick = onNavigateToPreferences)
                 SettingsRow(
                     { Icon(Lucide.ALargeSmall, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant) },

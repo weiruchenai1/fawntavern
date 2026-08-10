@@ -51,6 +51,7 @@ import me.rerere.fawntavern.data.speech.TtsEngine
 import me.rerere.fawntavern.data.speech.TtsUiState
 import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.data.settings.PromptLogStore
+import me.rerere.fawntavern.data.settings.PreferencesStore
 import me.rerere.fawntavern.data.settings.CharacterModelStore
 import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.data.settings.ThinkingStore
@@ -189,7 +190,13 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             ChatRepository.sessionsFlow(ctx).collect {
                 sessions = it
-                if (session == null) session = it.firstOrNull()
+                if (session == null) {
+                    // 应用启动时新建对话：每次启动都从空白对话开始（内存态，发首条消息才落盘）
+                    session = if (PreferencesStore.get(ctx).newChatOnLaunch) {
+                        val card = loadCard(defaultName)
+                        ConversationOps.newSession(card, defaultName, defaultName, userName)
+                    } else it.firstOrNull()
+                }
             }
         }
         // 会话的角色变化时加载对应角色卡，并恢复该角色记忆的模型
@@ -327,14 +334,17 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 角色选择面板：切到该角色最近的会话；没有则在内存里开新会话（发消息前不落盘） */
+    /** 角色选择面板：切到该角色最近的会话；没有则在内存里开新会话（发消息前不落盘）。
+     *  偏好"切换角色时新建对话"开启时每次都新建，不再回到该角色的旧会话。 */
     fun openCharacter(fileName: String, displayName: String) {
         if (generating) return
         viewModelScope.launch {
-            val existing = sessions.firstOrNull { it.charFile == fileName }
-            if (existing != null) {
-                session = existing
-                return@launch
+            if (!PreferencesStore.get(ctx).newChatOnCharSwitch) {
+                val existing = sessions.firstOrNull { it.charFile == fileName }
+                if (existing != null) {
+                    session = existing
+                    return@launch
+                }
             }
             val card = if (fileName.isBlank()) null else loadCard(fileName)
             currentCard = card
@@ -349,10 +359,14 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             ChatRepository.delete(ctx, id)
             val fresh = ChatRepository.list(ctx)
             if (session?.id == id) {
-                // 留在当前角色：优先切到该角色的其他会话；没有则只在内存里展示
-                // 一个新会话（有角色卡显示开场白，否则为空），不落盘
-                session = fresh.firstOrNull { it.charFile == curCharFile }
-                    ?: ConversationOps.newSession(currentCard, curCharFile, curCharName, userName)
+                // 留在当前角色：默认优先切到该角色的其他会话；偏好"删除话题后新建对话"
+                // 开启时总是新建（内存态，不落盘）。没有其他会话时也回退到新建。
+                session = if (PreferencesStore.get(ctx).newChatOnDeleteTopic) {
+                    ConversationOps.newSession(currentCard, curCharFile, curCharName, userName)
+                } else {
+                    fresh.firstOrNull { it.charFile == curCharFile }
+                        ?: ConversationOps.newSession(currentCard, curCharFile, curCharName, userName)
+                }
             }
         }
     }

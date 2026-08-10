@@ -241,7 +241,8 @@ fun PresetEditorScreen(
 @Composable
 private fun BasicParamsTab(p: StPreset, onUpdate: (StPreset) -> Unit) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space16),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(Space16),
         verticalArrangement = Arrangement.spacedBy(Space16)
     ) {
         SectionHeader(stringResource(R.string.sampling_params))

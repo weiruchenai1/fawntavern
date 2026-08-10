@@ -83,6 +83,20 @@ private fun greetingResId(): Int {
     }
 }
 
+/** 时间戳 → 本地日期（分组用） */
+private fun toLocalDate(ts: Long): java.time.LocalDate? = try {
+    java.time.Instant.ofEpochMilli(ts)
+        .atZone(java.time.ZoneId.systemDefault())
+        .toLocalDate()
+} catch (_: Exception) { null }
+
+/** 日期分组头：今天 / 昨天 / x月x日 */
+private fun dateHeaderText(date: java.time.LocalDate, today: java.time.LocalDate, ctx: android.content.Context): String = when (date) {
+    today -> ctx.getString(R.string.today)
+    today.minusDays(1) -> ctx.getString(R.string.yesterday)
+    else -> ctx.getString(R.string.date_header_fmt, date.monthValue, date.dayOfMonth)
+}
+
 @Composable
 fun ChatDrawerContent(
     onClose: () -> Unit,
@@ -96,6 +110,8 @@ fun ChatDrawerContent(
     currentSessionId: String? = null,
     onOpenSession: (String) -> Unit = {},
     onDeleteSession: (String) -> Unit = {},
+    showChatListDate: Boolean = false,
+    longPressHaptic: Boolean = true,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -314,31 +330,27 @@ fun ChatDrawerContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 6.dp))
                 }
-            }
-            itemsIndexed(sessions, key = { _, s -> s.id }) { _, s ->
-                val selected = s.id == currentSessionId
-                val fallbackTitle = stringResource(R.string.new_chat)
-                // 标题：优先用模型生成的 title，回退到首条用户消息预览
-                val title = s.title.takeIf { it.isNotBlank() }
-                    ?: s.messages.firstOrNull { it.role == "user" }?.content
-                        ?.replace('\n', ' ')?.take(24)
-                    ?: fallbackTitle
-                Row(
-                    Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.secondaryContainer
-                            else Color.Transparent
-                        )
-                        .appClickable(
-                            onClick = { onOpenSession(s.id) },
-                            onLongClick = { onDeleteSession(s.id) },
-                        )
-                        .padding(horizontal = Space8, vertical = 8.dp),
-                ) {
-                    Text(title, style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+            } else if (showChatListDate) {
+                // 按日期分组：今天 / 昨天 / x月x日 作为组头显示在标题卡片之外，卡片内不再放时间
+                val today = java.time.LocalDate.now()
+                val sorted = sessions.sortedByDescending { it.updatedAt }
+                var lastDate: java.time.LocalDate? = null
+                sorted.forEach { s ->
+                    val date = toLocalDate(s.updatedAt)
+                    if (date != null && date != lastDate) {
+                        item(key = "date_$date") {
+                            Text(dateHeaderText(date, today, context),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = Space8, bottom = Space4))
+                        }
+                        lastDate = date
+                    }
+                    item(key = s.id) { SessionCard(s, currentSessionId, onOpenSession, onDeleteSession, longPressHaptic) }
+                }
+            } else {
+                itemsIndexed(sessions, key = { _, s -> s.id }) { _, s ->
+                    SessionCard(s, currentSessionId, onOpenSession, onDeleteSession, longPressHaptic)
                 }
             }
         }
@@ -381,7 +393,7 @@ fun ChatDrawerContent(
                 icon = Lucide.Smile,
                 contentDescription = stringResource(R.string.characters),
                 onClick = onCharList,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 container = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
             AppIconButton(
@@ -391,6 +403,42 @@ fun ChatDrawerContent(
                 container = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
         }
+    }
+}
+
+/** 单条会话卡片：标题（+ 可选日期组头在卡片外，卡片内不含时间） */
+@Composable
+private fun SessionCard(
+    s: ChatSession,
+    currentSessionId: String?,
+    onOpenSession: (String) -> Unit,
+    onDeleteSession: (String) -> Unit,
+    longPressHaptic: Boolean,
+) {
+    val selected = s.id == currentSessionId
+    val fallbackTitle = stringResource(R.string.new_chat)
+    // 标题：优先用模型生成的 title，回退到首条用户消息预览
+    val title = s.title.takeIf { it.isNotBlank() }
+        ?: s.messages.firstOrNull { it.role == "user" }?.content
+            ?.replace('\n', ' ')?.take(24)
+        ?: fallbackTitle
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer
+                else Color.Transparent
+            )
+            .appClickable(
+                onClick = { onOpenSession(s.id) },
+                onLongClick = { onDeleteSession(s.id) },
+                hapticFeedbackEnabled = longPressHaptic,
+            )
+            .padding(horizontal = Space8, vertical = 8.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

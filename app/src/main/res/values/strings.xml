@@ -92,6 +92,8 @@
     <string name="greeting_afternoon">下午好 (っ´▽`)っ</string>
     <string name="greeting_evening">晚上好 (´｡• ᵕ •｡`)</string>
     <string name="today">今天</string>
+    <string name="yesterday">昨天</string>
+    <string name="date_header_fmt">%1$d月%2$d日</string>
     <string name="copy">复制</string>
     <string name="select_copy">选择复制</string>
     <string name="regenerate">重新生成</string>
@@ -564,5 +566,52 @@
     <string name="tts_resume">继续</string>
     <string name="tts_fast_forward">快进</string>
     <string name="tts_speed_fmt">%1$.1fx</string>
+
+    <!-- 偏好设置 -->
+    <string name="preferences">偏好设置</string>
+    <string name="theme_settings">主题设置</string>
+    <string name="solid_background">纯色背景</string>
+    <string name="solid_background_desc">在暗色主题中使用纯黑背景</string>
+    <string name="chat_item_display">聊天项显示</string>
+    <string name="show_user_avatar">显示用户头像</string>
+    <string name="show_user_name">显示用户名称</string>
+    <string name="show_user_timestamp">显示用户时间戳</string>
+    <string name="show_user_actions">显示用户消息操作按钮</string>
+    <string name="show_model_icon">聊天列表模型图标</string>
+    <string name="show_model_name">显示模型名称</string>
+    <string name="show_model_timestamp">显示模型时间戳</string>
+    <string name="show_token_stats">显示token和上下文统计</string>
+    <string name="rendering_settings">渲染设置</string>
+    <string name="math_rendering">启用数学公式渲染</string>
+    <string name="math_rendering_desc">识别 $…$ 与 $$…$$ 包裹的公式并单独渲染</string>
+    <string name="user_markdown">用户消息markdown渲染</string>
+    <string name="thinking_markdown">思维链markdown渲染</string>
+    <string name="character_markdown">角色消息markdown渲染</string>
+    <string name="auto_collapse_code">自动折叠代码块</string>
+    <string name="auto_collapse_code_lines">超过多少行自动折叠</string>
+    <string name="unit_lines">行</string>
+    <string name="behavior_startup">行为与启动</string>
+    <string name="auto_collapse_thinking">自动折叠思考</string>
+    <string name="confirm_regenerate">重新生成前弹出确认</string>
+    <string name="message_nav_buttons">消息导航按钮</string>
+    <string name="nav_always">始终显示</string>
+    <string name="nav_on_scroll">滚动时显示</string>
+    <string name="nav_never">永不显示</string>
+    <string name="show_chat_list_date">显示对话列表日期</string>
+    <string name="new_chat_on_char_switch">切换角色时新建对话</string>
+    <string name="new_chat_on_delete_topic">删除话题后新建对话</string>
+    <string name="new_chat_on_launch">应用启动时新建对话</string>
+    <string name="enter_to_send">回车键发送消息</string>
+    <string name="haptics">触觉反馈</string>
+    <string name="switch_haptic">开关触觉反馈</string>
+    <string name="sidebar_haptic">侧边栏触觉反馈</string>
+    <string name="long_press_haptic">长按触觉反馈</string>
+    <string name="confirm_regenerate_title">确认重新生成</string>
+    <string name="confirm_regenerate_msg">将重新生成该条消息的回复，确定继续吗？</string>
+    <string name="token_stats_fmt">%1$d tokens</string>
+    <string name="expand">展开</string>
+    <string name="collapse">收起</string>
+    <string name="code_block_lines_fmt">%1$d 行</string>
+    <string name="code_language_plain">代码</string>
 
 </resources>
