@@ -58,6 +58,9 @@ internal data class MessageEntity(
     @ColumnInfo(defaultValue = "") val imagesJson: String = "",  // List<String> JSON，空串 = 无图片附件
     @ColumnInfo(defaultValue = "") val filesJson: String = "",   // List<MsgFile> JSON，空串 = 无文件附件
     @ColumnInfo(defaultValue = "") val searchJson: String = "",  // List<MsgSearch> JSON，空串 = 无联网搜索
+    @ColumnInfo(defaultValue = "0") val promptTokens: Int = 0,
+    @ColumnInfo(defaultValue = "0") val completionTokens: Int = 0,
+    @ColumnInfo(defaultValue = "0") val generationMs: Long = 0,
 )
 
 internal data class SessionWithMessages(
@@ -142,7 +145,7 @@ internal interface ChatDao {
     suspend fun updatePinned(id: String, pinned: Boolean)
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 7, exportSchema = false)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 8, exportSchema = false)
 internal abstract class ChatDatabase : RoomDatabase() {
 
     abstract fun dao(): ChatDao
@@ -193,11 +196,23 @@ internal abstract class ChatDatabase : RoomDatabase() {
             }
         }
 
+        /** v8：消息表增加 token 用量与生成总耗时 */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN promptTokens INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE messages ADD COLUMN completionTokens INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE messages ADD COLUMN generationMs INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         @Volatile private var instance: ChatDatabase? = null
 
         fun get(context: Context): ChatDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, ChatDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
+                )
                 .build().also { instance = it }
         }
     }

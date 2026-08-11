@@ -584,7 +584,9 @@
     <string name="show_model_icon">聊天列表模型图标</string>
     <string name="show_model_name">显示模型名称</string>
     <string name="show_model_timestamp">显示模型时间戳</string>
-    <string name="show_token_stats">显示token和上下文统计</string>
+    <string name="show_token_usage">显示输入/输出 token</string>
+    <string name="show_token_speed">显示 token 生成速率</string>
+    <string name="show_generation_time">显示生成总用时</string>
     <string name="rendering_settings">渲染设置</string>
     <string name="math_rendering">启用数学公式渲染</string>
     <string name="math_rendering_desc">识别 $…$ 与 $$…$$ 包裹的公式并单独渲染</string>
@@ -612,7 +614,11 @@
     <string name="long_press_haptic">长按触觉反馈</string>
     <string name="confirm_regenerate_title">确认重新生成</string>
     <string name="confirm_regenerate_msg">将重新生成该条消息的回复，确定继续吗？</string>
-    <string name="token_stats_fmt">%1$d tokens</string>
+    <string name="token_stats_fmt">%1$s tokens</string>
+    <string name="input_tokens">输入 token</string>
+    <string name="output_tokens">输出 token</string>
+    <string name="generation_speed">生成速率</string>
+    <string name="total_duration">总用时</string>
     <string name="expand">展开</string>
     <string name="collapse">收起</string>
     <string name="code_block_lines_fmt">%1$d 行</string>

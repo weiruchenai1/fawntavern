@@ -15,6 +15,9 @@ data class MsgAlt(
     val reasoningMs: Long = 0,
     /** 此版本生成期间产生的联网搜索步骤与引用。 */
     val searches: List<MsgSearch> = emptyList(),
+    val promptTokens: Int = 0,
+    val completionTokens: Int = 0,
+    val generationMs: Long = 0,
 )
 
 /** 联网搜索的单条引用来源（展示"N个引用"胶囊卡与来源列表用） */
@@ -60,6 +63,9 @@ data class ChatMessage(
     val images: List<String> = emptyList(),   // 图片附件（filesDir 相对路径，发送时编码为 base64）
     val files: List<MsgFile> = emptyList(),   // 其它文件附件（发送时尝试以文本内联进 prompt）
     val searches: List<MsgSearch> = emptyList(),  // 当前版本的搜索工具调用（仅 assistant；按调用顺序）
+    val promptTokens: Int = 0,       // 本次请求输入 token（API usage 优先，缺失时估算）
+    val completionTokens: Int = 0,   // 本次生成输出 token（API usage 优先，缺失时估算）
+    val generationMs: Long = 0,      // 从发起请求到生成收尾的总用时
 )
 
 /** 聊天会话：每个角色卡对应独立的聊天列表 */

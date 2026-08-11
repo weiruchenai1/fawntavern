@@ -76,7 +76,9 @@ internal fun ChatItemDisplayScreen(onBack: () -> Unit) {
             PrefToggle(PrefIconBot, stringResource(R.string.show_model_icon), prefs.showModelIcon) { save(prefs.copy(showModelIcon = it)) }
             PrefToggle(PrefIconTag, stringResource(R.string.show_model_name), prefs.showModelName) { save(prefs.copy(showModelName = it)) }
             PrefToggle(PrefIconClock, stringResource(R.string.show_model_timestamp), prefs.showModelTimestamp) { save(prefs.copy(showModelTimestamp = it)) }
-            PrefToggle(PrefIconCalculator, stringResource(R.string.show_token_stats), prefs.showTokenStats) { save(prefs.copy(showTokenStats = it)) }
+            PrefToggle(PrefIconCalculator, stringResource(R.string.show_token_usage), prefs.showTokenUsage) { save(prefs.copy(showTokenUsage = it)) }
+            PrefToggle(PrefIconCalculator, stringResource(R.string.show_token_speed), prefs.showTokenSpeed) { save(prefs.copy(showTokenSpeed = it)) }
+            PrefToggle(PrefIconClock, stringResource(R.string.show_generation_time), prefs.showGenerationTime) { save(prefs.copy(showGenerationTime = it)) }
         }
     }
 }

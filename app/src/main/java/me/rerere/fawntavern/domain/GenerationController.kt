@@ -58,6 +58,7 @@ internal class GenerationController {
         onUpdate: (ChatMessage) -> Unit,
     ): ChatMessage = coroutineScope {
         stopFlag.set(false)
+        val generationStartedAt = System.currentTimeMillis()
         var cur = genMessage
         onUpdate(cur)
         // 思考耗时分段累计：思考 → 工具调用/正文时冻结一段，下一轮再有思考则重开一段。
@@ -96,11 +97,25 @@ internal class GenerationController {
         } else null
         try {
             val apiMessages = PromptBuilder.assemble(built, promptHistory, filesDir).toMutableList()
+            fun estimatePromptTokens(): Int = apiMessages.sumOf { message ->
+                PromptBuilder.estTokens(message.role) + PromptBuilder.estTokens(message.content) +
+                    message.toolCalls.sumOf { call ->
+                        PromptBuilder.estTokens(call.name) + PromptBuilder.estTokens(call.arguments) +
+                            PromptBuilder.estTokens(call.result)
+                    } + message.images.size * 256
+            }
+            var promptTokens = 0
+            var completionTokens = 0
+            var countedContentChars = 0
+            var countedReasoningChars = 0
             // 记录本次组装出的完整 prompt（日志开关关闭时为空操作）
             PromptLog.record(built, provider, modelId, apiMessages)
             var rounds = 0
             while (true) {
                 val roundStart = synchronized(lock) { buf.length }
+                val reasoningRoundStart = synchronized(lock) { reasoningBuf.length }
+                val estimatedInput = estimatePromptTokens()
+                promptTokens += estimatedInput
                 val end = ChatApi.streamChat(
                     provider = provider,
                     modelId = modelId,
@@ -126,6 +141,15 @@ internal class GenerationController {
                     synchronized(lock) { buf.append(c); reasoningBuf.append(r) }
                     dirty.set(true)
                 }
+                if (end.promptTokens > 0) promptTokens += end.promptTokens - estimatedInput
+                val (roundContent, roundReasoning) = synchronized(lock) {
+                    buf.substring(roundStart) to reasoningBuf.substring(reasoningRoundStart)
+                }
+                val estimatedOutput = PromptBuilder.estTokens(roundContent) +
+                    PromptBuilder.estTokens(roundReasoning)
+                completionTokens += end.completionTokens.takeIf { it > 0 } ?: estimatedOutput
+                countedContentChars = synchronized(lock) { buf.length }
+                countedReasoningChars = synchronized(lock) { reasoningBuf.length }
                 if (end.toolCalls.isEmpty() || toolExecutor == null) break
                 if (rounds >= HARD_TOOL_ROUNDS) break
                 // 工具调用到达即冻结当前思考段（执行搜索的时间不计入思考耗时）
@@ -168,7 +192,6 @@ internal class GenerationController {
                     call.copy(result = result)
                 }
                 // 本轮 assistant 输出（正文 + 调用 + 协议私有原始块）连同工具结果拼回历史，续下一轮
-                val roundContent = synchronized(lock) { buf.substring(roundStart) }
                 apiMessages += ApiMessage(
                     role = "assistant",
                     content = roundContent,
@@ -177,6 +200,16 @@ internal class GenerationController {
                 )
                 rounds++
             }
+            val (remainingContent, remainingReasoning) = synchronized(lock) {
+                buf.substring(countedContentChars) to reasoningBuf.substring(countedReasoningChars)
+            }
+            completionTokens += PromptBuilder.estTokens(remainingContent) +
+                PromptBuilder.estTokens(remainingReasoning)
+            cur = cur.copy(
+                promptTokens = promptTokens,
+                completionTokens = completionTokens,
+                generationMs = (System.currentTimeMillis() - generationStartedAt).coerceAtLeast(1L),
+            )
         } catch (_: ChatApi.Stopped) {
         } catch (e: Exception) {
             synchronized(lock) {
@@ -188,12 +221,20 @@ internal class GenerationController {
         // 收尾：搜索步骤一律离开"搜索中"状态（停止/异常路径可能残留）
         searches = searches.map { if (it.searching) it.copy(searching = false) else it }
         flushToUi()  // 把缓冲的最终内容全部写入
+        if (cur.generationMs == 0L) {
+            cur = cur.copy(
+                completionTokens = PromptBuilder.estTokens(cur.content) + PromptBuilder.estTokens(cur.reasoning),
+                generationMs = (System.currentTimeMillis() - generationStartedAt).coerceAtLeast(1L),
+            )
+        }
         // 将最终内容同步回当前版本（重答开的新版本）
         if (cur.alts.isNotEmpty()) {
             val alts = cur.alts.toMutableList()
             alts[cur.altIdx] = alts[cur.altIdx].copy(
                 content = cur.content, reasoning = cur.reasoning,
-                model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches)
+                model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
+                promptTokens = cur.promptTokens, completionTokens = cur.completionTokens,
+                generationMs = cur.generationMs)
             cur = cur.copy(alts = alts)
         }
         onUpdate(cur)

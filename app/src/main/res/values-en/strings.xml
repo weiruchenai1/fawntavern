@@ -584,7 +584,9 @@
     <string name="show_model_icon">Show model icon in chat</string>
     <string name="show_model_name">Show model name</string>
     <string name="show_model_timestamp">Show model timestamp</string>
-    <string name="show_token_stats">Show token &amp; context stats</string>
+    <string name="show_token_usage">Show input/output tokens</string>
+    <string name="show_token_speed">Show token generation speed</string>
+    <string name="show_generation_time">Show total generation time</string>
     <string name="rendering_settings">Rendering</string>
     <string name="math_rendering">Enable math formula rendering</string>
     <string name="math_rendering_desc">Recognize formulas wrapped in $…$ and $$…$$ and render them separately</string>
@@ -612,7 +614,11 @@
     <string name="long_press_haptic">Long-press haptics</string>
     <string name="confirm_regenerate_title">Confirm regeneration</string>
     <string name="confirm_regenerate_msg">This will regenerate the reply for this message. Continue?</string>
-    <string name="token_stats_fmt">%1$d tokens</string>
+    <string name="token_stats_fmt">%1$s tokens</string>
+    <string name="input_tokens">Input tokens</string>
+    <string name="output_tokens">Output tokens</string>
+    <string name="generation_speed">Generation speed</string>
+    <string name="total_duration">Total duration</string>
     <string name="expand">Expand</string>
     <string name="collapse">Collapse</string>
     <string name="code_block_lines_fmt">%1$d lines</string>

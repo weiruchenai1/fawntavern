@@ -78,6 +78,8 @@ internal object GoogleAdapter : ProviderAdapter {
             applyCustomBodies(model)
         }
         val toolCalls = mutableListOf<ApiToolCall>()
+        var promptTokens = 0
+        var completionTokens = 0
         SseClient.post(
             url = "${provider.baseUrl.trimEnd('/')}/models/${model.id}:streamGenerateContent?alt=sse",
             // 密钥走 x-goog-api-key 请求头，不再拼进 URL
@@ -87,6 +89,11 @@ internal object GoogleAdapter : ProviderAdapter {
             onCall = onCall,
         ) { data ->
             val obj = JSONObject(data)
+            obj.optJSONObject("usageMetadata")?.let { usage ->
+                promptTokens = usage.optInt("promptTokenCount", promptTokens)
+                completionTokens = usage.optInt("candidatesTokenCount", completionTokens) +
+                    usage.optInt("thoughtsTokenCount", 0)
+            }
             val parts = obj.optJSONArray("candidates")
                 ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts") ?: return@post
             for (i in 0 until parts.length()) {
@@ -106,7 +113,11 @@ internal object GoogleAdapter : ProviderAdapter {
                 if (part.optBoolean("thought")) onDelta("", text) else onDelta(text, "")
             }
         }
-        return StreamEnd(toolCalls = toolCalls)
+        return StreamEnd(
+            toolCalls = toolCalls,
+            promptTokens = promptTokens,
+            completionTokens = completionTokens,
+        )
     }
 
     /**

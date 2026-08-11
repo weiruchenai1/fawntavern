@@ -172,6 +172,9 @@ object ChatRepository {
                    else try { json.decodeFromString<List<MsgSearch>>(searchJson) } catch (_: Exception) {
                        try { listOf(json.decodeFromString<MsgSearch>(searchJson)) } catch (_: Exception) { emptyList() }
                    },
+        promptTokens = promptTokens,
+        completionTokens = completionTokens,
+        generationMs = generationMs,
     )
 
     private fun ChatMessage.toEntity(sessionId: String) = MessageEntity(
@@ -187,5 +190,8 @@ object ChatRepository {
         imagesJson = if (images.isEmpty()) "" else json.encodeToString(images),
         filesJson = if (files.isEmpty()) "" else json.encodeToString(files),
         searchJson = if (searches.isEmpty()) "" else json.encodeToString(searches),
+        promptTokens = promptTokens,
+        completionTokens = completionTokens,
+        generationMs = generationMs,
     )
 }

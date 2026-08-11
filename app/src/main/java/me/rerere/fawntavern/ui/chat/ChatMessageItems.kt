@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,9 @@ import androidx.compose.ui.unit.isSpecified
 import android.graphics.BitmapFactory
 import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.ArrowDownToLine
+import com.composables.icons.lucide.ArrowUpToLine
+import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.CircleStop
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.EllipsisVertical
@@ -43,7 +47,10 @@ import com.composables.icons.lucide.Paperclip
 import com.composables.icons.lucide.RotateCcw
 import com.composables.icons.lucide.UserPen
 import com.composables.icons.lucide.Volume2
+import com.composables.icons.lucide.Zap
 import java.io.File
+import java.text.NumberFormat
+import java.util.Locale
 import kotlin.math.roundToInt
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.chat.ChatMessage
@@ -53,7 +60,6 @@ import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.noRippleClickable
-import me.rerere.fawntavern.domain.PromptBuilder
 
 /** 消息时间戳的显示格式：xxxx-xx-xx 08:12:04 */
 private fun formatMsgTime(ts: Long): String = try {
@@ -61,11 +67,6 @@ private fun formatMsgTime(ts: Long): String = try {
         .withZone(java.time.ZoneId.systemDefault())
         .format(java.time.Instant.ofEpochMilli(ts))
 } catch (_: Exception) { "" }
-
-/** 单条消息（正文 + 思考）的粗略 token 估算，用于 token 统计显示 */
-private fun estimateMsgTokens(msg: ChatMessage): Int =
-    PromptBuilder.estTokens(msg.content) +
-        (if (msg.reasoning.isNotBlank()) PromptBuilder.estTokens(msg.reasoning) else 0)
 
 /** 把内容的最大宽度限制为父约束的 [fraction]（用户气泡不超过行宽的 ~80%） */
 private fun Modifier.maxWidthFraction(fraction: Float): Modifier = layout { measurable, constraints ->
@@ -229,7 +230,9 @@ internal fun AIMsg(
     showModelIcon: Boolean = true,
     showModelName: Boolean = true,
     showModelTimestamp: Boolean = false,
-    showTokenStats: Boolean = false,
+    showTokenUsage: Boolean = false,
+    showTokenSpeed: Boolean = false,
+    showGenerationTime: Boolean = false,
     autoCollapseThinking: Boolean = true,
     thinkingMarkdown: Boolean = true,
     renderPrefs: RenderPrefs = RenderPrefs(),
@@ -315,15 +318,6 @@ internal fun AIMsg(
                         Modifier.noRippleClickable { onMore() }
                             .padding(horizontal = s8, vertical = s8).size(iconSz),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    // token 统计显示在"更多"(三点)图标右侧
-                    if (showTokenStats) {
-                        Text(
-                            stringResource(R.string.token_stats_fmt, estimateMsgTokens(msg)),
-                            style = metaStyle,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 2.dp),
-                        )
-                    }
                 }
                 Spacer(Modifier.weight(1f))
                 // 多版本左右切换（重新生成的历史版本 / 备选开场白）
@@ -346,6 +340,97 @@ internal fun AIMsg(
                     }
                 }
             }
+            if (showTokenUsage || showTokenSpeed || showGenerationTime) {
+                MessageStatsLine(
+                    msg = msg,
+                    scale = scale,
+                    textStyle = metaStyle,
+                    showTokenUsage = showTokenUsage,
+                    showTokenSpeed = showTokenSpeed,
+                    showGenerationTime = showGenerationTime,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun MessageStatsLine(
+    msg: ChatMessage,
+    scale: Float,
+    textStyle: TextStyle,
+    showTokenUsage: Boolean,
+    showTokenSpeed: Boolean,
+    showGenerationTime: Boolean,
+) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+    val iconSize = (12f * scale).dp
+    val numberFormat = remember { NumberFormat.getIntegerInstance() }
+    val durationSeconds = msg.generationMs / 1000f
+    val tokensPerSecond = if (msg.generationMs > 0L) {
+        msg.completionTokens * 1000f / msg.generationMs
+    } else 0f
+
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (showTokenUsage) {
+            MessageStatItem(
+                icon = Lucide.ArrowUpToLine,
+                contentDescription = stringResource(R.string.input_tokens),
+                text = stringResource(R.string.token_stats_fmt, numberFormat.format(msg.promptTokens)),
+                iconSize = iconSize,
+                textStyle = textStyle,
+                color = color,
+            )
+            MessageStatItem(
+                icon = Lucide.ArrowDownToLine,
+                contentDescription = stringResource(R.string.output_tokens),
+                text = stringResource(R.string.token_stats_fmt, numberFormat.format(msg.completionTokens)),
+                iconSize = iconSize,
+                textStyle = textStyle,
+                color = color,
+            )
+        }
+        if (showTokenSpeed) {
+            MessageStatItem(
+                icon = Lucide.Zap,
+                contentDescription = stringResource(R.string.generation_speed),
+                text = String.format(Locale.US, "%.1f tok/s", tokensPerSecond),
+                iconSize = iconSize,
+                textStyle = textStyle,
+                color = color,
+            )
+        }
+        if (showGenerationTime) {
+            MessageStatItem(
+                icon = Lucide.Clock,
+                contentDescription = stringResource(R.string.total_duration),
+                text = String.format(Locale.US, "%.1fs", durationSeconds),
+                iconSize = iconSize,
+                textStyle = textStyle,
+                color = color,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MessageStatItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    text: String,
+    iconSize: androidx.compose.ui.unit.Dp,
+    textStyle: TextStyle,
+    color: androidx.compose.ui.graphics.Color,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Icon(icon, contentDescription, Modifier.size(iconSize), tint = color)
+        Text(text, style = textStyle, color = color)
     }
 }

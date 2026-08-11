@@ -18,7 +18,9 @@ data class Preferences(
     val showModelIcon: Boolean = true,
     val showModelName: Boolean = true,
     val showModelTimestamp: Boolean = false,
-    val showTokenStats: Boolean = false,
+    val showTokenUsage: Boolean = false,
+    val showTokenSpeed: Boolean = false,
+    val showGenerationTime: Boolean = false,
 
     // ── 渲染设置 ──
     val mathRendering: Boolean = false,
@@ -61,6 +63,9 @@ object PreferencesStore {
     private const val K_SHOW_MODEL_NAME = "showModelName"
     private const val K_SHOW_MODEL_TIMESTAMP = "showModelTimestamp"
     private const val K_SHOW_TOKEN_STATS = "showTokenStats"
+    private const val K_SHOW_TOKEN_USAGE = "showTokenUsage"
+    private const val K_SHOW_TOKEN_SPEED = "showTokenSpeed"
+    private const val K_SHOW_GENERATION_TIME = "showGenerationTime"
     private const val K_MATH_RENDERING = "mathRendering"
     private const val K_USER_MARKDOWN = "userMarkdown"
     private const val K_THINKING_MARKDOWN = "thinkingMarkdown"
@@ -85,6 +90,7 @@ object PreferencesStore {
         fun navMode(name: String?): NavButtonsMode = try {
             NavButtonsMode.valueOf(name ?: "")
         } catch (_: Exception) { d.navButtonsMode }
+        val legacyTokenStats = p.getBoolean(K_SHOW_TOKEN_STATS, false)
         return Preferences(
             solidBackground = p.getBoolean(K_SOLID_BACKGROUND, d.solidBackground),
             showUserAvatar = p.getBoolean(K_SHOW_USER_AVATAR, d.showUserAvatar),
@@ -94,7 +100,9 @@ object PreferencesStore {
             showModelIcon = p.getBoolean(K_SHOW_MODEL_ICON, d.showModelIcon),
             showModelName = p.getBoolean(K_SHOW_MODEL_NAME, d.showModelName),
             showModelTimestamp = p.getBoolean(K_SHOW_MODEL_TIMESTAMP, d.showModelTimestamp),
-            showTokenStats = p.getBoolean(K_SHOW_TOKEN_STATS, d.showTokenStats),
+            showTokenUsage = p.getBoolean(K_SHOW_TOKEN_USAGE, legacyTokenStats),
+            showTokenSpeed = p.getBoolean(K_SHOW_TOKEN_SPEED, legacyTokenStats),
+            showGenerationTime = p.getBoolean(K_SHOW_GENERATION_TIME, legacyTokenStats),
             mathRendering = p.getBoolean(K_MATH_RENDERING, d.mathRendering),
             userMarkdown = p.getBoolean(K_USER_MARKDOWN, d.userMarkdown),
             thinkingMarkdown = p.getBoolean(K_THINKING_MARKDOWN, d.thinkingMarkdown),
@@ -125,7 +133,9 @@ object PreferencesStore {
             .putBoolean(K_SHOW_MODEL_ICON, s.showModelIcon)
             .putBoolean(K_SHOW_MODEL_NAME, s.showModelName)
             .putBoolean(K_SHOW_MODEL_TIMESTAMP, s.showModelTimestamp)
-            .putBoolean(K_SHOW_TOKEN_STATS, s.showTokenStats)
+            .putBoolean(K_SHOW_TOKEN_USAGE, s.showTokenUsage)
+            .putBoolean(K_SHOW_TOKEN_SPEED, s.showTokenSpeed)
+            .putBoolean(K_SHOW_GENERATION_TIME, s.showGenerationTime)
             .putBoolean(K_MATH_RENDERING, s.mathRendering)
             .putBoolean(K_USER_MARKDOWN, s.userMarkdown)
             .putBoolean(K_THINKING_MARKDOWN, s.thinkingMarkdown)

@@ -62,10 +62,14 @@ internal object ConversationOps {
         // 镜像字段先写回当前版本：编辑过的内容切走再切回不丢
         newAlts[m.altIdx] = newAlts[m.altIdx].copy(
             content = m.content, reasoning = m.reasoning, model = m.model,
-            reasoningMs = m.reasoningMs, searches = m.searches)
+            reasoningMs = m.reasoningMs, searches = m.searches,
+            promptTokens = m.promptTokens, completionTokens = m.completionTokens,
+            generationMs = m.generationMs)
         val target = newAlts[ni]
         return m.copy(content = target.content, reasoning = target.reasoning,
             model = target.model, reasoningMs = target.reasoningMs, searches = target.searches,
+            promptTokens = target.promptTokens, completionTokens = target.completionTokens,
+            generationMs = target.generationMs,
             alts = newAlts, altIdx = ni)
     }
 
@@ -81,6 +85,8 @@ internal object ConversationOps {
         return m.copy(
             content = cur.content, reasoning = cur.reasoning,
             model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
+            promptTokens = cur.promptTokens, completionTokens = cur.completionTokens,
+            generationMs = cur.generationMs,
             alts = if (single) emptyList() else newAlts,
             altIdx = if (single) 0 else newIdx,
         )
@@ -91,9 +97,12 @@ internal object ConversationOps {
         val alts = m.alts.ifEmpty { listOf(MsgAlt()) }.toMutableList()
         val ai = m.altIdx.coerceIn(0, alts.lastIndex)
         alts[ai] = alts[ai].copy(content = m.content, reasoning = m.reasoning,
-            model = m.model, reasoningMs = m.reasoningMs, searches = m.searches)
+            model = m.model, reasoningMs = m.reasoningMs, searches = m.searches,
+            promptTokens = m.promptTokens, completionTokens = m.completionTokens,
+            generationMs = m.generationMs)
         alts += MsgAlt(model = modelId)
         return m.copy(content = "", reasoning = "", model = modelId, reasoningMs = 0,
+            promptTokens = 0, completionTokens = 0, generationMs = 0,
             alts = alts, altIdx = alts.lastIndex)
     }
 }

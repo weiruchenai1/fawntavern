@@ -16,6 +16,7 @@ internal object OpenAiAdapter : ProviderAdapter {
         val body = JSONObject().apply {
             put("model", model.id)
             put("stream", true)
+            put("stream_options", JSONObject().put("include_usage", true))
             params?.temperature?.let { put("temperature", it.toDouble()) }
             params?.topP?.let { put("top_p", it.toDouble()) }
             params?.maxTokens?.let { put("max_tokens", it) }
@@ -41,6 +42,8 @@ internal object OpenAiAdapter : ProviderAdapter {
         }
         // 流式工具调用按 index 分片到达（id/name 只在首片，arguments 逐片追加），此处累积拼装
         val callsByIndex = sortedMapOf<Int, Triple<String, String, StringBuilder>>()
+        var promptTokens = 0
+        var completionTokens = 0
         SseClient.post(
             url = "${provider.baseUrl.trimEnd('/')}/chat/completions",
             headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
@@ -50,6 +53,10 @@ internal object OpenAiAdapter : ProviderAdapter {
         ) { data ->
             if (data == "[DONE]") return@post
             val obj = JSONObject(data)
+            obj.optJSONObject("usage")?.let { usage ->
+                promptTokens = usage.optInt("prompt_tokens", usage.optInt("input_tokens", promptTokens))
+                completionTokens = usage.optInt("completion_tokens", usage.optInt("output_tokens", completionTokens))
+            }
             val delta = obj.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: return@post
             val content = delta.strOr("content")
             val reasoning = delta.strOr("reasoning_content").ifEmpty { delta.strOr("reasoning") }
@@ -68,11 +75,15 @@ internal object OpenAiAdapter : ProviderAdapter {
                 }
             }
         }
-        return StreamEnd(toolCalls = callsByIndex.values
-            .filter { it.second.isNotBlank() }
-            .mapIndexed { i, (id, name, args) ->
-                ApiToolCall(id = id.ifBlank { "call_$i" }, name = name, arguments = args.toString())
-            })
+        return StreamEnd(
+            toolCalls = callsByIndex.values
+                .filter { it.second.isNotBlank() }
+                .mapIndexed { i, (id, name, args) ->
+                    ApiToolCall(id = id.ifBlank { "call_$i" }, name = name, arguments = args.toString())
+                },
+            promptTokens = promptTokens,
+            completionTokens = completionTokens,
+        )
     }
 
     /**

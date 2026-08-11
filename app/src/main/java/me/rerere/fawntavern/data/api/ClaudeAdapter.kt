@@ -78,6 +78,8 @@ internal object ClaudeAdapter : ProviderAdapter {
             var data = ""                   // redacted_thinking 原文
         }
         val blocks = sortedMapOf<Int, Block>()
+        var promptTokens = 0
+        var completionTokens = 0
         SseClient.post(
             url = "${provider.baseUrl.trimEnd('/')}/messages",
             headers = model.applyHeaders(mapOf(
@@ -90,6 +92,13 @@ internal object ClaudeAdapter : ProviderAdapter {
         ) { data ->
             val obj = JSONObject(data)
             when (obj.optString("type")) {
+                "message_start" -> obj.optJSONObject("message")?.optJSONObject("usage")?.let { usage ->
+                    promptTokens = usage.optInt("input_tokens", promptTokens)
+                    completionTokens = usage.optInt("output_tokens", completionTokens)
+                }
+                "message_delta" -> obj.optJSONObject("usage")?.let { usage ->
+                    completionTokens = usage.optInt("output_tokens", completionTokens)
+                }
                 "content_block_start" -> {
                     val idx = obj.optInt("index")
                     val cb = obj.optJSONObject("content_block") ?: return@post
@@ -129,7 +138,10 @@ internal object ClaudeAdapter : ProviderAdapter {
                 arguments = b.inputJson.toString().ifBlank { "{}" },
             )
         }
-        if (toolCalls.isEmpty()) return StreamEnd()
+        if (toolCalls.isEmpty()) return StreamEnd(
+            promptTokens = promptTokens,
+            completionTokens = completionTokens,
+        )
         // 原样重建本轮 assistant 内容块（thinking 签名 / redacted_thinking 必须逐字回显）
         val raw = JSONArray()
         blocks.values.forEach { b ->
@@ -151,7 +163,12 @@ internal object ClaudeAdapter : ProviderAdapter {
                     .put("input", runCatching { JSONObject(b.inputJson.toString()) }.getOrDefault(JSONObject())))
             }
         }
-        return StreamEnd(toolCalls = toolCalls, rawBlocks = raw.toString())
+        return StreamEnd(
+            toolCalls = toolCalls,
+            rawBlocks = raw.toString(),
+            promptTokens = promptTokens,
+            completionTokens = completionTokens,
+        )
     }
 
     /**

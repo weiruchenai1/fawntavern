@@ -6,6 +6,9 @@ data class StreamEnd(
     val toolCalls: List<ApiToolCall> = emptyList(),
     /** 协议私有的 assistant 原始内容块 JSON（见 [ApiMessage.rawBlocks]），无需回显的协议为空串 */
     val rawBlocks: String = "",
+    /** 本轮请求的 token 用量；供应商未返回时保持 0，由生成层估算。 */
+    val promptTokens: Int = 0,
+    val completionTokens: Int = 0,
 )
 
 /**
