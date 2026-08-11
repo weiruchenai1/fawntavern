@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -56,7 +55,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.EyeOff
@@ -74,9 +72,9 @@ import me.rerere.fawntavern.data.search.SearchServiceOptions
 import me.rerere.fawntavern.data.search.createSearchService
 import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.ui.api.ProviderIcon
-import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.PickerRow
+import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
@@ -320,50 +318,19 @@ private fun SearchProviderEditScreen(
     var draft by remember(service.id) { mutableStateOf(service) }
     BackHandler(onBack = onBack)
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Row(
-                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
-                    .statusBarsPadding().padding(horizontal = Space16, vertical = Space8),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AppIconButton(
-                    icon = Lucide.ChevronLeft,
-                    contentDescription = stringResource(R.string.back),
-                    onClick = onBack,
-                    container = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    size = 32.dp,
-                    iconSize = 24.dp,
-                )
-                Spacer(Modifier.weight(1f))
-                Text(draft.displayName, style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.weight(1f))
-                Spacer(Modifier.size(32.dp))
-            }
-        },
-    ) { padding ->
+    SettingsSubPage(draft.displayName, onBack) {
         Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-                .padding(horizontal = Space16),
-            verticalArrangement = Arrangement.spacedBy(Space16),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer).padding(Space16),
+            verticalArrangement = Arrangement.spacedBy(Space12),
         ) {
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainer).padding(Space16),
-                verticalArrangement = Arrangement.spacedBy(Space12),
-            ) {
-                Text(stringResource(R.string.search_provider_config), style = MaterialTheme.typography.titleMedium)
-                ProviderOptionsEditor(draft) { updated ->
-                    draft = updated
-                    onSave(updated)
-                }
+            Text(stringResource(R.string.search_provider_config), style = MaterialTheme.typography.titleMedium)
+            ProviderOptionsEditor(draft) { updated ->
+                draft = updated
+                onSave(updated)
             }
-            SearchTesterCard(draft)
-            Spacer(Modifier.height(Space16))
         }
+        SearchTesterCard(draft)
     }
 }
 

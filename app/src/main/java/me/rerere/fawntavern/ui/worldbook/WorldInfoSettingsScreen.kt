@@ -6,18 +6,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.settings.WorldInfoSettingsStore
 import me.rerere.fawntavern.data.worldbook.WorldInfoSettings
-import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 
@@ -50,33 +45,22 @@ fun WorldInfoSettingsScreen(onBack: () -> Unit) {
     }
 
     BackHandler(onBack = onBack)
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(stringResource(R.string.wi_activation_settings), onBack) }
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(Space12),
-        ) {
-            Spacer(Modifier.height(4.dp))
-            SettingsCard(stringResource(R.string.wi_settings_scan_budget)) {
-                NumberRow(stringResource(R.string.wi_scan_depth), s.scanDepth) { save(s.copy(scanDepth = it.coerceAtLeast(0))) }
-                NumberRow(stringResource(R.string.wi_context_percent), s.budgetPercent) { save(s.copy(budgetPercent = it.coerceIn(0, 100))) }
-                NumberRow(stringResource(R.string.wi_budget_cap), s.budgetCap, stringResource(R.string.wi_zero_unlimited)) { save(s.copy(budgetCap = it.coerceAtLeast(0))) }
-                NumberRow(stringResource(R.string.wi_min_activations), s.minActivations, stringResource(R.string.wi_zero_unlimited)) { save(s.copy(minActivations = it.coerceAtLeast(0))) }
-                NumberRow(stringResource(R.string.wi_min_act_depth_max), s.minActivationsDepthMax, stringResource(R.string.wi_zero_unlimited)) { save(s.copy(minActivationsDepthMax = it.coerceAtLeast(0))) }
-                NumberRow(stringResource(R.string.wi_max_recursion), s.maxRecursionSteps, stringResource(R.string.wi_zero_unlimited)) { save(s.copy(maxRecursionSteps = it.coerceAtLeast(0))) }
-            }
-            SettingsCard(stringResource(R.string.wi_settings_matching)) {
-                SwitchRow(stringResource(R.string.wi_include_names), s.includeNames) { save(s.copy(includeNames = it)) }
-                SwitchRow(stringResource(R.string.wi_recursive), s.recursive) { save(s.copy(recursive = it)) }
-                SwitchRow(stringResource(R.string.wi_case_sensitive), s.caseSensitive) { save(s.copy(caseSensitive = it)) }
-                SwitchRow(stringResource(R.string.wi_match_whole_words), s.matchWholeWords) { save(s.copy(matchWholeWords = it)) }
-                SwitchRow(stringResource(R.string.wi_use_group_scoring), s.useGroupScoring) { save(s.copy(useGroupScoring = it)) }
-                SwitchRow(stringResource(R.string.wi_overflow_alert), s.overflowAlert) { save(s.copy(overflowAlert = it)) }
-            }
-            Spacer(Modifier.height(16.dp))
+    SettingsSubPage(stringResource(R.string.wi_activation_settings), onBack, spacing = Space12) {
+        SettingsCard(stringResource(R.string.wi_settings_scan_budget)) {
+            NumberRow(stringResource(R.string.wi_scan_depth), s.scanDepth) { save(s.copy(scanDepth = it.coerceAtLeast(0))) }
+            NumberRow(stringResource(R.string.wi_context_percent), s.budgetPercent) { save(s.copy(budgetPercent = it.coerceIn(0, 100))) }
+            NumberRow(stringResource(R.string.wi_budget_cap), s.budgetCap, stringResource(R.string.wi_zero_unlimited)) { save(s.copy(budgetCap = it.coerceAtLeast(0))) }
+            NumberRow(stringResource(R.string.wi_min_activations), s.minActivations, stringResource(R.string.wi_zero_unlimited)) { save(s.copy(minActivations = it.coerceAtLeast(0))) }
+            NumberRow(stringResource(R.string.wi_min_act_depth_max), s.minActivationsDepthMax, stringResource(R.string.wi_zero_unlimited)) { save(s.copy(minActivationsDepthMax = it.coerceAtLeast(0))) }
+            NumberRow(stringResource(R.string.wi_max_recursion), s.maxRecursionSteps, stringResource(R.string.wi_zero_unlimited)) { save(s.copy(maxRecursionSteps = it.coerceAtLeast(0))) }
+        }
+        SettingsCard(stringResource(R.string.wi_settings_matching)) {
+            SwitchRow(stringResource(R.string.wi_include_names), s.includeNames) { save(s.copy(includeNames = it)) }
+            SwitchRow(stringResource(R.string.wi_recursive), s.recursive) { save(s.copy(recursive = it)) }
+            SwitchRow(stringResource(R.string.wi_case_sensitive), s.caseSensitive) { save(s.copy(caseSensitive = it)) }
+            SwitchRow(stringResource(R.string.wi_match_whole_words), s.matchWholeWords) { save(s.copy(matchWholeWords = it)) }
+            SwitchRow(stringResource(R.string.wi_use_group_scoring), s.useGroupScoring) { save(s.copy(useGroupScoring = it)) }
+            SwitchRow(stringResource(R.string.wi_overflow_alert), s.overflowAlert) { save(s.copy(overflowAlert = it)) }
         }
     }
 }

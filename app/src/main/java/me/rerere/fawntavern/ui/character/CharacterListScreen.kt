@@ -210,7 +210,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
             LazyColumn(
                 Modifier.fillMaxSize().padding(padding),
                 state = listState,
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(Space12)
             ) {
                 itemsIndexed(names, key = { _, n -> n }) { _, name ->

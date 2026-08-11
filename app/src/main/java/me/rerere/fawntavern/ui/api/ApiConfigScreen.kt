@@ -139,7 +139,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
             LazyColumn(
                 Modifier.fillMaxSize().padding(padding),
                 state = listState,
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(Space12),
             ) {
                 itemsIndexed(config.providers, key = { _, p -> p.id }) { _, prov ->
@@ -480,9 +480,9 @@ private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, m
         } else {
             LazyColumn(
                 Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = Space16),
                 verticalArrangement = Arrangement.spacedBy(Space8),
             ) {
-                item { Spacer(Modifier.height(8.dp)) }
                 itemsIndexed(prov.models) { idx, model ->
                     OutlinedCard(onClick = { editingIdx = idx }, modifier = Modifier.fillMaxWidth()) {
                         Row(

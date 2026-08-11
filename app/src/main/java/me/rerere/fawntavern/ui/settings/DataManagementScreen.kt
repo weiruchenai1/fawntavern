@@ -10,15 +10,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -26,7 +22,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -64,7 +59,7 @@ import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
-import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
@@ -318,100 +313,87 @@ fun DataManagementScreen(onBack: () -> Unit) {
 
     BackHandler(onBack = onBack)
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(stringResource(R.string.data_management), onBack) }
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+    SettingsSubPage(stringResource(R.string.data_management), onBack) {
+        SectionHeader(stringResource(R.string.storage_overview))
+        OverviewCard(
+            totalItems = totalItems,
+            totalSize = totalSize,
+            apiCount = apiCount,
+        )
+
+        SectionHeader(stringResource(R.string.category_management))
+        catInfos.forEach { (cat, count, size) ->
+            val fileCount = cat.dir(context)?.listFiles()?.size ?: 0
+            CategoryCard(
+                icon = cat.icon,
+                label = cat.label(),
+                count = count,
+                size = size,
+                fileCount = fileCount,
+                onClear = { showClearCategory = cat },
+                enabled = count > 0,
+            )
+        }
+
+        SectionHeader(stringResource(R.string.api_config))
+        ApiConfigCard(
+            providerCount = apiCount,
+            onReset = { showResetApi = true },
+        )
+
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant,
+            modifier = Modifier.padding(vertical = 4.dp),
+        )
+
+        SectionHeader(stringResource(R.string.backup_restore))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Space12),
         ) {
-            Spacer(Modifier.height(4.dp))
-
-            SectionHeader(stringResource(R.string.storage_overview))
-            OverviewCard(
-                totalItems = totalItems,
-                totalSize = totalSize,
-                apiCount = apiCount,
-            )
-
-            SectionHeader(stringResource(R.string.category_management))
-            catInfos.forEach { (cat, count, size) ->
-                val fileCount = cat.dir(context)?.listFiles()?.size ?: 0
-                CategoryCard(
-                    icon = cat.icon,
-                    label = cat.label(),
-                    count = count,
-                    size = size,
-                    fileCount = fileCount,
-                    onClear = { showClearCategory = cat },
-                    enabled = count > 0,
-                )
-            }
-
-            SectionHeader(stringResource(R.string.api_config))
-            ApiConfigCard(
-                providerCount = apiCount,
-                onReset = { showResetApi = true },
-            )
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant,
-                modifier = Modifier.padding(vertical = 4.dp),
-            )
-
-            SectionHeader(stringResource(R.string.backup_restore))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Space12),
+            OutlinedButton(
+                onClick = {
+                    importLauncher.launch(arrayOf(
+                        "application/zip", "application/x-zip-compressed", "application/octet-stream"))
+                },
+                modifier = Modifier.weight(1f),
+                enabled = !working,
             ) {
-                OutlinedButton(
-                    onClick = {
-                        importLauncher.launch(arrayOf(
-                            "application/zip", "application/x-zip-compressed", "application/octet-stream"))
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = !working,
-                ) {
-                    Icon(Lucide.ArrowDownToLine, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(Space8))
-                    Text(stringResource(R.string.import_backup))
-                }
-                OutlinedButton(
-                    onClick = { exportLauncher.launch("st-app-backup.zip") },
-                    modifier = Modifier.weight(1f),
-                    enabled = !working && totalItems > 0,
-                ) {
-                    Icon(Lucide.ArrowUpToLine, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(Space8))
-                    Text(stringResource(R.string.export_all))
-                }
-            }
-
-            SectionHeader(stringResource(R.string.danger_zone))
-            Button(
-                onClick = { showClearAll = true },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !working && totalItems > 0,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                ),
-            ) {
-                Icon(Lucide.Trash2, null, Modifier.size(18.dp))
+                Icon(Lucide.ArrowDownToLine, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(Space8))
-                Text(stringResource(R.string.clear_all_data))
+                Text(stringResource(R.string.import_backup))
             }
-
-            if (working) {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.processing), style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+            OutlinedButton(
+                onClick = { exportLauncher.launch("st-app-backup.zip") },
+                modifier = Modifier.weight(1f),
+                enabled = !working && totalItems > 0,
+            ) {
+                Icon(Lucide.ArrowUpToLine, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(Space8))
+                Text(stringResource(R.string.export_all))
             }
+        }
 
-            Spacer(Modifier.height(32.dp))
+        SectionHeader(stringResource(R.string.danger_zone))
+        Button(
+            onClick = { showClearAll = true },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !working && totalItems > 0,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            ),
+        ) {
+            Icon(Lucide.Trash2, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(Space8))
+            Text(stringResource(R.string.clear_all_data))
+        }
+
+        if (working) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.processing), style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

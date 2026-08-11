@@ -7,22 +7,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
@@ -54,7 +50,7 @@ import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.ModelSelectorSheet
 import me.rerere.fawntavern.ui.components.rememberModelSelectorState
-import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.Space4
@@ -106,60 +102,47 @@ fun DefaultModelPage(onBack: () -> Unit) {
 
     BackHandler(onBack = onBack)
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(stringResource(R.string.default_model_title), onBack) }
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = Space16)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(Space16),
-        ) {
-            Spacer(Modifier.height(4.dp))
+    SettingsSubPage(stringResource(R.string.default_model_title), onBack) {
+        val (chIcon, chName) = roleModelParts(chatEntry)
+        ModelCard(
+            icon = Lucide.MessageSquareText,
+            title = stringResource(R.string.default_model_chat),
+            subtitle = stringResource(R.string.default_model_chat_desc),
+            iconKey = chIcon,
+            displayName = chName,
+            showReset = chatEntry.model.isNotBlank(),
+            showBolt = false,
+            onPick = { pickingRole = DefaultModelStore.ROLE_CHAT; modelSelector.open() },
+            onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_CHAT); version++ },
+        )
 
-            val (chIcon, chName) = roleModelParts(chatEntry)
-            ModelCard(
-                icon = Lucide.MessageSquareText,
-                title = stringResource(R.string.default_model_chat),
-                subtitle = stringResource(R.string.default_model_chat_desc),
-                iconKey = chIcon,
-                displayName = chName,
-                showReset = chatEntry.model.isNotBlank(),
-                showBolt = false,
-                onPick = { pickingRole = DefaultModelStore.ROLE_CHAT; modelSelector.open() },
-                onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_CHAT); version++ },
-            )
+        val (tiIcon, tiName) = roleModelParts(titleEntry)
+        ModelCard(
+            icon = Lucide.FileText,
+            title = stringResource(R.string.default_model_title_role),
+            subtitle = stringResource(R.string.default_model_title_desc),
+            iconKey = tiIcon,
+            displayName = tiName,
+            showReset = titleEntry.model.isNotBlank(),
+            showBolt = true,
+            onPick = { pickingRole = DefaultModelStore.ROLE_TITLE; modelSelector.open() },
+            onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_TITLE); version++ },
+            onConfig = { promptRole = DefaultModelStore.ROLE_TITLE },
+        )
 
-            val (tiIcon, tiName) = roleModelParts(titleEntry)
-            ModelCard(
-                icon = Lucide.FileText,
-                title = stringResource(R.string.default_model_title_role),
-                subtitle = stringResource(R.string.default_model_title_desc),
-                iconKey = tiIcon,
-                displayName = tiName,
-                showReset = titleEntry.model.isNotBlank(),
-                showBolt = true,
-                onPick = { pickingRole = DefaultModelStore.ROLE_TITLE; modelSelector.open() },
-                onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_TITLE); version++ },
-                onConfig = { promptRole = DefaultModelStore.ROLE_TITLE },
-            )
-
-            val (suIcon, suName) = roleModelParts(summaryEntry)
-            ModelCard(
-                icon = Lucide.Bot,
-                title = stringResource(R.string.default_model_summary),
-                subtitle = stringResource(R.string.default_model_summary_desc),
-                iconKey = suIcon,
-                displayName = suName,
-                showReset = summaryEntry.model.isNotBlank(),
-                showBolt = true,
-                onPick = { pickingRole = DefaultModelStore.ROLE_SUMMARY; modelSelector.open() },
-                onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_SUMMARY); version++ },
-                onConfig = { promptRole = DefaultModelStore.ROLE_SUMMARY },
-            )
-
-            Spacer(Modifier.height(Space16))
-        }
+        val (suIcon, suName) = roleModelParts(summaryEntry)
+        ModelCard(
+            icon = Lucide.Bot,
+            title = stringResource(R.string.default_model_summary),
+            subtitle = stringResource(R.string.default_model_summary_desc),
+            iconKey = suIcon,
+            displayName = suName,
+            showReset = summaryEntry.model.isNotBlank(),
+            showBolt = true,
+            onPick = { pickingRole = DefaultModelStore.ROLE_SUMMARY; modelSelector.open() },
+            onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_SUMMARY); version++ },
+            onConfig = { promptRole = DefaultModelStore.ROLE_SUMMARY },
+        )
     }
 
     // ── 模型选择器（三张卡片共用） ──

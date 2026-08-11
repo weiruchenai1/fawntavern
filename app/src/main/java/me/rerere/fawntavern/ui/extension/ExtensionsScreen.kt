@@ -7,21 +7,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,7 +44,7 @@ import me.rerere.fawntavern.extension.ExtensionStore
 import me.rerere.fawntavern.extension.QuickReply
 import me.rerere.fawntavern.extension.builtin.QuickReplyExtension
 import me.rerere.fawntavern.extension.builtin.SummarizeExtension
-import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
@@ -83,19 +78,8 @@ fun ExtensionsScreen(onBack: () -> Unit) {
 @Composable
 private fun ExtensionsList(onBack: () -> Unit, onOpenSettings: (String) -> Unit) {
     BackHandler(onBack = onBack)
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(stringResource(R.string.extensions), onBack) },
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = Space16)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(Space12),
-        ) {
-            Spacer(Modifier.height(4.dp))
-            ExtensionHost.all().forEach { ext -> ExtensionCard(ext, onOpenSettings) }
-            Spacer(Modifier.height(Space16))
-        }
+    SettingsSubPage(stringResource(R.string.extensions), onBack, spacing = Space12) {
+        ExtensionHost.all().forEach { ext -> ExtensionCard(ext, onOpenSettings) }
     }
 }
 
@@ -164,23 +148,12 @@ private fun SummarizeSettings(onBack: () -> Unit) {
         ExtensionStore.setConfig(context, SummarizeExtension.ID, SummarizeExtension.encodeConfig(next))
     }
     BackHandler(onBack = onBack)
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(stringResource(R.string.ext_summarize), onBack) },
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = Space16)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(Space12),
-        ) {
-            Spacer(Modifier.height(4.dp))
-            SettingsCard(stringResource(R.string.ext_summarize)) {
-                SwitchRow(stringResource(R.string.ext_summarize_auto), cfg.auto) { save(cfg.copy(auto = it)) }
-                NumberRow(stringResource(R.string.ext_summarize_keep_recent), cfg.keepRecent) { save(cfg.copy(keepRecent = it.coerceAtLeast(0))) }
-                NumberRow(stringResource(R.string.ext_summarize_target_tokens), cfg.targetTokens) { save(cfg.copy(targetTokens = it.coerceAtLeast(1))) }
-                NumberRow(stringResource(R.string.ext_summarize_trigger_tokens), cfg.triggerTokens) { save(cfg.copy(triggerTokens = it.coerceAtLeast(1))) }
-            }
-            Spacer(Modifier.height(Space16))
+    SettingsSubPage(stringResource(R.string.ext_summarize), onBack, spacing = Space12) {
+        SettingsCard(stringResource(R.string.ext_summarize)) {
+            SwitchRow(stringResource(R.string.ext_summarize_auto), cfg.auto) { save(cfg.copy(auto = it)) }
+            NumberRow(stringResource(R.string.ext_summarize_keep_recent), cfg.keepRecent) { save(cfg.copy(keepRecent = it.coerceAtLeast(0))) }
+            NumberRow(stringResource(R.string.ext_summarize_target_tokens), cfg.targetTokens) { save(cfg.copy(targetTokens = it.coerceAtLeast(1))) }
+            NumberRow(stringResource(R.string.ext_summarize_trigger_tokens), cfg.triggerTokens) { save(cfg.copy(triggerTokens = it.coerceAtLeast(1))) }
         }
     }
 }
@@ -198,56 +171,45 @@ private fun QuickReplySettings(onBack: () -> Unit) {
         ExtensionStore.setConfig(context, QuickReplyExtension.ID, QuickReplyExtension.encodeConfig(next))
     }
     BackHandler(onBack = onBack)
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(stringResource(R.string.ext_quickreply), onBack) },
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = Space16)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(Space8),
-        ) {
-            Spacer(Modifier.height(4.dp))
-            if (items.isEmpty()) {
-                Text(stringResource(R.string.ext_qr_empty), style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(Space12))
-            }
-            items.forEachIndexed { i, qr ->
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainer)
-                        .clickable { editIdx = i }
-                        .padding(Space12),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(qr.label.ifBlank { qr.text }, style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface)
-                        Text(
-                            (if (qr.send) stringResource(R.string.ext_qr_send) + " · " else "") + qr.text,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(Lucide.X, stringResource(R.string.delete),
-                        Modifier.size(20.dp).clip(RoundedCornerShape(4.dp))
-                            .clickable { persist(items.filterIndexed { j, _ -> j != i }) },
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+    SettingsSubPage(stringResource(R.string.ext_quickreply), onBack, spacing = Space8) {
+        if (items.isEmpty()) {
+            Text(stringResource(R.string.ext_qr_empty), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(Space12))
+        }
+        items.forEachIndexed { i, qr ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainer)
-                    .clickable { editIdx = -1 }
+                    .clickable { editIdx = i }
                     .padding(Space12),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Space8),
             ) {
-                Icon(Lucide.Plus, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Text(stringResource(R.string.ext_qr_add), style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f)) {
+                    Text(qr.label.ifBlank { qr.text }, style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        (if (qr.send) stringResource(R.string.ext_qr_send) + " · " else "") + qr.text,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(Lucide.X, stringResource(R.string.delete),
+                    Modifier.size(20.dp).clip(RoundedCornerShape(4.dp))
+                        .clickable { persist(items.filterIndexed { j, _ -> j != i }) },
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.height(Space16))
+        }
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .clickable { editIdx = -1 }
+                .padding(Space12),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Space8),
+        ) {
+            Icon(Lucide.Plus, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.ext_qr_add), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary)
         }
     }
     val idx = editIdx

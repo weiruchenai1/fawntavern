@@ -7,19 +7,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -65,7 +59,7 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.Preferences
 import me.rerere.fawntavern.data.settings.PreferencesStore
-import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.noRippleClickable
 import me.rerere.fawntavern.ui.components.vibrate
 
@@ -105,25 +99,16 @@ private fun PrefHomeScreen(
     onBack: () -> Unit,
     onOpen: (PrefPage) -> Unit,
 ) {
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(stringResource(R.string.preferences), onBack) }
-    ) { padding ->
+    SettingsSubPage(stringResource(R.string.preferences), onBack, spacing = 8.dp, scrollable = false) {
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer)
         ) {
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
-            ) {
-                PrefNavRow(PrefIconPalette, stringResource(R.string.theme_settings)) { onOpen(PrefPage.THEME) }
-                PrefNavRow(PrefIconMessageSquareText, stringResource(R.string.chat_item_display)) { onOpen(PrefPage.CHAT_DISPLAY) }
-                PrefNavRow(PrefIconSigma, stringResource(R.string.rendering_settings)) { onOpen(PrefPage.RENDERING) }
-                PrefNavRow(PrefIconRocket, stringResource(R.string.behavior_startup)) { onOpen(PrefPage.BEHAVIOR) }
-                PrefNavRow(PrefIconVibrate, stringResource(R.string.haptics)) { onOpen(PrefPage.HAPTICS) }
-            }
-            Spacer(Modifier.height(16.dp))
+            PrefNavRow(PrefIconPalette, stringResource(R.string.theme_settings)) { onOpen(PrefPage.THEME) }
+            PrefNavRow(PrefIconMessageSquareText, stringResource(R.string.chat_item_display)) { onOpen(PrefPage.CHAT_DISPLAY) }
+            PrefNavRow(PrefIconSigma, stringResource(R.string.rendering_settings)) { onOpen(PrefPage.RENDERING) }
+            PrefNavRow(PrefIconRocket, stringResource(R.string.behavior_startup)) { onOpen(PrefPage.BEHAVIOR) }
+            PrefNavRow(PrefIconVibrate, stringResource(R.string.haptics)) { onOpen(PrefPage.HAPTICS) }
         }
     }
 }

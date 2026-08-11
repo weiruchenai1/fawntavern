@@ -6,19 +6,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,7 +55,7 @@ import com.composables.icons.lucide.Sun
 import com.composables.icons.lucide.Volume2
 import me.rerere.fawntavern.data.settings.LanguageStore
 import me.rerere.fawntavern.data.settings.ThemeMode
-import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.SettingsSubPage
 
 private val LANGUAGE_CODES = listOf("zh", "en")
 
@@ -225,92 +220,82 @@ fun SettingsScreen(
         ThemeMode.DARK -> Lucide.Moon
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(stringResource(R.string.settings), onBack) }
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            SettingsSection(stringResource(R.string.general_settings)) {
-                SettingsRow(
-                    { Icon(currentThemeIcon, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.color_mode), themeLabel,
-                    onClick = { showThemeDialog = true })
-                SettingsRow(
-                    { Icon(Lucide.Globe, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.language), LanguageStore.getLabel(currentLang),
-                    onClick = { showLangDialog = true })
-                SettingsRow(
-                    { Icon(Lucide.Settings2, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.preferences), onClick = onNavigateToPreferences)
-                SettingsRow(
-                    { Icon(Lucide.ALargeSmall, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.font_size), onClick = onNavigateToFontSize)
-                SettingsRow(
-                    { Icon(Lucide.ScrollText, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.debug_log), onClick = onNavigateToPromptLog)
-            }
-            SettingsSection(stringResource(R.string.workspace)) {
-                SettingsRow(
-                    { Icon(Lucide.Smile, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.characters), onClick = onNavigateToCharacters)
-                SettingsRow(
-                    { Icon(Lucide.SlidersHorizontal, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.presets), onClick = onNavigateToPresets)
-                SettingsRow(
-                    { Icon(Lucide.SquareLibrary, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.world_books), onClick = onNavigateToWorldBooks)
-                SettingsRow(
-                    { Icon(Lucide.Package, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.api_config), onClick = onNavigateToApiConfig)
-                SettingsRow(
-                    { Icon(Lucide.Database, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.data_management), onClick = onNavigateToDataManagement)
-                SettingsRow(
-                    { Icon(Lucide.Bot, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.default_model_title), onClick = onNavigateToDefaultModel)
-                SettingsRow(
-                    { Icon(Lucide.Puzzle, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.extensions), onClick = onNavigateToExtensions)
-                SettingsRow(
-                    { Icon(Lucide.Earth, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.search_service), onClick = onNavigateToWebSearch)
-                SettingsRow(
-                    { Icon(Lucide.Volume2, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.tts), onClick = onNavigateToTts)
-            }
-            SettingsSection(stringResource(R.string.about)) {
-                SettingsRow(
-                    { Icon(Lucide.Info, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.check_update), versionName,
-                    onClick = {
-                        showUpdateDialog = true
-                    })
-                SettingsRow(
-                    { Icon(Lucide.CircleHelp, null, Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    stringResource(R.string.about),
-                    onClick = onNavigateToAbout)
-            }
-            Spacer(Modifier.height(16.dp))
+    SettingsSubPage(stringResource(R.string.settings), onBack) {
+        SettingsSection(stringResource(R.string.general_settings)) {
+            SettingsRow(
+                { Icon(currentThemeIcon, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.color_mode), themeLabel,
+                onClick = { showThemeDialog = true })
+            SettingsRow(
+                { Icon(Lucide.Globe, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.language), LanguageStore.getLabel(currentLang),
+                onClick = { showLangDialog = true })
+            SettingsRow(
+                { Icon(Lucide.Settings2, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.preferences), onClick = onNavigateToPreferences)
+            SettingsRow(
+                { Icon(Lucide.ALargeSmall, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.font_size), onClick = onNavigateToFontSize)
+            SettingsRow(
+                { Icon(Lucide.ScrollText, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.debug_log), onClick = onNavigateToPromptLog)
+        }
+        SettingsSection(stringResource(R.string.workspace)) {
+            SettingsRow(
+                { Icon(Lucide.Smile, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.characters), onClick = onNavigateToCharacters)
+            SettingsRow(
+                { Icon(Lucide.SlidersHorizontal, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.presets), onClick = onNavigateToPresets)
+            SettingsRow(
+                { Icon(Lucide.SquareLibrary, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.world_books), onClick = onNavigateToWorldBooks)
+            SettingsRow(
+                { Icon(Lucide.Package, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.api_config), onClick = onNavigateToApiConfig)
+            SettingsRow(
+                { Icon(Lucide.Database, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.data_management), onClick = onNavigateToDataManagement)
+            SettingsRow(
+                { Icon(Lucide.Bot, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.default_model_title), onClick = onNavigateToDefaultModel)
+            SettingsRow(
+                { Icon(Lucide.Puzzle, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.extensions), onClick = onNavigateToExtensions)
+            SettingsRow(
+                { Icon(Lucide.Earth, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.search_service), onClick = onNavigateToWebSearch)
+            SettingsRow(
+                { Icon(Lucide.Volume2, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.tts), onClick = onNavigateToTts)
+        }
+        SettingsSection(stringResource(R.string.about)) {
+            SettingsRow(
+                { Icon(Lucide.Info, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.check_update), versionName,
+                onClick = {
+                    showUpdateDialog = true
+                })
+            SettingsRow(
+                { Icon(Lucide.CircleHelp, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.about),
+                onClick = onNavigateToAbout)
         }
     }
 }
