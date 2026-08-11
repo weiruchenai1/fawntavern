@@ -399,6 +399,10 @@
     <string name="chat_error_fmt">请求出错：%s</string>
     <string name="delete_chat_title">删除聊天</string>
     <string name="delete_chat_msg">确定删除这条聊天记录吗？</string>
+    <string name="chat_title_label">聊天标题</string>
+    <string name="pin">置顶</string>
+    <string name="unpin">取消置顶</string>
+    <string name="regenerate_title">重新生成标题</string>
     <string name="search_no_results">没有匹配的聊天</string>
     <string name="add_model">添加模型</string>
     <string name="available_models">可用模型</string>

@@ -40,6 +40,7 @@ object ChatRepository {
                 timedWiJson = if (session.timedWi.isEmpty()) "" else json.encodeToString(session.timedWi),
                 extStateJson = if (session.extState.isEmpty()) "" else json.encodeToString(session.extState),
                 title = session.title,
+                pinned = session.pinned,
             ),
             ms = session.messages.map { it.toEntity(session.id) },
         )
@@ -133,6 +134,10 @@ object ChatRepository {
         dao(context).updateTitle(sessionId, title, System.currentTimeMillis())
     }
 
+    suspend fun updatePinned(context: Context, sessionId: String, pinned: Boolean) {
+        dao(context).updatePinned(sessionId, pinned)
+    }
+
     private fun SessionWithMessages.toModel() = ChatSession(
         id = session.id,
         charFile = session.charFile,
@@ -145,6 +150,7 @@ object ChatRepository {
         extState = if (session.extStateJson.isBlank()) emptyMap()
                    else try { json.decodeFromString<Map<String, String>>(session.extStateJson) } catch (_: Exception) { emptyMap() },
         title = session.title,
+        pinned = session.pinned,
     )
 
     private fun MessageEntity.toModel() = ChatMessage(

@@ -399,6 +399,10 @@
     <string name="chat_error_fmt">Request error: %s</string>
     <string name="delete_chat_title">Delete Chat</string>
     <string name="delete_chat_msg">Delete this chat history?</string>
+    <string name="chat_title_label">Chat title</string>
+    <string name="pin">Pin</string>
+    <string name="unpin">Unpin</string>
+    <string name="regenerate_title">Regenerate title</string>
     <string name="search_no_results">No matching chats</string>
     <string name="add_model">Add Model</string>
     <string name="available_models">Available Models</string>

@@ -371,6 +371,28 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun renameSession(id: String, title: String) {
+        val trimmed = title.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            ChatRepository.updateTitle(ctx, id, trimmed)
+            if (session?.id == id) session = session?.copy(title = trimmed)
+        }
+    }
+
+    fun setSessionPinned(id: String, pinned: Boolean) {
+        viewModelScope.launch {
+            ChatRepository.updatePinned(ctx, id, pinned)
+            if (session?.id == id) session = session?.copy(pinned = pinned)
+        }
+    }
+
+    fun regenerateTitle(id: String) {
+        viewModelScope.launch {
+            ChatRepository.get(ctx, id)?.let { generateTitle(it, force = true) }
+        }
+    }
+
     /** 数据管理页可能清空了聊天记录/角色卡，返回时重新加载并校验当前会话 */
     fun refreshAfterDataManagement() {
         viewModelScope.launch {
@@ -798,7 +820,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * 失败静默跳过（不清掉已有标题），空结果不写。
      */
     private fun maybeGenerateTitle(session: ChatSession) {
-        if (session.title.isNotBlank()) return
+        generateTitle(session, force = false)
+    }
+
+    private fun generateTitle(session: ChatSession, force: Boolean) {
+        if (!force && session.title.isNotBlank()) return
         val userMsgs = session.messages.filter { it.role == "user" }
         val aiMsgs = session.messages.filter { it.role == "assistant" }
         if (userMsgs.isEmpty() || aiMsgs.isEmpty()) return

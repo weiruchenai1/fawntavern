@@ -25,6 +25,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -52,6 +54,8 @@ import com.composables.icons.lucide.Bolt
 import com.composables.icons.lucide.ImagePlus
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.PencilLine
+import com.composables.icons.lucide.Pin
+import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Smile
 import com.composables.icons.lucide.Trash2
@@ -109,6 +113,9 @@ fun ChatDrawerContent(
     sessions: List<ChatSession> = emptyList(),
     currentSessionId: String? = null,
     onOpenSession: (String) -> Unit = {},
+    onRenameSession: (String, String) -> Unit = { _, _ -> },
+    onPinSession: (String, Boolean) -> Unit = { _, _ -> },
+    onRegenerateTitle: (String) -> Unit = {},
     onDeleteSession: (String) -> Unit = {},
     showChatListDate: Boolean = false,
     longPressHaptic: Boolean = true,
@@ -333,12 +340,15 @@ fun ChatDrawerContent(
             } else if (showChatListDate) {
                 // 按日期分组：今天 / 昨天 / x月x日 作为组头显示在标题卡片之外，卡片内不再放时间
                 val today = java.time.LocalDate.now()
-                val sorted = sessions.sortedByDescending { it.updatedAt }
+                val sorted = sessions.sortedWith(
+                    compareByDescending<ChatSession> { it.pinned }
+                        .thenByDescending { it.updatedAt }
+                )
                 var lastDate: java.time.LocalDate? = null
                 sorted.forEach { s ->
                     val date = toLocalDate(s.updatedAt)
                     if (date != null && date != lastDate) {
-                        item(key = "date_$date") {
+                        item(key = "date_${s.pinned}_$date") {
                             Text(dateHeaderText(date, today, context),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -346,11 +356,19 @@ fun ChatDrawerContent(
                         }
                         lastDate = date
                     }
-                    item(key = s.id) { SessionCard(s, currentSessionId, onOpenSession, onDeleteSession, longPressHaptic) }
+                    item(key = s.id) {
+                        SessionCard(
+                            s, currentSessionId, onOpenSession, onRenameSession,
+                            onPinSession, onRegenerateTitle, onDeleteSession, longPressHaptic,
+                        )
+                    }
                 }
             } else {
                 itemsIndexed(sessions, key = { _, s -> s.id }) { _, s ->
-                    SessionCard(s, currentSessionId, onOpenSession, onDeleteSession, longPressHaptic)
+                    SessionCard(
+                        s, currentSessionId, onOpenSession, onRenameSession,
+                        onPinSession, onRegenerateTitle, onDeleteSession, longPressHaptic,
+                    )
                 }
             }
         }
@@ -412,9 +430,13 @@ private fun SessionCard(
     s: ChatSession,
     currentSessionId: String?,
     onOpenSession: (String) -> Unit,
+    onRenameSession: (String, String) -> Unit,
+    onPinSession: (String, Boolean) -> Unit,
+    onRegenerateTitle: (String) -> Unit,
     onDeleteSession: (String) -> Unit,
     longPressHaptic: Boolean,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     val selected = s.id == currentSessionId
     val fallbackTitle = stringResource(R.string.new_chat)
     // 标题：优先用模型生成的 title，回退到首条用户消息预览
@@ -422,23 +444,78 @@ private fun SessionCard(
         ?: s.messages.firstOrNull { it.role == "user" }?.content
             ?.replace('\n', ' ')?.take(24)
         ?: fallbackTitle
-    Row(
-        Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.secondaryContainer
-                else Color.Transparent
+    Box {
+        Row(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (selected) MaterialTheme.colorScheme.secondaryContainer
+                    else Color.Transparent
+                )
+                .appClickable(
+                    onClick = { onOpenSession(s.id) },
+                    onLongClick = { showMenu = true },
+                    hapticFeedbackEnabled = longPressHaptic,
+                )
+                .padding(horizontal = Space8, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
-            .appClickable(
-                onClick = { onOpenSession(s.id) },
-                onLongClick = { onDeleteSession(s.id) },
-                hapticFeedbackEnabled = longPressHaptic,
+            if (s.pinned) {
+                Icon(
+                    Lucide.Pin,
+                    stringResource(R.string.pin),
+                    Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.rename)) },
+                leadingIcon = { Icon(Lucide.PencilLine, null, Modifier.size(18.dp)) },
+                onClick = {
+                    showMenu = false
+                    onRenameSession(s.id, title)
+                },
             )
-            .padding(horizontal = Space8, vertical = 8.dp),
-    ) {
-        Text(title, style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1, overflow = TextOverflow.Ellipsis)
+            DropdownMenuItem(
+                text = { Text(stringResource(if (s.pinned) R.string.unpin else R.string.pin)) },
+                leadingIcon = { Icon(Lucide.Pin, null, Modifier.size(18.dp)) },
+                onClick = {
+                    showMenu = false
+                    onPinSession(s.id, !s.pinned)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.regenerate_title)) },
+                leadingIcon = { Icon(Lucide.RefreshCw, null, Modifier.size(18.dp)) },
+                onClick = {
+                    showMenu = false
+                    onRegenerateTitle(s.id)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
+                leadingIcon = {
+                    Icon(Lucide.Trash2, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                },
+                onClick = {
+                    showMenu = false
+                    onDeleteSession(s.id)
+                },
+            )
+        }
     }
 }
 

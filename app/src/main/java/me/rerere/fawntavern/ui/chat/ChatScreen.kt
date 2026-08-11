@@ -25,6 +25,7 @@ import me.rerere.fawntavern.ui.components.FloatingWindow
 import me.rerere.fawntavern.ui.components.rememberInteractiveDrawerState
 import me.rerere.fawntavern.ui.components.InteractiveDrawer
 import me.rerere.fawntavern.ui.components.ModelSelectorSheet
+import me.rerere.fawntavern.ui.components.RenameDialog
 import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -120,6 +121,7 @@ fun ChatScreen(
     var editTargetIdx by remember { mutableStateOf<Long?>(null) }
     var selectCopyText by remember { mutableStateOf<String?>(null) }
     var deleteSessionId by remember { mutableStateOf<String?>(null) }
+    var renameSession by remember { mutableStateOf<Pair<String, String>?>(null) }
     var scrollToBottomTrigger by remember { mutableStateOf(0) }
     // 重新生成前确认：偏好开启时把待执行的重答存这里，弹框确认后执行
     var pendingRegenerate by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -397,6 +399,9 @@ fun ChatScreen(
                         scope.launch { drawerState.close() }
                         vm.openSession(id)
                     },
+                    onRenameSession = { id, title -> renameSession = id to title },
+                    onPinSession = vm::setSessionPinned,
+                    onRegenerateTitle = vm::regenerateTitle,
                     onDeleteSession = { id -> deleteSessionId = id },
                     showChatListDate = prefs.showChatListDate,
                     longPressHaptic = prefs.longPressHaptic,
@@ -734,6 +739,20 @@ fun ChatScreen(
             dismissButton = {
                 TextButton(onClick = { editTargetIdx = null }) { Text(stringResource(R.string.cancel)) }
             },
+        )
+    }
+
+    renameSession?.let { (id, title) ->
+        RenameDialog(
+            initialName = title,
+            label = stringResource(R.string.chat_title_label),
+            onConfirm = { newTitle ->
+                if (newTitle.isNotBlank()) {
+                    vm.renameSession(id, newTitle)
+                    renameSession = null
+                }
+            },
+            onDismiss = { renameSession = null },
         )
     }
 
