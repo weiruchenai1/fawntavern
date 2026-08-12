@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
 import android.content.Context
+import me.rerere.fawntavern.data.security.SecurePreferences
 import me.rerere.fawntavern.data.search.SearchServiceOptions
 import me.rerere.fawntavern.data.search.newSearchId
 import org.json.JSONArray
@@ -18,6 +19,7 @@ object SearchStore {
     private const val KEY_SERVICES = "services"
     private const val KEY_SELECTED = "selected"
     private const val KEY_RESULT_SIZE = "result_size"
+    private const val KEY_CORRUPTED = "services_corrupted"
 
     /** 联网搜索总开关：开启后发送消息时用最近一条用户消息联网搜索并注入结果 */
     fun isEnabled(context: Context): Boolean =
@@ -36,22 +38,30 @@ object SearchStore {
 
     /** 已配置的提供商列表（有序）。旧格式首次读到会迁移并写回。 */
     fun getServices(context: Context): List<SearchServiceOptions> {
-        val raw = prefs(context).getString(KEY_SERVICES, null)
-        if (raw == null) return migrateLegacy(context)
+        val p = prefs(context)
+        val stored = p.getString(KEY_SERVICES, null)
+        val raw = SecurePreferences.getString(context, p, KEY_SERVICES, null)
+        if (raw == null) {
+            if (stored == null) return migrateLegacy(context)
+            return recoverDefaults(context, p)
+        }
         val list = try {
             val arr = JSONArray(raw)
             (0 until arr.length()).mapNotNull { readService(arr.getJSONObject(it)) }
-        } catch (_: Exception) { emptyList() }
-        return list.ifEmpty { listOf(SearchServiceOptions.fromKey(SearchServiceOptions.ALL.first().key)) }
+        } catch (_: Exception) {
+            return recoverDefaults(context, p)
+        }
+        return list.ifEmpty { recoverDefaults(context, p) }
     }
 
     /** 整表保存提供商列表；顺带把越界的选中下标收敛回 0 */
     fun setServices(context: Context, services: List<SearchServiceOptions>) {
         val arr = JSONArray()
         services.forEach { arr.put(toJson(it)) }
-        prefs(context).edit().putString(KEY_SERVICES, arr.toString()).apply()
-        val sel = prefs(context).getInt(KEY_SELECTED, 0)
-        if (sel >= services.size) prefs(context).edit().putInt(KEY_SELECTED, 0).apply()
+        val p = prefs(context)
+        SecurePreferences.putString(context, p, KEY_SERVICES, arr.toString())
+        val sel = p.getInt(KEY_SELECTED, 0)
+        if (sel >= services.size) p.edit().putInt(KEY_SELECTED, 0).apply()
     }
 
     fun addService(context: Context, options: SearchServiceOptions) {
@@ -81,6 +91,54 @@ object SearchStore {
     /** 当前选中提供商配置 */
     fun getSelected(context: Context): SearchServiceOptions =
         getServices(context).getOrElse(getSelectedIndex(context)) { SearchServiceOptions.ALL.first() }
+
+    fun consumeCorruptionNotice(context: Context): Boolean {
+        val p = prefs(context)
+        if (!p.getBoolean(KEY_CORRUPTED, false)) return false
+        p.edit().putBoolean(KEY_CORRUPTED, false).apply()
+        return true
+    }
+
+    internal fun exportPortable(context: Context): String = JSONObject()
+        .put("enabled", isEnabled(context))
+        .put("resultSize", getResultSize(context))
+        .put("selected", getSelectedIndex(context))
+        .put("services", JSONArray().apply { getServices(context).forEach { put(toJson(it)) } })
+        .toString()
+
+    internal fun parsePortable(raw: String): PortableSearchConfig {
+        val root = JSONObject(raw)
+        val servicesArray = root.getJSONArray("services")
+        val services = (0 until servicesArray.length()).map { readService(servicesArray.getJSONObject(it)) }
+        require(services.isNotEmpty()) { "Search configuration contains no services" }
+        return PortableSearchConfig(
+            enabled = root.optBoolean("enabled", false),
+            resultSize = root.optInt("resultSize", 5).coerceIn(3, 10),
+            selected = root.optInt("selected", 0).coerceIn(0, services.lastIndex),
+            services = services,
+        )
+    }
+
+    internal fun importPortable(context: Context, config: PortableSearchConfig) {
+        setServices(context, config.services)
+        setSelectedIndex(context, config.selected)
+        setResultSize(context, config.resultSize)
+        setEnabled(context, config.enabled)
+    }
+
+    internal data class PortableSearchConfig(
+        val enabled: Boolean,
+        val resultSize: Int,
+        val selected: Int,
+        val services: List<SearchServiceOptions>,
+    )
+
+    private fun recoverDefaults(context: Context, p: android.content.SharedPreferences): List<SearchServiceOptions> {
+        val defaults = listOf(SearchServiceOptions.fromKey(SearchServiceOptions.ALL.first().key))
+        setServices(context, defaults)
+        p.edit().putBoolean(KEY_CORRUPTED, true).apply()
+        return defaults
+    }
 
     // ── 序列化 ──
 
@@ -155,10 +213,16 @@ object SearchStore {
     /** 旧格式（单选中 provider + 按 key 分存 configs）迁移成单元素列表并写回 */
     private fun migrateLegacy(context: Context): List<SearchServiceOptions> {
         val p = prefs(context)
-        val legacyKey = p.getString("provider", null) ?: return listOf(SearchServiceOptions.fromKey(SearchServiceOptions.ALL.first().key))
+        val legacyKey = p.getString("provider", null)
+        if (legacyKey == null) {
+            val defaults = listOf(SearchServiceOptions.fromKey(SearchServiceOptions.ALL.first().key))
+            setServices(context, defaults)
+            return defaults
+        }
         val configs = try { JSONObject(p.getString("configs", null) ?: "{}") } catch (_: Exception) { JSONObject() }
         val service = applyLegacyConfig(SearchServiceOptions.fromKey(legacyKey), configs.optJSONObject(legacyKey))
         setServices(context, listOf(service))
+        p.edit().remove("provider").remove("configs").apply()
         return listOf(service)
     }
 

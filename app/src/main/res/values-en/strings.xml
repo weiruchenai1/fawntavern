@@ -121,7 +121,20 @@
     <string name="reset_to_default">Reset to Default</string>
     <string name="backup_restore">Backup &amp; Restore</string>
     <string name="import_backup">Import Backup</string>
-    <string name="export_all">Export All</string>
+    <string name="export_all">Export Backup</string>
+    <string name="select_export_content">Select content to export</string>
+    <string name="select_import_content">Select content to import</string>
+    <string name="export_backup_confirm">Export</string>
+    <string name="import_backup_confirm">Import</string>
+    <string name="backup_section_characters">Characters</string>
+    <string name="backup_section_presets">Presets</string>
+    <string name="backup_section_worldbooks">World books</string>
+    <string name="backup_section_chats">Chats and attachments</string>
+    <string name="backup_section_api">API configuration and keys</string>
+    <string name="backup_section_search">Search configuration and credentials</string>
+    <string name="backup_section_tts">TTS configuration and keys</string>
+    <string name="backup_section_avatar">Avatar</string>
+    <string name="backup_sensitive_warning">Selected credentials and keys will be stored as plain text in the backup file. Keep it private and do not share it.</string>
     <string name="danger_zone">Danger Zone</string>
     <string name="clear_all_data">Clear All Data</string>
     <string name="processing">Processing…</string>
@@ -131,7 +144,7 @@
     <string name="clear_category_msg_fmt">Delete all %1$d %2$s items? This cannot be undone.</string>
     <string name="clear_category_btn">Clear</string>
     <string name="clear_all_title">Clear All Data</string>
-    <string name="clear_all_msg">Delete all characters, presets and world books?\n\nThis cannot be undone.</string>
+    <string name="clear_all_msg">Delete all characters, presets, world books and chat history?\n\nThis cannot be undone.</string>
     <string name="clear_all_btn">Clear All</string>
     <string name="reset_api_title">Reset API Config</string>
     <string name="reset_api_msg">Reset API config to defaults? All custom providers and API keys will be removed.</string>
@@ -157,9 +170,21 @@
     <string name="toast_cleared_fmt">%s cleared</string>
     <string name="toast_cleared_all">All data cleared</string>
     <string name="toast_api_reset">API config reset</string>
+    <string name="api_config_recovered">API config was damaged. Safe defaults were loaded; review and save your settings again.</string>
+    <string name="search_config_recovered">Search configuration was damaged and was reset to safe defaults.</string>
+    <string name="tts_config_recovered">Speech configuration was damaged and was reset to system speech.</string>
     <string name="toast_export_success">Export successful</string>
+    <string name="toast_backup_content_imported">Selected backup content imported</string>
     <string name="toast_export_failed_fmt">Export failed: %s</string>
     <string name="toast_imported_files_fmt">Imported %d files</string>
+    <plurals name="backup_files">
+        <item quantity="one">Restored %d file</item>
+        <item quantity="other">Restored %d files</item>
+    </plurals>
+    <plurals name="backup_sessions_suffix">
+        <item quantity="one"> and %d conversation</item>
+        <item quantity="other"> and %d conversations</item>
+    </plurals>
     <string name="toast_import_failed_count_fmt">Failed to import %d file(s)</string>
     <string name="file_too_large_to_send">File too large (over 20 MB), cannot send</string>
     <string name="attachment_send_failed">Failed to process attachment, please retry</string>

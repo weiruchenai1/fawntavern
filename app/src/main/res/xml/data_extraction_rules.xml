@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="api_config.xml" />
+        <exclude domain="sharedpref" path="web_search.xml" />
+        <exclude domain="sharedpref" path="tts.xml" />
+        <exclude domain="database" path="chats.db" />
+        <exclude domain="database" path="chats.db-wal" />
+        <exclude domain="database" path="chats.db-shm" />
+        <exclude domain="file" path="attachments/" />
+        <exclude domain="file" path="avatars/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="api_config.xml" />
+        <exclude domain="sharedpref" path="web_search.xml" />
+        <exclude domain="sharedpref" path="tts.xml" />
+        <exclude domain="database" path="chats.db" />
+        <exclude domain="database" path="chats.db-wal" />
+        <exclude domain="database" path="chats.db-shm" />
+        <exclude domain="file" path="attachments/" />
+        <exclude domain="file" path="avatars/" />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="sharedpref" path="api_config.xml" />
+    <exclude domain="sharedpref" path="web_search.xml" />
+    <exclude domain="sharedpref" path="tts.xml" />
+    <exclude domain="database" path="chats.db" />
+    <exclude domain="database" path="chats.db-wal" />
+    <exclude domain="database" path="chats.db-shm" />
+    <exclude domain="file" path="attachments/" />
+    <exclude domain="file" path="avatars/" />
+</full-backup-content>

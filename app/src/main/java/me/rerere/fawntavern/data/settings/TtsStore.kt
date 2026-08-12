@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
 import android.content.Context
+import me.rerere.fawntavern.data.security.SecurePreferences
 import me.rerere.fawntavern.data.speech.TTSProviderSetting
 import me.rerere.fawntavern.data.speech.newTtsId
 import org.json.JSONArray
@@ -16,24 +17,33 @@ object TtsStore {
     private const val PREFS = "tts"
     private const val KEY_SERVICES = "services"
     private const val KEY_SELECTED = "selected"
+    private const val KEY_CORRUPTED = "services_corrupted"
 
     /** 已配置的提供商列表（有序）。旧格式首次读到会迁移并写回。 */
     fun getServices(context: Context): List<TTSProviderSetting> {
-        val raw = prefs(context).getString(KEY_SERVICES, null)
-        if (raw == null) return migrateLegacy(context)
+        val p = prefs(context)
+        val stored = p.getString(KEY_SERVICES, null)
+        val raw = SecurePreferences.getString(context, p, KEY_SERVICES, null)
+        if (raw == null) {
+            if (stored == null) return migrateLegacy(context)
+            return recoverDefaults(context, p)
+        }
         val list = try {
             val arr = JSONArray(raw)
             (0 until arr.length()).mapNotNull { readService(arr.getJSONObject(it)) }
-        } catch (_: Exception) { emptyList() }
-        return list.ifEmpty { listOf(TTSProviderSetting.SystemTTS()) }
+        } catch (_: Exception) {
+            return recoverDefaults(context, p)
+        }
+        return list.ifEmpty { recoverDefaults(context, p) }
     }
 
     /** 整表保存提供商列表；选中 id 缺失或不在列表时收敛到第一个 */
     fun setServices(context: Context, services: List<TTSProviderSetting>) {
         val arr = JSONArray()
         services.forEach { arr.put(toJson(it)) }
-        prefs(context).edit().putString(KEY_SERVICES, arr.toString()).apply()
-        val selectedId = prefs(context).getString(KEY_SELECTED, null)
+        val p = prefs(context)
+        SecurePreferences.putString(context, p, KEY_SERVICES, arr.toString())
+        val selectedId = p.getString(KEY_SELECTED, null)
         if (selectedId == null || services.none { it.id == selectedId }) {
             prefs(context).edit().putString(KEY_SELECTED, services.firstOrNull()?.id ?: "").apply()
         }
@@ -67,6 +77,45 @@ object TtsStore {
     fun getSetting(context: Context): TTSProviderSetting {
         val services = getServices(context)
         return services.find { it.id == getSelectedId(context) } ?: services.first()
+    }
+
+    fun consumeCorruptionNotice(context: Context): Boolean {
+        val p = prefs(context)
+        if (!p.getBoolean(KEY_CORRUPTED, false)) return false
+        p.edit().putBoolean(KEY_CORRUPTED, false).apply()
+        return true
+    }
+
+    internal fun exportPortable(context: Context): String = JSONObject()
+        .put("selectedId", getSelectedId(context))
+        .put("services", JSONArray().apply { getServices(context).forEach { put(toJson(it)) } })
+        .toString()
+
+    internal fun parsePortable(raw: String): PortableTtsConfig {
+        val root = JSONObject(raw)
+        val servicesArray = root.getJSONArray("services")
+        val services = (0 until servicesArray.length()).map { readService(servicesArray.getJSONObject(it)) }
+        require(services.isNotEmpty()) { "TTS configuration contains no services" }
+        val selected = root.optString("selectedId").takeIf { id -> services.any { it.id == id } }
+            ?: services.first().id
+        return PortableTtsConfig(selected, services)
+    }
+
+    internal fun importPortable(context: Context, config: PortableTtsConfig) {
+        setServices(context, config.services)
+        setSelectedId(context, config.selectedId)
+    }
+
+    internal data class PortableTtsConfig(
+        val selectedId: String,
+        val services: List<TTSProviderSetting>,
+    )
+
+    private fun recoverDefaults(context: Context, p: android.content.SharedPreferences): List<TTSProviderSetting> {
+        val defaults = listOf(TTSProviderSetting.SystemTTS())
+        setServices(context, defaults)
+        p.edit().putBoolean(KEY_CORRUPTED, true).apply()
+        return defaults
     }
 
     // ── 序列化 ──
@@ -162,6 +211,13 @@ object TtsStore {
             )
         }
         setServices(context, listOf(service))
+        p.edit()
+            .remove("provider")
+            .remove("openai_api_key")
+            .remove("openai_base_url")
+            .remove("openai_model")
+            .remove("openai_voice")
+            .apply()
         return listOf(service)
     }
 

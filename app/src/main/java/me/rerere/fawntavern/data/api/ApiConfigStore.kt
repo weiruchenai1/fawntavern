@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.data.api
 
 import android.content.Context
+import me.rerere.fawntavern.data.security.SecurePreferences
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -8,6 +9,7 @@ object ApiConfigStore {
     private const val PREFS = "api_config"
     private const val KEY_PROVIDERS = "providers"
     private const val KEY_CURRENT = "current_model"
+    private const val KEY_CORRUPTED = "providers_corrupted"
     /** 预置的常见模型提供商（默认全部禁用、不带模型） */
     private fun defaultProviders(): List<ApiProvider> = listOf(
         ApiProvider(
@@ -84,10 +86,13 @@ object ApiConfigStore {
 
     fun loadConfig(context: Context): ApiConfig {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val raw = p.getString(KEY_PROVIDERS, null)
+        val stored = p.getString(KEY_PROVIDERS, null)
+        val raw = SecurePreferences.getString(context, p, KEY_PROVIDERS, null)
         if (raw == null) {
+            if (stored != null) p.edit().putBoolean(KEY_CORRUPTED, true).apply()
             val config = ApiConfig(providers = defaultProviders())
             saveConfig(context, config)
+            if (stored != null) p.edit().putBoolean(KEY_CORRUPTED, true).apply()
             return config
         }
 
@@ -115,7 +120,12 @@ object ApiConfigStore {
                     balanceJsonKey = obj.optString("balanceJsonKey", ""),
                 ))
             }
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+            val recovered = ApiConfig(providers = defaultProviders())
+            saveConfig(context, recovered)
+            p.edit().putBoolean(KEY_CORRUPTED, true).apply()
+            return recovered
+        }
 
         return ApiConfig(
             providers = providers,
@@ -130,8 +140,34 @@ object ApiConfigStore {
     }
 
     fun saveConfig(context: Context, config: ApiConfig) {
-        val arr = JSONArray()
-        config.providers.forEach { p ->
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        SecurePreferences.putString(context, prefs, KEY_PROVIDERS, providersToJson(config.providers).toString())
+        prefs.edit()
+            .putString(KEY_CURRENT, config.currentModel)
+            .putBoolean(KEY_CORRUPTED, false)
+            .apply()
+    }
+
+    internal fun exportPortable(context: Context): String {
+        val config = loadConfig(context)
+        return JSONObject()
+            .put("providers", providersToJson(config.providers))
+            .put("currentModel", config.currentModel)
+            .toString()
+    }
+
+    internal fun parsePortable(raw: String): ApiConfig {
+        val root = JSONObject(raw)
+        val providers = providersFromJson(root.getJSONArray("providers"))
+        require(providers.isNotEmpty()) { "API configuration contains no providers" }
+        return ApiConfig(
+            providers = providers,
+            currentModel = root.optString("currentModel"),
+        ).withValidCurrentModel()
+    }
+
+    private fun providersToJson(providers: List<ApiProvider>): JSONArray = JSONArray().apply {
+        providers.forEach { p ->
             val obj = JSONObject()
             obj.put("id", p.id)
             obj.put("name", p.name)
@@ -143,12 +179,38 @@ object ApiConfigStore {
             obj.put("balanceEnabled", p.balanceEnabled)
             obj.put("balancePath", p.balancePath)
             obj.put("balanceJsonKey", p.balanceJsonKey)
-            arr.put(obj)
+            put(obj)
         }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY_PROVIDERS, arr.toString())
-            .putString(KEY_CURRENT, config.currentModel)
-            .apply()
+    }
+
+    private fun providersFromJson(arr: JSONArray): List<ApiProvider> =
+        (0 until arr.length()).map { i ->
+            val obj = arr.getJSONObject(i)
+            val models = mutableListOf<ModelInfo>()
+            obj.optJSONArray("models")?.let { modelArray ->
+                for (j in 0 until modelArray.length()) {
+                    modelArray.optJSONObject(j)?.let { models.add(modelFromJson(it)) }
+                }
+            }
+            ApiProvider(
+                id = obj.optString("id", java.util.UUID.randomUUID().toString()),
+                name = obj.optString("name", ""),
+                type = obj.optString("type", "openai"),
+                baseUrl = obj.optString("baseUrl", ""),
+                apiKey = obj.optString("apiKey", ""),
+                enabled = obj.optBoolean("enabled", true),
+                models = models,
+                balanceEnabled = obj.optBoolean("balanceEnabled", false),
+                balancePath = obj.optString("balancePath", ""),
+                balanceJsonKey = obj.optString("balanceJsonKey", ""),
+            )
+        }
+
+    fun consumeCorruptionNotice(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_CORRUPTED, false)) return false
+        prefs.edit().putBoolean(KEY_CORRUPTED, false).apply()
+        return true
     }
 
     // ── 模型元数据的 JSON 编解码 ──

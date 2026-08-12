@@ -1,5 +1,6 @@
 package me.rerere.fawntavern.ui.settings
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -44,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,6 +91,13 @@ import sh.calvin.reorderable.ReorderableItem
 fun TtsConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var services by remember { mutableStateOf(TtsStore.getServices(context)) }
+    val configWasRecovered = remember { TtsStore.consumeCorruptionNotice(context) }
+    val configRecoveredMessage = stringResource(R.string.tts_config_recovered)
+    LaunchedEffect(configWasRecovered) {
+        if (configWasRecovered) Toast.makeText(
+            context, configRecoveredMessage, Toast.LENGTH_LONG
+        ).show()
+    }
     var selectedId by remember { mutableStateOf(TtsStore.getSelectedId(context)) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }

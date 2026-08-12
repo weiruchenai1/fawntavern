@@ -197,7 +197,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // 会话列表来自 Repository 的 Flow：任何 save/delete/clear 后自动刷新
         viewModelScope.launch {
             val defaultName = CharacterRepository.ensureDefaultCard(ctx, ctx.getString(R.string.default_character))
-            if (ChatRepository.list(ctx).isEmpty()) {
+            if (ChatRepository.count(ctx) == 0) {
                 session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName, userName)
             }
             ChatRepository.sessionsFlow(ctx).collect {
@@ -207,7 +207,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     session = if (PreferencesStore.get(ctx).newChatOnLaunch) {
                         val card = loadCard(defaultName)
                         ConversationOps.newSession(card, defaultName, defaultName, userName)
-                    } else it.firstOrNull()
+                    } else it.firstOrNull()?.let { summary -> ChatRepository.get(ctx, summary.id) }
                 }
             }
         }
@@ -331,7 +331,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun openSession(id: String) {
         if (generating) return
         // 悬浮窗是系统级、独立于会话：切换会话不停朗读
-        session = sessions.firstOrNull { it.id == id } ?: session
+        viewModelScope.launch {
+            ChatRepository.get(ctx, id)?.let { session = it }
+        }
     }
 
     /** 顶栏"新聊天"：当前已是无用户消息的新聊天则不重复创建 */
@@ -354,7 +356,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (!PreferencesStore.get(ctx).newChatOnCharSwitch) {
                 val existing = sessions.firstOrNull { it.charFile == fileName }
                 if (existing != null) {
-                    session = existing
+                    session = ChatRepository.get(ctx, existing.id) ?: existing
                     return@launch
                 }
             }
@@ -369,7 +371,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val curCharFile = session?.charFile ?: ""
             val curCharName = session?.charName ?: ""
             ChatRepository.delete(ctx, id)
-            val fresh = ChatRepository.list(ctx)
+            val fresh = ChatRepository.listSummaries(ctx)
             if (session?.id == id) {
                 // 留在当前角色：默认优先切到该角色的其他会话；偏好"删除话题后新建对话"
                 // 开启时总是新建（内存态，不落盘）。没有其他会话时也回退到新建。
@@ -377,6 +379,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     ConversationOps.newSession(currentCard, curCharFile, curCharName, userName)
                 } else {
                     fresh.firstOrNull { it.charFile == curCharFile }
+                        ?.let { ChatRepository.get(ctx, it.id) }
                         ?: ConversationOps.newSession(currentCard, curCharFile, curCharName, userName)
                 }
             }
@@ -408,14 +411,17 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 数据管理页可能清空了聊天记录/角色卡，返回时重新加载并校验当前会话 */
     fun refreshAfterDataManagement() {
         viewModelScope.launch {
-            val fresh = ChatRepository.list(ctx)
+            val fresh = ChatRepository.listSummaries(ctx)
             sessions = fresh
             val cur = session
-            if (cur != null && fresh.none { it.id == cur.id }) {
+            if (cur != null && fresh.any { it.id == cur.id }) {
+                session = ChatRepository.get(ctx, cur.id)
+            } else if (cur != null) {
                 val card = if (cur.charFile.isBlank()) null else loadCard(cur.charFile)
                 currentCard = card
                 // 角色卡还在：留在该角色（开场白）；角色卡被清了：回到内置默认角色卡
                 session = fresh.firstOrNull { it.charFile == cur.charFile }
+                    ?.let { ChatRepository.get(ctx, it.id) }
                     ?: if (card != null) {
                         ConversationOps.newSession(card, cur.charFile, cur.charName, userName)
                     } else {
@@ -473,6 +479,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 if (persistFailed) {
+                    ChatRepository.collectUnusedAttachments(ctx)
                     inputText = text
                     attachments = atts
                     sendError = ctx.getString(R.string.attachment_send_failed)

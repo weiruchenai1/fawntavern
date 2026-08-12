@@ -121,7 +121,20 @@
     <string name="reset_to_default">重置为默认</string>
     <string name="backup_restore">备份与恢复</string>
     <string name="import_backup">导入备份</string>
-    <string name="export_all">导出全部</string>
+    <string name="export_all">导出备份</string>
+    <string name="select_export_content">选择导出内容</string>
+    <string name="select_import_content">选择导入内容</string>
+    <string name="export_backup_confirm">导出</string>
+    <string name="import_backup_confirm">导入</string>
+    <string name="backup_section_characters">角色卡</string>
+    <string name="backup_section_presets">预设</string>
+    <string name="backup_section_worldbooks">世界书</string>
+    <string name="backup_section_chats">聊天记录和附件</string>
+    <string name="backup_section_api">API 配置和密钥</string>
+    <string name="backup_section_search">搜索配置和凭据</string>
+    <string name="backup_section_tts">TTS 配置和密钥</string>
+    <string name="backup_section_avatar">头像</string>
+    <string name="backup_sensitive_warning">所选凭据和密钥将以明文写入备份文件。请妥善保管，不要分享给他人。</string>
     <string name="danger_zone">危险操作</string>
     <string name="clear_all_data">清除全部数据</string>
     <string name="processing">处理中…</string>
@@ -131,7 +144,7 @@
     <string name="clear_category_msg_fmt">确定要删除全部 %1$d 个%2$s数据吗？此操作不可撤销。</string>
     <string name="clear_category_btn">确定清除</string>
     <string name="clear_all_title">清除全部数据</string>
-    <string name="clear_all_msg">确定要删除所有角色、预设和世界书吗？\n\n此操作不可撤销。</string>
+    <string name="clear_all_msg">确定要删除所有角色、预设、世界书和聊天记录吗？\n\n此操作不可撤销。</string>
     <string name="clear_all_btn">全部清除</string>
     <string name="reset_api_title">重置 API 配置</string>
     <string name="reset_api_msg">确定要重置 API 配置为默认值吗？所有自定义提供商和 API Key 将被清除。</string>
@@ -157,9 +170,19 @@
     <string name="toast_cleared_fmt">已清除%s</string>
     <string name="toast_cleared_all">已清除全部数据</string>
     <string name="toast_api_reset">API 配置已重置</string>
+    <string name="api_config_recovered">API 配置已损坏，已加载安全默认值；请检查并重新保存配置</string>
+    <string name="search_config_recovered">搜索服务配置已损坏，已恢复为安全默认值</string>
+    <string name="tts_config_recovered">语音服务配置已损坏，已恢复为系统语音</string>
     <string name="toast_export_success">导出成功</string>
+    <string name="toast_backup_content_imported">所选备份内容已导入</string>
     <string name="toast_export_failed_fmt">导出失败: %s</string>
     <string name="toast_imported_files_fmt">已导入 %d 个文件</string>
+    <plurals name="backup_files">
+        <item quantity="other">已恢复 %d 个文件</item>
+    </plurals>
+    <plurals name="backup_sessions_suffix">
+        <item quantity="other">和 %d 个会话</item>
+    </plurals>
     <string name="toast_import_failed_count_fmt">有 %d 个文件导入失败</string>
     <string name="file_too_large_to_send">文件过大（超过 20MB），无法发送</string>
     <string name="attachment_send_failed">附件处理失败，请重试</string>

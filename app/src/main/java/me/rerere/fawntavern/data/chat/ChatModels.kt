@@ -69,6 +69,7 @@ data class ChatMessage(
 )
 
 /** 聊天会话：每个角色卡对应独立的聊天列表 */
+@Serializable
 data class ChatSession(
     val id: String = java.util.UUID.randomUUID().toString(),
     val charFile: String = "",    // 角色卡文件名，空 = 无角色的普通聊天

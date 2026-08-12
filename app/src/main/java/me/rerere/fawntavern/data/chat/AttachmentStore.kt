@@ -70,8 +70,15 @@ object AttachmentStore {
         try {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 out.outputStream().use { output ->
-                    val copied = input.copyTo(output, bufferSize = 64 * 1024)
-                    if (copied > MAX_FILE_BYTES) throw IllegalStateException("file too large")
+                    val buffer = ByteArray(64 * 1024)
+                    var copied = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        copied += read
+                        if (copied > MAX_FILE_BYTES) throw IllegalStateException("file too large")
+                        output.write(buffer, 0, read)
+                    }
                 }
             } ?: return@withContext null
             MsgFile(name = displayName, path = "$DIR/$safeName")

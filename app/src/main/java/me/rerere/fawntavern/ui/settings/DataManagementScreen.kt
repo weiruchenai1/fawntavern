@@ -5,19 +5,24 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -25,24 +30,26 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ArrowDownToLine
 import com.composables.icons.lucide.ArrowUpToLine
 import com.composables.icons.lucide.SquareLibrary
 import com.composables.icons.lucide.Database
-import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircle
 import com.composables.icons.lucide.Package
@@ -55,6 +62,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiConfigStore
+import me.rerere.fawntavern.data.backup.AppBackup
 import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.preset.PresetRepository
@@ -65,8 +73,6 @@ import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
 import java.io.File
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 @Composable
 private fun DataCategory.label(): String = stringResource(labelResId)
@@ -82,15 +88,48 @@ private data class DataCategory(
     val clear: suspend (android.content.Context) -> Unit,
 )
 
+private val credentialBackupSections = setOf(
+    AppBackup.Section.API_CONFIG,
+    AppBackup.Section.SEARCH_CONFIG,
+    AppBackup.Section.TTS_CONFIG,
+)
+
+private fun AppBackup.Section.labelResId(): Int = when (this) {
+    AppBackup.Section.CHARACTERS -> R.string.backup_section_characters
+    AppBackup.Section.PRESETS -> R.string.backup_section_presets
+    AppBackup.Section.WORLDBOOKS -> R.string.backup_section_worldbooks
+    AppBackup.Section.CHATS -> R.string.backup_section_chats
+    AppBackup.Section.API_CONFIG -> R.string.backup_section_api
+    AppBackup.Section.SEARCH_CONFIG -> R.string.backup_section_search
+    AppBackup.Section.TTS_CONFIG -> R.string.backup_section_tts
+    AppBackup.Section.AVATAR -> R.string.backup_section_avatar
+}
+
 @Composable
 fun DataManagementScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
+    val backupImportedMessage: (Int, Int) -> String = { files, sessions ->
+        resources.getQuantityString(R.plurals.backup_files, files, files) +
+            resources.getQuantityString(R.plurals.backup_sessions_suffix, sessions, sessions)
+    }
 
     var showClearCategory by remember { mutableStateOf<DataCategory?>(null) }
     var showClearAll by remember { mutableStateOf(false) }
     var showResetApi by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
+    var showExportSelection by remember { mutableStateOf(false) }
+    var exportSections by remember { mutableStateOf(AppBackup.defaultExportSections) }
+    var pendingExportSections by remember { mutableStateOf<Set<AppBackup.Section>>(emptySet()) }
+    var pendingImportFile by remember { mutableStateOf<File?>(null) }
+    var importAvailableSections by remember { mutableStateOf<Set<AppBackup.Section>>(emptySet()) }
+    var importSections by remember { mutableStateOf<Set<AppBackup.Section>>(emptySet()) }
+    val currentPendingImportFile by rememberUpdatedState(pendingImportFile)
+
+    DisposableEffect(Unit) {
+        onDispose { currentPendingImportFile?.delete() }
+    }
 
     val categories = remember {
         listOf(
@@ -134,7 +173,7 @@ fun DataManagementScreen(onBack: () -> Unit) {
                     Icon(Lucide.MessageCircle, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
-                itemCount = { ChatRepository.list(context).size },
+                itemCount = { ChatRepository.count(context) },
                 dir = { ChatRepository.storageDir(it) },
                 clear = { ctx -> ChatRepository.clear(ctx) },
             ),
@@ -243,16 +282,8 @@ fun DataManagementScreen(onBack: () -> Unit) {
                 try {
                     withContext(Dispatchers.IO) {
                         context.contentResolver.openOutputStream(uri)?.use { out ->
-                            ZipOutputStream(out).use { zip ->
-                                categories.forEach { cat ->
-                                    cat.dir(context)?.listFiles()?.forEach { file ->
-                                        zip.putNextEntry(ZipEntry("${cat.key}/${file.name}"))
-                                        file.inputStream().use { it.copyTo(zip) }
-                                        zip.closeEntry()
-                                    }
-                                }
-                            }
-                        }
+                            AppBackup.export(context, out, pendingExportSections)
+                        } ?: error("Unable to create backup")
                     }
                     Toast.makeText(context, context.getString(R.string.toast_export_success), Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
@@ -270,45 +301,91 @@ fun DataManagementScreen(onBack: () -> Unit) {
         if (uri != null) {
             scope.launch {
                 working = true
-                var restored = 0
                 try {
-                    withContext(Dispatchers.IO) {
-                        // zip 条目前缀 → 落盘目录，与"导出全部"的打包格式对称（json、png 等
-                        // 全部还原）。聊天记录（chats/）是打开中的 Room 数据库文件，运行期
-                        // 覆盖会损坏数据库，跳过不恢复
-                        val dirs = mapOf(
-                            "characters" to CharacterRepository.charsDir(context),
-                            "presets" to PresetRepository.presetsDir(context),
-                            "worldbooks" to WorldBookRepository.worldDir(context),
-                        )
-                        context.contentResolver.openInputStream(uri)?.use { input ->
-                            java.util.zip.ZipInputStream(input).use { zip ->
-                                var entry = zip.nextEntry
-                                while (entry != null) {
-                                    val parts = entry.name.split('/', limit = 2)
-                                    val dir = if (parts.size == 2) dirs[parts[0]] else null
-                                    val fileName = parts.getOrNull(1)
-                                    // 只接受顶层分类目录直属的文件，拒绝子目录/路径穿越
-                                    if (!entry.isDirectory && dir != null && !fileName.isNullOrBlank() &&
-                                        !fileName.contains('/') && !fileName.contains('\\') && fileName != ".."
-                                    ) {
-                                        File(dir, fileName).outputStream().use { zip.copyTo(it) }
-                                        restored++
-                                    }
-                                    zip.closeEntry()
-                                    entry = zip.nextEntry
-                                }
-                            }
+                    val inspected = withContext(Dispatchers.IO) {
+                        pendingImportFile?.delete()
+                        val cached = File.createTempFile("backup_selected_", ".zip", context.cacheDir)
+                        try {
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                cached.outputStream().use { input.copyTo(it) }
+                            } ?: error("Unable to open backup")
+                            val available = cached.inputStream().use { AppBackup.inspect(context, it) }
+                            require(available.isNotEmpty()) { "No supported content found in backup" }
+                            cached to available
+                        } catch (e: Exception) {
+                            cached.delete()
+                            throw e
                         }
                     }
-                    refresh()
-                    Toast.makeText(context, context.getString(R.string.toast_imported_files_fmt, restored), Toast.LENGTH_SHORT).show()
+                    pendingImportFile = inspected.first
+                    importAvailableSections = inspected.second
+                    importSections = inspected.second
                 } catch (e: Exception) {
                     Toast.makeText(context, context.getString(R.string.toast_import_failed_fmt, e.message ?: ""), Toast.LENGTH_SHORT).show()
                 }
                 working = false
             }
         }
+    }
+
+    if (showExportSelection) {
+        BackupSelectionDialog(
+            title = stringResource(R.string.select_export_content),
+            available = AppBackup.Section.entries.toSet(),
+            selected = exportSections,
+            showSensitiveWarning = exportSections.any { it in credentialBackupSections },
+            confirmLabel = stringResource(R.string.export_backup_confirm),
+            onSelectedChange = { exportSections = it },
+            onDismiss = { showExportSelection = false },
+            onConfirm = {
+                pendingExportSections = exportSections
+                showExportSelection = false
+                exportLauncher.launch("st-app-backup.zip")
+            },
+        )
+    }
+
+    if (pendingImportFile != null) {
+        BackupSelectionDialog(
+            title = stringResource(R.string.select_import_content),
+            available = importAvailableSections,
+            selected = importSections,
+            showSensitiveWarning = false,
+            confirmLabel = stringResource(R.string.import_backup_confirm),
+            onSelectedChange = { importSections = it },
+            onDismiss = {
+                pendingImportFile?.delete()
+                pendingImportFile = null
+            },
+            onConfirm = {
+                val cached = pendingImportFile ?: return@BackupSelectionDialog
+                pendingImportFile = null
+                scope.launch {
+                    working = true
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            cached.inputStream().use { AppBackup.import(context, it, importSections) }
+                        }
+                        refresh()
+                        val message = if (result.files > 0 || result.sessions > 0) {
+                            backupImportedMessage(result.files, result.sessions)
+                        } else {
+                            context.getString(R.string.toast_backup_content_imported)
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.toast_import_failed_fmt, e.message ?: ""),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } finally {
+                        cached.delete()
+                        working = false
+                    }
+                }
+            },
+        )
     }
 
     BackHandler(onBack = onBack)
@@ -364,9 +441,9 @@ fun DataManagementScreen(onBack: () -> Unit) {
                 Text(stringResource(R.string.import_backup))
             }
             OutlinedButton(
-                onClick = { exportLauncher.launch("st-app-backup.zip") },
+                onClick = { showExportSelection = true },
                 modifier = Modifier.weight(1f),
-                enabled = !working && totalItems > 0,
+                enabled = !working,
             ) {
                 Icon(Lucide.ArrowUpToLine, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(Space8))
@@ -396,6 +473,64 @@ fun DataManagementScreen(onBack: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun BackupSelectionDialog(
+    title: String,
+    available: Set<AppBackup.Section>,
+    selected: Set<AppBackup.Section>,
+    showSensitiveWarning: Boolean,
+    confirmLabel: String,
+    onSelectedChange: (Set<AppBackup.Section>) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(
+                Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Space4),
+            ) {
+                available.sortedBy { it.ordinal }.forEach { section ->
+                    val checked = section in selected
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable {
+                                onSelectedChange(if (checked) selected - section else selected + section)
+                            }
+                            .padding(vertical = Space4),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { value ->
+                                onSelectedChange(if (value) selected + section else selected - section)
+                            },
+                        )
+                        Spacer(Modifier.width(Space8))
+                        Text(stringResource(section.labelResId()), Modifier.weight(1f))
+                    }
+                }
+                if (showSensitiveWarning) {
+                    Text(
+                        stringResource(R.string.backup_sensitive_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = Space8),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = selected.isNotEmpty()) { Text(confirmLabel) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 @Composable

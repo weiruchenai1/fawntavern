@@ -54,6 +54,13 @@ val API_TYPES = listOf("openai" to "OpenAI", "google" to "Google", "claude" to "
 fun ApiConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var config by remember { mutableStateOf(ApiConfigStore.loadConfig(context)) }
+    val configWasRecovered = remember { ApiConfigStore.consumeCorruptionNotice(context) }
+    val configRecoveredMessage = stringResource(R.string.api_config_recovered)
+    LaunchedEffect(configWasRecovered) {
+        if (configWasRecovered) {
+            Toast.makeText(context, configRecoveredMessage, Toast.LENGTH_LONG).show()
+        }
+    }
     // 每次落盘都校正选中模型：禁用/删除提供商、移除模型后不留悬空选择
     fun save() {
         config = config.withValidCurrentModel()

@@ -1,5 +1,6 @@
 package me.rerere.fawntavern.ui.settings
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +42,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +94,13 @@ import sh.calvin.reorderable.ReorderableItem
 fun WebSearchConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var services by remember { mutableStateOf(SearchStore.getServices(context)) }
+    val configWasRecovered = remember { SearchStore.consumeCorruptionNotice(context) }
+    val configRecoveredMessage = stringResource(R.string.search_config_recovered)
+    LaunchedEffect(configWasRecovered) {
+        if (configWasRecovered) Toast.makeText(
+            context, configRecoveredMessage, Toast.LENGTH_LONG
+        ).show()
+    }
     var editingId by remember { mutableStateOf<String?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }
     val stateHolder = rememberSaveableStateHolder()

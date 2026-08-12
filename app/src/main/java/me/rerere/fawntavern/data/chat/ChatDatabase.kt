@@ -69,12 +69,36 @@ internal data class SessionWithMessages(
     val messages: List<MessageEntity>,
 )
 
+internal data class SessionSummaryRow(
+    @Embedded val session: SessionEntity,
+    val preview: String?,
+)
+
 @Dao
 internal interface ChatDao {
 
-    @Transaction
-    @Query("SELECT * FROM sessions ORDER BY pinned DESC, updatedAt DESC")
-    fun observeAll(): Flow<List<SessionWithMessages>>
+    @Query("""
+        SELECT sessions.*,
+            (SELECT content FROM messages
+             WHERE messages.sessionId = sessions.id AND messages.role = 'user'
+             ORDER BY messages.ts ASC LIMIT 1) AS preview
+        FROM sessions
+        ORDER BY pinned DESC, updatedAt DESC
+    """)
+    fun observeSummaries(): Flow<List<SessionSummaryRow>>
+
+    @Query("""
+        SELECT sessions.*,
+            (SELECT content FROM messages
+             WHERE messages.sessionId = sessions.id AND messages.role = 'user'
+             ORDER BY messages.ts ASC LIMIT 1) AS preview
+        FROM sessions
+        ORDER BY pinned DESC, updatedAt DESC
+    """)
+    suspend fun listSummaries(): List<SessionSummaryRow>
+
+    @Query("SELECT COUNT(*) FROM sessions")
+    suspend fun countSessions(): Int
 
     @Transaction
     @Query("SELECT * FROM sessions ORDER BY pinned DESC, updatedAt DESC")

@@ -5,6 +5,7 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.map
+import androidx.room.withTransaction
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +23,13 @@ object ChatRepository {
 
     /** 全部会话（按更新时间倒序），save/delete/clear 后由 Room 自动重发 */
     fun sessionsFlow(context: Context): Flow<List<ChatSession>> =
-        dao(context).observeAll().map { rows -> rows.map { it.toModel() } }
+        dao(context).observeSummaries().map { rows -> rows.map { it.toModel() } }
+
+    /** 会话摘要列表；只查询会话元数据与首条用户消息，不加载完整消息历史。 */
+    suspend fun listSummaries(context: Context): List<ChatSession> =
+        dao(context).listSummaries().map { it.toModel() }
+
+    suspend fun count(context: Context): Int = dao(context).countSessions()
 
     /** 列出全部会话，按更新时间倒序 */
     suspend fun list(context: Context): List<ChatSession> =
@@ -33,21 +40,27 @@ object ChatRepository {
         dao(context).getSession(id)?.toModel()
 
     suspend fun save(context: Context, session: ChatSession) {
-        dao(context).saveSession(
-            s = SessionEntity(
-                id = session.id, charFile = session.charFile, charName = session.charName,
-                createdAt = session.createdAt, updatedAt = session.updatedAt,
-                timedWiJson = if (session.timedWi.isEmpty()) "" else json.encodeToString(session.timedWi),
-                extStateJson = if (session.extState.isEmpty()) "" else json.encodeToString(session.extState),
-                title = session.title,
-                pinned = session.pinned,
-            ),
+        dao(context).saveSession(s = session.toEntity(),
             ms = session.messages.map { it.toEntity(session.id) },
         )
     }
 
+    /** 原子恢复备份内的会话；同 id 覆盖，任一项失败则整批回滚。 */
+    suspend fun restore(context: Context, sessions: List<ChatSession>) {
+        val db = ChatDatabase.get(context)
+        db.withTransaction {
+            sessions.forEach { session ->
+                db.dao().saveSession(
+                    s = session.toEntity(),
+                    ms = session.messages.map { it.toEntity(session.id) },
+                )
+            }
+        }
+    }
+
     suspend fun delete(context: Context, id: String) {
         dao(context).deleteSession(id)
+        collectUnusedAttachments(context)
     }
 
     /** 清空所有会话（附件随之全部失去引用，一并删除） */
@@ -99,6 +112,7 @@ object ChatRepository {
         if (upd == null) d.deleteMessageRow(sessionId, ts)
         else d.upsertMessage(upd.toEntity(sessionId))
         d.touchSession(sessionId, System.currentTimeMillis())
+        collectUnusedAttachments(context)
     }
 
     /** 删除整条消息（全部版本） */
@@ -106,6 +120,7 @@ object ChatRepository {
         val d = dao(context)
         d.deleteMessageRow(sessionId, ts)
         d.touchSession(sessionId, System.currentTimeMillis())
+        collectUnusedAttachments(context)
     }
 
     /** 编辑单条消息正文（DB 落盘） */
@@ -121,6 +136,7 @@ object ChatRepository {
         val d = dao(context)
         d.deleteMessagesAfter(sessionId, ts)
         d.touchSession(sessionId, System.currentTimeMillis())
+        collectUnusedAttachments(context)
     }
 
     /** 单独回写会话的世界书定时状态（生成收尾用，不整会话覆盖） */
@@ -144,6 +160,43 @@ object ChatRepository {
     suspend fun updatePinned(context: Context, sessionId: String, pinned: Boolean) {
         dao(context).updatePinned(sessionId, pinned)
     }
+
+    /** 删除已不被任何消息引用的附件；导入、删消息和删会话后均可安全调用。 */
+    suspend fun collectUnusedAttachments(context: Context) {
+        val referenced = list(context).asSequence()
+            .flatMap { it.messages.asSequence() }
+            .flatMap { message -> message.images.asSequence() + message.files.asSequence().map { it.path } }
+            .map { it.substringAfterLast('/') }
+            .toSet()
+        withContext(Dispatchers.IO) {
+            AttachmentStore.dir(context).listFiles()?.forEach { file ->
+                if (file.isFile && file.name !in referenced) file.delete()
+            }
+        }
+    }
+
+    private fun SessionSummaryRow.toModel() = ChatSession(
+        id = session.id,
+        charFile = session.charFile,
+        charName = session.charName,
+        messages = preview?.let { listOf(ChatMessage(role = "user", content = it)) } ?: emptyList(),
+        createdAt = session.createdAt,
+        updatedAt = session.updatedAt,
+        title = session.title,
+        pinned = session.pinned,
+    )
+
+    private fun ChatSession.toEntity() = SessionEntity(
+        id = id,
+        charFile = charFile,
+        charName = charName,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        timedWiJson = if (timedWi.isEmpty()) "" else json.encodeToString(timedWi),
+        extStateJson = if (extState.isEmpty()) "" else json.encodeToString(extState),
+        title = title,
+        pinned = pinned,
+    )
 
     private fun SessionWithMessages.toModel() = ChatSession(
         id = session.id,
