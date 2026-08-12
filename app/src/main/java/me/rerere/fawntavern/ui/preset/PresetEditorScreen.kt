@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -604,15 +605,24 @@ private fun PromptEditDialog(
                         Modifier.fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surface)
                             .statusBarsPadding()
-                            .padding(horizontal = 4.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                     ) {
-                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                         Text(
                             stringResource(R.string.edit_prompt), style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
                         )
+                    }
+                },
+                bottomBar = {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+                    ) {
+                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                         Button(onClick = {
                             onSave(item.copy(
                                 name = name, role = role, content = content.text.toString(),

@@ -13,10 +13,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -25,7 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,8 +51,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import me.rerere.fawntavern.R
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
@@ -71,6 +75,7 @@ import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
+import me.rerere.fawntavern.ui.components.noRippleClickable
 
 /** 位置下拉选项：展示用字符串资源 → (position, role)。at_depth 按 role 拆成三项。 */
 private val POSITION_OPTIONS = listOf(
@@ -261,149 +266,182 @@ private fun EntryEditDialog(entry: WorldBookEntry, onDismiss: () -> Unit, onSave
     val isAtDepth = ePosition == WorldBookPos.AT_DEPTH
     val isOutlet = ePosition == WorldBookPos.OUTLET
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.edit_entry)) },
-        text = {
-            Column(
-                Modifier.fillMaxWidth().heightIn(max = 540.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(Space8)
-            ) {
-                OutlinedTextField(eComment, { eComment = it }, label = { Text(stringResource(R.string.entry_name_label)) },
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
-                // 三态状态
-                StatusSelector(eStatus) { eStatus = it }
-                if (eStatus == WiStatus.VECTORIZED) {
-                    Text(stringResource(R.string.status_vectorized_note),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error)
-                }
-                if (eStatus != WiStatus.CONSTANT) {
-                    OutlinedTextField(eKeys, { eKeys = it }, label = { Text(stringResource(R.string.entry_keys_label)) },
-                        singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(eSecondary, { eSecondary = it }, label = { Text(stringResource(R.string.entry_secondary_keys)) },
-                        singleLine = true, modifier = Modifier.fillMaxWidth())
-                    val logicLabels = LOGICS.map { stringResource(it.second) }
-                    EntryDropdown(stringResource(R.string.entry_selective_logic),
-                        stringResource(LOGICS.first { it.first == eLogic }.second), logicLabels) { label ->
-                        eLogic = LOGICS[logicLabels.indexOf(label)].first
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            Scaffold(
+                modifier = Modifier.imePadding(),
+                topBar = {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .statusBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    ) {
+                        Text(
+                            stringResource(R.string.edit_entry), style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
+                        )
+                    }
+                },
+                bottomBar = {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+                    ) {
+                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                        Button(onClick = {
+                            onSave(entry.copy(
+                                comment = eComment, content = eContent.text.toString(),
+                                keys = eKeys.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                                keySecondary = eSecondary.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                                enabled = eEnabled,
+                                constant = eStatus == WiStatus.CONSTANT,
+                                vectorized = eStatus == WiStatus.VECTORIZED,
+                                position = ePosition, role = eRole,
+                                insertionOrder = eOrder.toIntOrNull() ?: entry.insertionOrder,
+                                depth = eDepth.toIntOrNull() ?: entry.depth,
+                                outletName = eOutlet.trim(),
+                                selectiveLogic = eLogic, probability = eProbability,
+                                scanDepth = eScanDepth.toIntOrNull()?.takeIf { it > 0 },
+                                caseSensitive = eCase, matchWholeWords = eWholeWords,
+                                excludeRecursion = eExcludeRec, preventRecursion = ePreventRec, delayUntilRecursion = eDelayRec,
+                                group = eGroup.trim(), groupWeight = eGroupWeight.toIntOrNull() ?: entry.groupWeight,
+                                groupOverride = eGroupOverride, useGroupScoring = eGroupScoring,
+                                sticky = eSticky.toIntOrNull() ?: 0,
+                                cooldown = eCooldown.toIntOrNull() ?: 0,
+                                delay = eDelay.toIntOrNull() ?: 0,
+                            ))
+                        }) { Text(stringResource(R.string.save)) }
                     }
                 }
-                EntryRow(stringResource(R.string.entry_enabled)) { Switch(eEnabled, { eEnabled = it }) }
-                // 位置（含 @D 角色拆项）
-                val posLabels = POSITION_OPTIONS.map { stringResource(it.first) }
-                val curIdx = POSITION_OPTIONS.indexOfFirst {
-                    it.second == ePosition && (it.second != WorldBookPos.AT_DEPTH || it.third == eRole)
-                }.let { if (it < 0) 1 else it }
-                EntryDropdown(stringResource(R.string.entry_position), posLabels[curIdx], posLabels) { label ->
-                    val opt = POSITION_OPTIONS[posLabels.indexOf(label)]
-                    ePosition = opt.second; eRole = opt.third
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space8)) {
-                    OutlinedTextField(eOrder, { eOrder = it.filter { c -> c.isDigit() } },
-                        label = { Text(stringResource(R.string.entry_order)) },
-                        singleLine = true, modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    if (isAtDepth) {
-                        OutlinedTextField(eDepth, { eDepth = it.filter { c -> c.isDigit() } },
-                            label = { Text(stringResource(R.string.entry_depth)) },
+            ) { padding ->
+                Column(
+                    Modifier.fillMaxSize().padding(padding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(Space8)
+                ) {
+                    OutlinedTextField(eComment, { eComment = it }, label = { Text(stringResource(R.string.entry_name_label)) },
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
+                    // 三态状态
+                    StatusSelector(eStatus) { eStatus = it }
+                    if (eStatus == WiStatus.VECTORIZED) {
+                        Text(stringResource(R.string.status_vectorized_note),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error)
+                    }
+                    if (eStatus != WiStatus.CONSTANT) {
+                        OutlinedTextField(eKeys, { eKeys = it }, label = { Text(stringResource(R.string.entry_keys_label)) },
+                            singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(eSecondary, { eSecondary = it }, label = { Text(stringResource(R.string.entry_secondary_keys)) },
+                            singleLine = true, modifier = Modifier.fillMaxWidth())
+                        val logicLabels = LOGICS.map { stringResource(it.second) }
+                        EntryDropdown(stringResource(R.string.entry_selective_logic),
+                            stringResource(LOGICS.first { it.first == eLogic }.second), logicLabels) { label ->
+                            eLogic = LOGICS[logicLabels.indexOf(label)].first
+                        }
+                    }
+                    EntryRow(stringResource(R.string.entry_enabled)) { Switch(eEnabled, { eEnabled = it }) }
+                    // 位置（含 @D 角色拆项）
+                    val posLabels = POSITION_OPTIONS.map { stringResource(it.first) }
+                    val curIdx = POSITION_OPTIONS.indexOfFirst {
+                        it.second == ePosition && (it.second != WorldBookPos.AT_DEPTH || it.third == eRole)
+                    }.let { if (it < 0) 1 else it }
+                    EntryDropdown(stringResource(R.string.entry_position), posLabels[curIdx], posLabels) { label ->
+                        val opt = POSITION_OPTIONS[posLabels.indexOf(label)]
+                        ePosition = opt.second; eRole = opt.third
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space8)) {
+                        OutlinedTextField(eOrder, { eOrder = it.filter { c -> c.isDigit() } },
+                            label = { Text(stringResource(R.string.entry_order)) },
                             singleLine = true, modifier = Modifier.weight(1f),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        if (isAtDepth) {
+                            OutlinedTextField(eDepth, { eDepth = it.filter { c -> c.isDigit() } },
+                                label = { Text(stringResource(R.string.entry_depth)) },
+                                singleLine = true, modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        }
                     }
-                }
-                if (isOutlet) {
-                    OutlinedTextField(eOutlet, { eOutlet = it }, label = { Text(stringResource(R.string.entry_outlet_name)) },
-                        singleLine = true, modifier = Modifier.fillMaxWidth())
-                }
-                if (eStatus != WiStatus.CONSTANT) {
-                    Column {
-                        Text("${stringResource(R.string.entry_probability)}: $eProbability%",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Slider(eProbability.toFloat(), { eProbability = it.toInt() }, valueRange = 0f..100f)
+                    if (isOutlet) {
+                        OutlinedTextField(eOutlet, { eOutlet = it }, label = { Text(stringResource(R.string.entry_outlet_name)) },
+                            singleLine = true, modifier = Modifier.fillMaxWidth())
                     }
-                }
-                AppTextArea(
-                    state = eContent,
-                    label = stringResource(R.string.entry_content_label),
-                    minLines = 5, maxLines = 14,
-                )
+                    if (eStatus != WiStatus.CONSTANT) {
+                        Column {
+                            Text("${stringResource(R.string.entry_probability)}: $eProbability%",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Slider(eProbability.toFloat(), { eProbability = it.toInt() }, valueRange = 0f..100f)
+                        }
+                    }
+                    AppTextArea(
+                        state = eContent,
+                        label = stringResource(R.string.entry_content_label),
+                        minLines = 5, maxLines = 14,
+                    )
 
-                // ── 高级（默认折叠） ──
-                Row(Modifier.fillMaxWidth().clickable { showAdvanced = !showAdvanced },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(stringResource(R.string.entry_advanced), style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium)
-                    Icon(if (showAdvanced) Lucide.ChevronDown else Lucide.ChevronRight, null,
-                        Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (showAdvanced) {
-                    OutlinedTextField(eScanDepth, { eScanDepth = it.filter { c -> c.isDigit() } },
-                        label = { Text(stringResource(R.string.entry_scan_depth)) },
-                        placeholder = { Text(stringResource(R.string.tri_follow_global)) },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    TriStateDropdown(stringResource(R.string.entry_case_sensitive), eCase) { eCase = it }
-                    TriStateDropdown(stringResource(R.string.entry_match_whole_words), eWholeWords) { eWholeWords = it }
-                    // 递归
-                    SectionLabel(stringResource(R.string.entry_recursion))
-                    EntryRow(stringResource(R.string.entry_exclude_recursion)) { Switch(eExcludeRec, { eExcludeRec = it }) }
-                    EntryRow(stringResource(R.string.entry_prevent_recursion)) { Switch(ePreventRec, { ePreventRec = it }) }
-                    EntryRow(stringResource(R.string.entry_delay_until_recursion)) { Switch(eDelayRec, { eDelayRec = it }) }
-                    // 包含组
-                    SectionLabel(stringResource(R.string.entry_group))
-                    OutlinedTextField(eGroup, { eGroup = it }, label = { Text(stringResource(R.string.entry_group)) },
-                        singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(eGroupWeight, { eGroupWeight = it.filter { c -> c.isDigit() } },
-                        label = { Text(stringResource(R.string.entry_group_weight)) },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    EntryRow(stringResource(R.string.entry_group_override)) { Switch(eGroupOverride, { eGroupOverride = it }) }
-                    EntryRow(stringResource(R.string.entry_use_group_scoring)) { Switch(eGroupScoring, { eGroupScoring = it }) }
-                    // 定时
-                    SectionLabel(stringResource(R.string.entry_timed))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space8)) {
-                        OutlinedTextField(eSticky, { eSticky = it.filter { c -> c.isDigit() } },
-                            label = { Text(stringResource(R.string.entry_sticky)) }, singleLine = true,
-                            modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        OutlinedTextField(eCooldown, { eCooldown = it.filter { c -> c.isDigit() } },
-                            label = { Text(stringResource(R.string.entry_cooldown)) }, singleLine = true,
-                            modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        OutlinedTextField(eDelay, { eDelay = it.filter { c -> c.isDigit() } },
-                            label = { Text(stringResource(R.string.entry_delay)) }, singleLine = true,
-                            modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                    // ── 高级（默认折叠） ──
+                    Row(Modifier.fillMaxWidth().clickable { showAdvanced = !showAdvanced },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(stringResource(R.string.entry_advanced), style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium)
+                        Icon(if (showAdvanced) Lucide.ChevronDown else Lucide.ChevronRight, null,
+                            Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (showAdvanced) {
+                        OutlinedTextField(eScanDepth, { eScanDepth = it.filter { c -> c.isDigit() } },
+                            label = { Text(stringResource(R.string.entry_scan_depth)) },
+                            placeholder = { Text(stringResource(R.string.tri_follow_global)) },
+                            singleLine = true, modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        TriStateDropdown(stringResource(R.string.entry_case_sensitive), eCase) { eCase = it }
+                        TriStateDropdown(stringResource(R.string.entry_match_whole_words), eWholeWords) { eWholeWords = it }
+                        // 递归
+                        SectionLabel(stringResource(R.string.entry_recursion))
+                        EntryRow(stringResource(R.string.entry_exclude_recursion)) { Switch(eExcludeRec, { eExcludeRec = it }) }
+                        EntryRow(stringResource(R.string.entry_prevent_recursion)) { Switch(ePreventRec, { ePreventRec = it }) }
+                        EntryRow(stringResource(R.string.entry_delay_until_recursion)) { Switch(eDelayRec, { eDelayRec = it }) }
+                        // 包含组
+                        SectionLabel(stringResource(R.string.entry_group))
+                        OutlinedTextField(eGroup, { eGroup = it }, label = { Text(stringResource(R.string.entry_group)) },
+                            singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(eGroupWeight, { eGroupWeight = it.filter { c -> c.isDigit() } },
+                            label = { Text(stringResource(R.string.entry_group_weight)) },
+                            singleLine = true, modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        EntryRow(stringResource(R.string.entry_group_override)) { Switch(eGroupOverride, { eGroupOverride = it }) }
+                        EntryRow(stringResource(R.string.entry_use_group_scoring)) { Switch(eGroupScoring, { eGroupScoring = it }) }
+                        // 定时
+                        SectionLabel(stringResource(R.string.entry_timed))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space8)) {
+                            OutlinedTextField(eSticky, { eSticky = it.filter { c -> c.isDigit() } },
+                                label = { Text(stringResource(R.string.entry_sticky)) }, singleLine = true,
+                                modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                            OutlinedTextField(eCooldown, { eCooldown = it.filter { c -> c.isDigit() } },
+                                label = { Text(stringResource(R.string.entry_cooldown)) }, singleLine = true,
+                                modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                            OutlinedTextField(eDelay, { eDelay = it.filter { c -> c.isDigit() } },
+                                label = { Text(stringResource(R.string.entry_delay)) }, singleLine = true,
+                                modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        }
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = {
-                onSave(entry.copy(
-                    comment = eComment, content = eContent.text.toString(),
-                    keys = eKeys.split(",").map { it.trim() }.filter { it.isNotBlank() },
-                    keySecondary = eSecondary.split(",").map { it.trim() }.filter { it.isNotBlank() },
-                    enabled = eEnabled,
-                    constant = eStatus == WiStatus.CONSTANT,
-                    vectorized = eStatus == WiStatus.VECTORIZED,
-                    position = ePosition, role = eRole,
-                    insertionOrder = eOrder.toIntOrNull() ?: entry.insertionOrder,
-                    depth = eDepth.toIntOrNull() ?: entry.depth,
-                    outletName = eOutlet.trim(),
-                    selectiveLogic = eLogic, probability = eProbability,
-                    scanDepth = eScanDepth.toIntOrNull()?.takeIf { it > 0 },
-                    caseSensitive = eCase, matchWholeWords = eWholeWords,
-                    excludeRecursion = eExcludeRec, preventRecursion = ePreventRec, delayUntilRecursion = eDelayRec,
-                    group = eGroup.trim(), groupWeight = eGroupWeight.toIntOrNull() ?: entry.groupWeight,
-                    groupOverride = eGroupOverride, useGroupScoring = eGroupScoring,
-                    sticky = eSticky.toIntOrNull() ?: 0,
-                    cooldown = eCooldown.toIntOrNull() ?: 0,
-                    delay = eDelay.toIntOrNull() ?: 0,
-                ))
-            }) { Text(stringResource(R.string.save)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
-    )
+        }
+    }
 }
 
 /** 三态状态分段选择器：永久 / 关键词 / 向量化（互斥） */
@@ -414,21 +452,27 @@ private fun StatusSelector(status: WiStatus, onChange: (WiStatus) -> Unit) {
         WiStatus.KEYWORD to R.string.status_keyword,
         WiStatus.VECTORIZED to R.string.status_vectorized,
     )
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-        .background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(2.dp),
+    ) {
         options.forEach { (st, res) ->
             val sel = st == status
-            Box(
-                Modifier.weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (sel) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent)
-                    .clickable { onChange(st) }
-                    .padding(vertical = Space8),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(stringResource(res), style = MaterialTheme.typography.bodyMedium,
-                    color = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
-            }
+            Text(
+                stringResource(res),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (sel) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (sel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .noRippleClickable { onChange(st) }
+                    .padding(vertical = 8.dp),
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }

@@ -148,7 +148,7 @@ object TtsStore {
     /** 旧格式（单选中 provider + 扁平分字段）迁移成单元素列表并写回 */
     private fun migrateLegacy(context: Context): List<TTSProviderSetting> {
         val p = prefs(context)
-        val legacyKey = p.getString("provider", null) ?: return listOf(TTSProviderSetting.SystemTTS())
+        val legacyKey = p.getString("provider", null)
         val service = when (legacyKey) {
             "openai" -> TTSProviderSetting.OpenAI(
                 apiKey = p.getString("openai_api_key", "") ?: "",
