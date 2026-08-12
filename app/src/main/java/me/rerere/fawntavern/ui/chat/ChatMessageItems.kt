@@ -28,12 +28,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
-import android.graphics.BitmapFactory
 import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.ArrowDownToLine
@@ -43,12 +41,10 @@ import com.composables.icons.lucide.CircleStop
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.EllipsisVertical
 import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Paperclip
 import com.composables.icons.lucide.RotateCcw
 import com.composables.icons.lucide.UserPen
 import com.composables.icons.lucide.Volume2
 import com.composables.icons.lucide.Zap
-import java.io.File
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -80,47 +76,6 @@ internal fun TextStyle.scaledBy(scale: Float): TextStyle = copy(
     fontSize = fontSize * scale,
     lineHeight = if (lineHeight.isSpecified) lineHeight * scale else lineHeight,
 )
-
-/** 消息里的图片附件缩略图（path 为 filesDir 相对路径，解码时降采样） */
-@Composable
-private fun AttachedImage(relPath: String, corner: androidx.compose.ui.unit.Dp) {
-    val context = LocalContext.current
-    val bmp = remember(relPath) {
-        try {
-            val f = File(context.filesDir, relPath)
-            if (!f.exists()) null else {
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeFile(f.absolutePath, bounds)
-                var sample = 1
-                while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 720) sample *= 2
-                BitmapFactory.decodeFile(f.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
-            }
-        } catch (_: Exception) { null }
-    } ?: return
-    Image(
-        bitmap = bmp.asImageBitmap(),
-        contentDescription = null,
-        modifier = Modifier.maxWidthFraction(0.6f).clip(RoundedCornerShape(corner)),
-        contentScale = ContentScale.FillWidth,
-    )
-}
-
-/** 消息里的文件附件卡片（只展示文件名；内容在发送时内联进 prompt） */
-@Composable
-private fun AttachedFileCard(file: MsgFile) {
-    Row(
-        Modifier.clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(Lucide.Paperclip, null, Modifier.size(14.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(file.name, style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
-    }
-}
 
 @Composable
 internal fun UserMsg(
@@ -178,8 +133,7 @@ internal fun UserMsg(
                 }
             }
         }
-        images.forEach { rel -> AttachedImage(rel, s12) }
-        files.forEach { f -> AttachedFileCard(f) }
+        MessageAttachmentRow(images = images, files = files)
         if (text.isNotBlank()) {
             // 气泡拥抱内容（markdown 走 fillWidth=false 让正文按内容撑宽，而不是固定铺满 80%）
             Box(Modifier.maxWidthFraction(0.8f).clip(RoundedCornerShape(s12)).background(MaterialTheme.colorScheme.primaryContainer).padding(s8)) {

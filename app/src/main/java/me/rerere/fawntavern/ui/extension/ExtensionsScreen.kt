@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +45,7 @@ import me.rerere.fawntavern.extension.ExtensionStore
 import me.rerere.fawntavern.extension.QuickReply
 import me.rerere.fawntavern.extension.builtin.QuickReplyExtension
 import me.rerere.fawntavern.extension.builtin.SummarizeExtension
+import me.rerere.fawntavern.ui.components.AppTextArea
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
@@ -228,7 +230,7 @@ private fun QuickReplySettings(onBack: () -> Unit) {
 @Composable
 private fun QuickReplyEditDialog(initial: QuickReply?, onDismiss: () -> Unit, onConfirm: (QuickReply) -> Unit) {
     var label by remember { mutableStateOf(initial?.label ?: "") }
-    var text by remember { mutableStateOf(initial?.text ?: "") }
+    val text = remember { TextFieldState(initial?.text ?: "") }
     var send by remember { mutableStateOf(initial?.send ?: false) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -238,9 +240,11 @@ private fun QuickReplyEditDialog(initial: QuickReply?, onDismiss: () -> Unit, on
                 OutlinedTextField(label, { label = it }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.ext_qr_label)) })
-                OutlinedTextField(text, { text = it },
-                    modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5,
-                    label = { Text(stringResource(R.string.ext_qr_text)) })
+                AppTextArea(
+                    state = text,
+                    label = stringResource(R.string.ext_qr_text),
+                    minLines = 2, maxLines = 5,
+                )
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(stringResource(R.string.ext_qr_send), style = MaterialTheme.typography.bodyMedium,
@@ -251,8 +255,8 @@ private fun QuickReplyEditDialog(initial: QuickReply?, onDismiss: () -> Unit, on
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(QuickReply(label = label.trim(), text = text.trim(), send = send)) },
-                enabled = text.isNotBlank() || label.isNotBlank(),
+                onClick = { onConfirm(QuickReply(label = label.trim(), text = text.text.toString().trim(), send = send)) },
+                enabled = text.text.isNotBlank() || label.isNotBlank(),
             ) { Text(stringResource(R.string.confirm)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },

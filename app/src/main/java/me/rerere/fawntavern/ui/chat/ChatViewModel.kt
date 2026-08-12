@@ -3,6 +3,8 @@ package me.rerere.fawntavern.ui.chat
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -82,7 +84,10 @@ import me.rerere.fawntavern.extension.QuickReplyProvider
 internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 发送/重答的结果：UI 据此决定是否弹"先选模型"提示 */
-    enum class SendOutcome { STARTED, NO_MODEL, SKIPPED }
+    enum class SendOutcome { STARTED, NO_MODEL, SKIPPED, FILE_TOO_LARGE }
+
+    /** 发送时附件落盘失败的提示（一次性消费：UI 弹完清空）；过大在 SendOutcome 里同步拦截，这里是兜底 */
+    var sendError by mutableStateOf<String?>(null); private set
 
     // ── 状态（写入只经由本类方法） ──
     var apiConfig by mutableStateOf(ApiConfigStore.loadConfig(app)); private set
@@ -110,9 +115,16 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // 当前角色关联的世界书/预设（随角色卡切换加载，生成时进入 Prompt 拼装）
     var activeWorldBooks by mutableStateOf<List<WorldBook>>(emptyList()); private set
     var activePreset by mutableStateOf<StPreset?>(null); private set
-    // 输入草稿放这里，Activity 重建后不丢
-    var inputText by mutableStateOf("")
+    // 输入草稿放这里，Activity 重建后不丢。BTF2 的 TextFieldState 即单一事实源，
+    // 输入框与展开面板持有同一实例，两边改动天然同步，不需要 onTextChange 回写
+    val inputState = TextFieldState()
+    /** [inputState] 的字符串视图：VM 内部与旧调用方按 String 读写，光标落到末尾 */
+    var inputText: String
+        get() = inputState.text.toString()
+        set(value) = inputState.setTextAndPlaceCursorAtEnd(value)
     var attachments by mutableStateOf(listOf<Attachment>())
+    /** 正在编辑的消息 ts：非 null = 输入框处于编辑态，发送走更新而非追加 */
+    var editingTs by mutableStateOf<Long?>(null); private set
 
     /** 启用的快捷回复（UI 插槽扩展提供），随扩展配置刷新 */
     var quickReplies by mutableStateOf<List<QuickReply>>(emptyList()); private set
@@ -425,18 +437,46 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val text = inputText.trim()
         val atts = attachments
         if (text.isBlank() && atts.isEmpty()) return SendOutcome.SKIPPED
+        // 编辑态：只更新该消息文本，不追加新消息、不触发生成
+        val editTs = editingTs
+        if (editTs != null) {
+            if (text.isBlank()) return SendOutcome.SKIPPED
+            updateMessage(editTs, text)
+            editingTs = null
+            inputText = ""
+            return SendOutcome.STARTED
+        }
         val (prov, modelId) = currentProviderAndModel() ?: return SendOutcome.NO_MODEL
+        // 发送前同步校验文件大小：过大直接拦截（不清空附件，用户可移除或换文件）
+        if (atts.any { !it.isImage && AttachmentStore.isTooLarge(ctx, it.uri) }) {
+            return SendOutcome.FILE_TOO_LARGE
+        }
         inputText = ""
         attachments = emptyList()
         generating = true  // 同步置位:附件落盘/DB 读等挂起点之前就挡住重复发送与并发生成
         viewModelScope.launch {
             try {
-                // 附件先拷入自有目录（content URI 的读权限是临时的，落盘副本才能支撑历史展示与重答）
+                // 附件先拷入自有目录（content URI 的读权限是临时的，落盘副本才能支撑历史展示与重答）。
+                // 任一落盘失败（提供方不报大小、读取中途出错等）都中止发送并恢复输入与附件
                 val images = mutableListOf<String>()
                 val files = mutableListOf<MsgFile>()
+                var persistFailed = false
                 for (a in atts) {
-                    if (a.isImage) AttachmentStore.persistImage(ctx, a.uri)?.let { images.add(it) }
-                    else AttachmentStore.persistFile(ctx, a.uri)?.let { files.add(it) }
+                    val persisted = if (a.isImage) {
+                        AttachmentStore.persistImage(ctx, a.uri)?.also { images.add(it) } != null
+                    } else {
+                        AttachmentStore.persistFile(ctx, a.uri)?.also { files.add(it) } != null
+                    }
+                    if (!persisted) {
+                        persistFailed = true
+                        break
+                    }
+                }
+                if (persistFailed) {
+                    inputText = text
+                    attachments = atts
+                    sendError = ctx.getString(R.string.attachment_send_failed)
+                    return@launch
                 }
                 // 以 DB 为准取当前会话（内存态可能落后于分支切换等 DB 变更）；未落盘的新会话回退内存态
                 val existing = session?.id?.let { ChatRepository.get(ctx, it) }
@@ -458,6 +498,25 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         return SendOutcome.STARTED
+    }
+
+    /** 消费附件发送失败提示：UI 弹完 Toast 后清空，避免下次重组重复弹出 */
+    fun consumeSendError() {
+        sendError = null
+    }
+
+    /** 进入编辑态：把该消息内容填入输入框，发送即更新该消息 */
+    fun startEdit(ts: Long) {
+        if (generating) return
+        val msg = overlays[ts] ?: session?.messages?.firstOrNull { it.ts == ts } ?: return
+        editingTs = ts
+        inputText = msg.content
+    }
+
+    /** 取消编辑：退出编辑态并清空输入 */
+    fun cancelEdit() {
+        editingTs = null
+        inputText = ""
     }
 
     fun stopGenerate() {

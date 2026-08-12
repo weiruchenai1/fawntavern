@@ -17,13 +17,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -80,6 +82,7 @@ import me.rerere.fawntavern.ui.components.ModelSelectorSheet
 import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
+import me.rerere.fawntavern.ui.components.AppTextArea
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
@@ -96,14 +99,15 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(card.name) }
-    var description by remember { mutableStateOf(card.description) }
-    var personality by remember { mutableStateOf(card.personality) }
-    var scenario by remember { mutableStateOf(card.scenario) }
-    var systemPrompt by remember { mutableStateOf(card.systemPrompt) }
-    var postHistory by remember { mutableStateOf(card.postHistoryInstructions) }
-    var mesExample by remember { mutableStateOf(card.mesExample) }
-    var creatorNotes by remember { mutableStateOf(card.creatorNotes) }
-    var depthPromptText by remember { mutableStateOf(card.depthPrompt?.prompt ?: "") }
+    // 多行字段用 TextFieldState（BTF2）：限高交给 AppTextArea 的 lineLimits，滚动在测量期完成
+    val description = rememberTextFieldState(card.description)
+    val personality = rememberTextFieldState(card.personality)
+    val scenario = rememberTextFieldState(card.scenario)
+    val systemPrompt = rememberTextFieldState(card.systemPrompt)
+    val postHistory = rememberTextFieldState(card.postHistoryInstructions)
+    val mesExample = rememberTextFieldState(card.mesExample)
+    val creatorNotes = rememberTextFieldState(card.creatorNotes)
+    val depthPromptText = rememberTextFieldState(card.depthPrompt?.prompt ?: "")
     var depthPromptDepth by remember { mutableStateOf((card.depthPrompt?.depth ?: 4).toString()) }
     var depthPromptRole by remember { mutableStateOf(card.depthPrompt?.role ?: "system") }
     var tags by remember { mutableStateOf(card.tags) }
@@ -227,13 +231,13 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
         scope.launch {
             patchCard { d ->
                 d.put("name", name.trim())
-                d.put("description", description)
-                d.put("personality", personality)
-                d.put("scenario", scenario)
-                d.put("system_prompt", systemPrompt)
-                d.put("post_history_instructions", postHistory)
-                d.put("mes_example", mesExample)
-                d.put("creator_notes", creatorNotes)
+                d.put("description", description.text.toString())
+                d.put("personality", personality.text.toString())
+                d.put("scenario", scenario.text.toString())
+                d.put("system_prompt", systemPrompt.text.toString())
+                d.put("post_history_instructions", postHistory.text.toString())
+                d.put("mes_example", mesExample.text.toString())
+                d.put("creator_notes", creatorNotes.text.toString())
                 d.put("tags", JSONArray(tags))
                 d.put("first_mes", greetings.firstOrNull() ?: "")
                 d.put("alternate_greetings", JSONArray(greetings.drop(1)))
@@ -242,11 +246,11 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 d.put("streaming", streaming)
                 // 角色注入提示写回 extensions.depth_prompt（空则移除）
                 val ext = d.optJSONObject("extensions") ?: JSONObject().also { d.put("extensions", it) }
-                if (depthPromptText.isBlank()) {
+                if (depthPromptText.text.isBlank()) {
                     ext.remove("depth_prompt")
                 } else {
                     ext.put("depth_prompt", JSONObject()
-                        .put("prompt", depthPromptText)
+                        .put("prompt", depthPromptText.text.toString())
                         .put("depth", depthPromptDepth.toIntOrNull() ?: 4)
                         .put("role", depthPromptRole))
                 }
@@ -284,22 +288,22 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
 
     if (showGreetingDialog || editingGreetingIdx != null) {
         val idx = editingGreetingIdx
-        var greeting by remember(idx) {
-            mutableStateOf(if (idx != null) greetings.getOrElse(idx) { "" } else "")
+        val greeting = remember(idx) {
+            TextFieldState(if (idx != null) greetings.getOrElse(idx) { "" } else "")
         }
         AlertDialog(
             onDismissRequest = { showGreetingDialog = false; editingGreetingIdx = null },
             title = { Text(if (idx != null) stringResource(R.string.edit_greeting) else stringResource(R.string.add_greeting)) },
             text = {
-                OutlinedTextField(
-                    value = greeting, onValueChange = { greeting = it },
-                    label = { Text(stringResource(R.string.greeting_content)) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 360.dp),
+                AppTextArea(
+                    state = greeting,
+                    label = stringResource(R.string.greeting_content),
+                    minLines = 5, maxLines = 14,
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val trimmed = greeting.trim()
+                    val trimmed = greeting.text.toString().trim()
                     if (trimmed.isNotBlank()) {
                         greetings = if (idx != null) {
                             greetings.toMutableList().also { it[idx] = trimmed }
@@ -331,6 +335,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppTopBar(
@@ -433,10 +438,10 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 }
             }
 
-            OutlinedTextField(
-                value = description, onValueChange = { description = it },
-                label = { Text(stringResource(R.string.char_definition_label)) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 600.dp),
+            AppTextArea(
+                state = description,
+                label = stringResource(R.string.char_definition_label),
+                minLines = 8, maxLines = 24,
             )
 
             // 高级定义（Advanced Definitions）：默认折叠，避免冲淡基础编辑
@@ -461,41 +466,36 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
             }
 
             if (advancedExpanded) {
-                OutlinedTextField(
-                    value = personality, onValueChange = { personality = it },
-                    label = { Text(stringResource(R.string.char_personality_label)) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 300.dp),
+                AppTextArea(
+                    state = personality,
+                    label = stringResource(R.string.char_personality_label),
                 )
-                OutlinedTextField(
-                    value = scenario, onValueChange = { scenario = it },
-                    label = { Text(stringResource(R.string.char_scenario_label)) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 300.dp),
+                AppTextArea(
+                    state = scenario,
+                    label = stringResource(R.string.char_scenario_label),
                 )
-                OutlinedTextField(
-                    value = systemPrompt, onValueChange = { systemPrompt = it },
-                    label = { Text(stringResource(R.string.char_system_prompt_label)) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 300.dp),
+                AppTextArea(
+                    state = systemPrompt,
+                    label = stringResource(R.string.char_system_prompt_label),
                 )
-                OutlinedTextField(
-                    value = postHistory, onValueChange = { postHistory = it },
-                    label = { Text(stringResource(R.string.char_post_history_label)) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 300.dp),
+                AppTextArea(
+                    state = postHistory,
+                    label = stringResource(R.string.char_post_history_label),
                 )
-                OutlinedTextField(
-                    value = mesExample, onValueChange = { mesExample = it },
-                    label = { Text(stringResource(R.string.char_mes_example_label)) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 300.dp),
+                AppTextArea(
+                    state = mesExample,
+                    label = stringResource(R.string.char_mes_example_label),
                 )
-                OutlinedTextField(
-                    value = creatorNotes, onValueChange = { creatorNotes = it },
-                    label = { Text(stringResource(R.string.char_creator_notes_label)) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+                AppTextArea(
+                    state = creatorNotes,
+                    label = stringResource(R.string.char_creator_notes_label),
+                    minLines = 2,
                 )
                 // 角色注入提示（Character's Note）：正文 + 注入深度 + 角色（始终显示）
-                OutlinedTextField(
-                    value = depthPromptText, onValueChange = { depthPromptText = it },
-                    label = { Text(stringResource(R.string.char_depth_prompt_label)) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp),
+                AppTextArea(
+                    state = depthPromptText,
+                    label = stringResource(R.string.char_depth_prompt_label),
+                    minLines = 2,
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space12),
                     verticalAlignment = Alignment.CenterVertically) {

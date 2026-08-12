@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -69,6 +70,7 @@ import me.rerere.fawntavern.data.preset.RegexScript
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
+import me.rerere.fawntavern.ui.components.AppTextArea
 import me.rerere.fawntavern.ui.components.draggableLiftScale
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
 import me.rerere.fawntavern.ui.components.rememberReorderableList
@@ -112,6 +114,7 @@ fun PresetEditorScreen(
     var deleteConfirmIdx by remember { mutableStateOf<Int?>(null) }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Column {
@@ -457,8 +460,8 @@ private fun RegexEditDialog(
     onSave: (RegexScript) -> Unit,
 ) {
     var name by remember { mutableStateOf(script.scriptName) }
-    var find by remember { mutableStateOf(script.findRegex) }
-    var replace by remember { mutableStateOf(script.replaceString) }
+    val find = rememberTextFieldState(script.findRegex)
+    val replace = rememberTextFieldState(script.replaceString)
     var onUser by remember { mutableStateOf(1 in script.placement) }
     var onAi by remember { mutableStateOf(2 in script.placement || script.placement.isEmpty()) }
     var markdownOnly by remember { mutableStateOf(script.markdownOnly) }
@@ -476,6 +479,7 @@ private fun RegexEditDialog(
             color = MaterialTheme.colorScheme.background,
         ) {
             Scaffold(
+                modifier = Modifier.imePadding(),
                 topBar = {
                     Row(
                         Modifier.fillMaxWidth()
@@ -496,7 +500,8 @@ private fun RegexEditDialog(
                                 if (onAi) add(2)
                             }
                             onSave(script.copy(
-                                scriptName = name, findRegex = find, replaceString = replace,
+                                scriptName = name, findRegex = find.text.toString(),
+                                replaceString = replace.text.toString(),
                                 placement = placement,
                                 markdownOnly = markdownOnly, promptOnly = promptOnly,
                                 minDepth = minDepth.toIntOrNull()?.takeIf { it >= 0 },
@@ -517,15 +522,15 @@ private fun RegexEditDialog(
                         label = { Text(stringResource(R.string.prompt_name)) },
                         modifier = Modifier.fillMaxWidth(), singleLine = true,
                     )
-                    OutlinedTextField(
-                        value = find, onValueChange = { find = it },
-                        label = { Text(stringResource(R.string.find_regex_label)) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+                    AppTextArea(
+                        state = find,
+                        label = stringResource(R.string.find_regex_label),
+                        minLines = 4,
                     )
-                    OutlinedTextField(
-                        value = replace, onValueChange = { replace = it },
-                        label = { Text(stringResource(R.string.replace_string_label)) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+                    AppTextArea(
+                        state = replace,
+                        label = stringResource(R.string.replace_string_label),
+                        minLines = 4,
                     )
 
                     // 高级设置默认折叠
@@ -578,7 +583,7 @@ private fun PromptEditDialog(
 ) {
     var name by remember { mutableStateOf(item.name) }
     var role by remember { mutableStateOf(item.role) }
-    var content by remember { mutableStateOf(item.content) }
+    val content = rememberTextFieldState(item.content)
     var injectionPos by remember { mutableIntStateOf(item.injectionPosition) }
     var injectionDepth by remember { mutableStateOf(item.injectionDepth.toString()) }
     var forbidOverrides by remember { mutableStateOf(item.forbidOverrides) }
@@ -593,6 +598,7 @@ private fun PromptEditDialog(
             color = MaterialTheme.colorScheme.background,
         ) {
             Scaffold(
+                modifier = Modifier.imePadding(),
                 topBar = {
                     Row(
                         Modifier.fillMaxWidth()
@@ -609,7 +615,7 @@ private fun PromptEditDialog(
                         )
                         Button(onClick = {
                             onSave(item.copy(
-                                name = name, role = role, content = content,
+                                name = name, role = role, content = content.text.toString(),
                                 injectionPosition = injectionPos,
                                 injectionDepth = injectionDepth.toIntOrNull() ?: item.injectionDepth,
                                 forbidOverrides = forbidOverrides, systemPrompt = systemPrompt,
@@ -655,9 +661,9 @@ private fun PromptEditDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                         // 正文输入框占据剩余空间，可独立滚动
-                        OutlinedTextField(
-                            value = content, onValueChange = { content = it },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 300.dp),
+                        AppTextArea(
+                            state = content,
+                            minLines = 12, maxLines = 24,
                         )
                     }
                 }

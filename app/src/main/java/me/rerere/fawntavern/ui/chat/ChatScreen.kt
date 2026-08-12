@@ -11,15 +11,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import me.rerere.fawntavern.ui.components.FloatingWindow
 import me.rerere.fawntavern.ui.components.rememberInteractiveDrawerState
@@ -29,7 +25,6 @@ import me.rerere.fawntavern.ui.components.RenameDialog
 import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -118,8 +113,8 @@ fun ChatScreen(
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
     // ── 消息操作弹窗状态（按消息 ts 定位，与分页/内存窗口无关） ──
     var menuTargetIdx by remember { mutableStateOf<Long?>(null) }
-    var editTargetIdx by remember { mutableStateOf<Long?>(null) }
-    var selectCopyText by remember { mutableStateOf<String?>(null) }
+    /** 全屏底部面板内容（消息全文/输入框全文共用），非 null 时显示 */
+    var copyPanel by remember { mutableStateOf<CopyPanel?>(null) }
     var deleteSessionId by remember { mutableStateOf<String?>(null) }
     var renameSession by remember { mutableStateOf<Pair<String, String>?>(null) }
     var scrollToBottomTrigger by remember { mutableStateOf(0) }
@@ -145,15 +140,24 @@ fun ChatScreen(
                 modelSelector.open()
             }
             ChatViewModel.SendOutcome.SKIPPED -> {}
+            ChatViewModel.SendOutcome.FILE_TOO_LARGE ->
+                Toast.makeText(ctx, ctx.getString(R.string.file_too_large_to_send), Toast.LENGTH_SHORT).show()
+        }
+    }
+    // 附件落盘失败（提供方不报大小等兜底场景）：附件与输入已恢复，这里弹提示
+    LaunchedEffect(vm.sendError) {
+        vm.sendError?.let { err ->
+            Toast.makeText(ctx, err, Toast.LENGTH_SHORT).show()
+            vm.consumeSendError()
         }
     }
 
-    // ── 附件选取 launcher ──
-    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { vm.attachments = vm.attachments + Attachment(it, isImage = true) }
+    // ── 附件选取 launcher（相册/文件均可多选；文件里选到图片按 MIME 归为图片）──
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        uris.forEach { uri -> vm.attachments = vm.attachments + Attachment(uri, isImage = true) }
     }
-    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { vm.attachments = vm.attachments + Attachment(it, isImage = false) }
+    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        uris.forEach { uri -> vm.attachments = vm.attachments + Attachment(uri, isImage = isImageUri(ctx, uri)) }
     }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok) cameraImageUri?.let { vm.attachments = vm.attachments + Attachment(it, isImage = true) }
@@ -423,12 +427,18 @@ fun ChatScreen(
                 },
                 bottomBar = {
                     ChatBottomArea(
-                        text = vm.inputText,
-                        onTextChange = { vm.inputText = it },
+                        state = vm.inputState,
                         attachments = vm.attachments,
                         onRemoveAttachment = { vm.attachments = vm.attachments - it },
                         showAttachment = showAttachment,
                         onToggleAttachment = { showAttachment = !showAttachment },
+                        editing = vm.editingTs != null,
+                        onCancelEdit = { vm.cancelEdit() },
+                        onExpand = {
+                            if (vm.inputText.isNotBlank()) {
+                                copyPanel = CopyPanel(ctx.getString(R.string.input_content), vm.inputText, editable = true)
+                            }
+                        },
                         currentModelId = displayModelId,
                         reasoning = vm.reasoning,
                         generating = vm.generating,
@@ -437,9 +447,11 @@ fun ChatScreen(
                         builtInSearchEnabled = vm.builtInSearchEnabled,
                         onStop = { vm.stopGenerate() },
                         onSend = {
+                            val wasEditing = vm.editingTs != null
                             val outcome = vm.sendMessage()
                             if (outcome != ChatViewModel.SendOutcome.SKIPPED) keyboardController?.hide()
-                            handleOutcome(outcome)
+                            // 编辑是原地更新，不滚动到底部
+                            handleOutcome(outcome, scroll = !wasEditing)
                         },
                         onSelectModel = { modelSelector.open() },
                         onSelectReasoning = { showReasoningPicker = true },
@@ -681,11 +693,11 @@ fun ChatScreen(
         MessageMenu(
             onDismiss = { menuTargetIdx = null },
             onSelectCopy = {
-                selectCopyText = menuMsg.content
+                copyPanel = CopyPanel(ctx.getString(R.string.select_copy), menuMsg.content)
                 menuTargetIdx = null
             },
             onEdit = {
-                if (!vm.generating) editTargetIdx = menuTs
+                vm.startEdit(menuTs)
                 menuTargetIdx = null
             },
             onDelete = {
@@ -698,49 +710,17 @@ fun ChatScreen(
         )
     }
 
-    // ── 选择复制对话框 ──
-    selectCopyText?.let { txt ->
-        AlertDialog(
-            onDismissRequest = { selectCopyText = null },
-            title = { Text(stringResource(R.string.select_copy)) },
-            text = {
-                SelectionContainer {
-                    Text(txt, style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()))
-                }
+    // ── 全屏底部面板：消息全文（只读）/ 输入框全文（可编辑，与输入框共用同一 TextFieldState）──
+    copyPanel?.let { panel ->
+        TextCopySheet(
+            title = panel.title,
+            text = if (panel.editable) vm.inputText else panel.text,
+            onCopyAll = {
+                copyText(if (panel.editable) vm.inputText else panel.text)
+                copyPanel = null
             },
-            confirmButton = {
-                TextButton(onClick = { copyText(txt); selectCopyText = null }) {
-                    Text(stringResource(R.string.copy_all))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { selectCopyText = null }) { Text(stringResource(R.string.close)) }
-            },
-        )
-    }
-
-    // ── 编辑消息对话框 ──
-    val editTs = editTargetIdx
-    val editMsg = editTs?.let { ts -> vm.overlays[ts] ?: vm.session?.messages?.firstOrNull { it.ts == ts } }
-    if (editTs != null && editMsg != null) {
-        var editText by remember(editTs) { mutableStateOf(editMsg.content) }
-        AlertDialog(
-            onDismissRequest = { editTargetIdx = null },
-            title = { Text(stringResource(R.string.edit_message)) },
-            text = {
-                OutlinedTextField(editText, { editText = it },
-                    modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 10)
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.updateMessage(editTs, editText)
-                    editTargetIdx = null
-                }) { Text(stringResource(R.string.confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { editTargetIdx = null }) { Text(stringResource(R.string.cancel)) }
-            },
+            onDismiss = { copyPanel = null },
+            editState = if (panel.editable) vm.inputState else null,
         )
     }
 
@@ -846,6 +826,19 @@ fun ChatScreen(
             onDismiss = { showSearch = false },
         )
     }
+}
+
+/** 全屏底部面板的内容（消息全文 / 输入框全文共用同一面板）；editable = 输入框展开，正文可直接编辑 */
+private data class CopyPanel(val title: String, val text: String, val editable: Boolean = false)
+
+/** "文件"入口选到图片时按图片展示：优先看 MIME，部分提供方不给 MIME 时按扩展名兜底 */
+private val IMAGE_FILE_EXTENSIONS = listOf(".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic", ".heif", ".avif")
+
+private fun isImageUri(context: android.content.Context, uri: Uri): Boolean {
+    val mime = context.contentResolver.getType(uri)
+    if (mime != null) return mime.startsWith("image/")
+    val name = uri.lastPathSegment?.substringAfterLast('/') ?: return false
+    return IMAGE_FILE_EXTENSIONS.any { name.endsWith(it, ignoreCase = true) }
 }
 
 /** 状态栏高度（px），用于把悬浮窗初始位置放到顶栏之下 */

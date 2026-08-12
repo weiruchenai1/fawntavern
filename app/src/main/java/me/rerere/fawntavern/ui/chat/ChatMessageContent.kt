@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -18,10 +19,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,8 +34,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -38,12 +53,20 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
+import com.mikepenz.markdown.annotator.annotatorSettings
+import com.mikepenz.markdown.annotator.buildMarkdownAnnotatedString
 import com.mikepenz.markdown.compose.LocalMarkdownColors
 import com.mikepenz.markdown.compose.LocalMarkdownDimens
+import com.mikepenz.markdown.compose.LocalMarkdownInlineContent
 import com.mikepenz.markdown.compose.LocalMarkdownPadding
 import com.mikepenz.markdown.compose.components.CurrentComponentsBridge
+import com.mikepenz.markdown.compose.components.MarkdownComponent
+import com.mikepenz.markdown.compose.components.MarkdownComponentModel
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
+import com.mikepenz.markdown.compose.elements.MarkdownHeader
+import com.mikepenz.markdown.compose.elements.MarkdownText
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.m3.elements.MarkdownCheckBox
@@ -51,12 +74,23 @@ import com.mikepenz.markdown.model.DefaultMarkdownAnimation
 import com.mikepenz.markdown.model.MarkdownTypography
 import com.mikepenz.markdown.model.ReferenceLinkHandlerImpl
 import com.mikepenz.markdown.model.State
+import com.mikepenz.markdown.model.markdownInlineContent
 import com.mikepenz.markdown.model.markdownPadding
+import com.mikepenz.markdown.utils.MARKDOWN_TAG_IMAGE_URL
+import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
+import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.FileCode2
 import com.composables.icons.lucide.Lucide
+import org.intellij.markdown.IElementType
+import org.intellij.markdown.MarkdownTokenTypes
+import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.parser.MarkdownParser
+import ru.noties.jlatexmath.JLatexMathDrawable
+import java.util.Base64
+import kotlinx.coroutines.delay
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.RegexEngine
@@ -84,15 +118,29 @@ data class RenderPrefs(
     val codeCollapseLines: Int = 5,
 )
 
-/** 数学公式预处理：把 $$…$$（块）与 $…$（行内）转成 markdown 能渲染的形态（代码块/行内代码）。 */
+/** 把 TeX 片段转换成 Markdown 可定位的节点；节点最终由 JLaTeXMath 绘制。 */
 private object MathFormula {
     private val block = Regex("""\$\$([\s\S]+?)\$\$""")
     // 行内 $…$：两侧内容以非空白收尾、紧贴 $（避免误伤 $5 这类货币），不跨行
     private val inline = Regex("""(?<!\$)\$(?!\$)(?=\S)([^\$\n]+?)(?<=\S)\$(?!\$)""")
+    private const val LinkPrefix = "latex:"
 
     fun prepare(text: String): String {
         val afterBlock = block.replace(text) { "```math\n${it.groupValues[1].trim()}\n```" }
-        return inline.replace(afterBlock) { "`${it.groupValues[1]}`" }
+        return inline.replace(afterBlock) {
+            val encoded = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(it.groupValues[1].toByteArray(Charsets.UTF_8))
+            "![latex]($LinkPrefix$encoded)"
+        }
+    }
+
+    fun decodeLink(link: String): String? {
+        if (!link.startsWith(LinkPrefix)) return null
+        return try {
+            String(Base64.getUrlDecoder().decode(link.removePrefix(LinkPrefix)), Charsets.UTF_8)
+        } catch (_: IllegalArgumentException) {
+            null
+        }
     }
 }
 
@@ -182,15 +230,37 @@ fun MessageContent(
             State.Error(e, handler)
         }
     }
-    // 自动折叠代码块：仅覆盖 codeFence 组件（保留 m3 的 checkbox 默认），其余渲染不变
-    val components = remember(renderPrefs.autoCollapseCode, renderPrefs.codeCollapseLines) {
+    // 代码围栏统一走聊天专用工具栏；math 围栏交给本地 TeX 引擎。行内公式则在段落组件中
+    // 换成拥有独立尺寸的 InlineTextContent，保留正文中的自然基线与换行。
+    val components = remember(renderPrefs.math, renderPrefs.autoCollapseCode, renderPrefs.codeCollapseLines) {
         markdownComponents(
             checkbox = { MarkdownCheckBox(it.content, it.node, it.typography.text) },
-            codeFence = if (renderPrefs.autoCollapseCode) { model ->
+            paragraph = if (renderPrefs.math) { model ->
+                LatexMarkdownText(model, model.typography.paragraph)
+            } else CurrentComponentsBridge.paragraph,
+            heading1 = latexHeading(renderPrefs.math) { it.typography.h1 },
+            heading2 = latexHeading(renderPrefs.math) { it.typography.h2 },
+            heading3 = latexHeading(renderPrefs.math) { it.typography.h3 },
+            heading4 = latexHeading(renderPrefs.math) { it.typography.h4 },
+            heading5 = latexHeading(renderPrefs.math) { it.typography.h5 },
+            heading6 = latexHeading(renderPrefs.math) { it.typography.h6 },
+            setextHeading1 = latexHeading(renderPrefs.math, MarkdownTokenTypes.SETEXT_CONTENT) { it.typography.h1 },
+            setextHeading2 = latexHeading(renderPrefs.math, MarkdownTokenTypes.SETEXT_CONTENT) { it.typography.h2 },
+            codeFence = { model ->
                 MarkdownCodeFence(model.content, model.node, model.typography.code) { code, language, style ->
-                    FoldableCodeBlock(code, language, style, renderPrefs.codeCollapseLines)
+                    if (renderPrefs.math && language.equals("math", ignoreCase = true)) {
+                        LatexFormulaBlock(code.trim(), style)
+                    } else {
+                        ChatCodeBlock(
+                            code = code,
+                            language = language,
+                            style = style,
+                            collapsible = renderPrefs.autoCollapseCode,
+                            threshold = renderPrefs.codeCollapseLines,
+                        )
+                    }
                 }
-            } else CurrentComponentsBridge.codeFence,
+            },
         )
     }
     // 每个 markdown 元素前都会加 Spacer(block 高度)，AI 消息靠它撑开段落间距；
@@ -243,6 +313,156 @@ private fun chatMarkdownTypography(textStyle: TextStyle): MarkdownTypography {
     )
 }
 
+private fun latexHeading(
+    enabled: Boolean,
+    contentChildType: IElementType = MarkdownTokenTypes.ATX_CONTENT,
+    style: (MarkdownComponentModel) -> TextStyle,
+): MarkdownComponent = if (enabled) {
+    { model: MarkdownComponentModel ->
+        LatexMarkdownText(
+            model = model,
+            style = style(model),
+            contentChildType = contentChildType,
+            heading = true,
+        )
+    }
+} else {
+    { model: MarkdownComponentModel ->
+        MarkdownHeader(model.content, model.node, style(model), contentChildType)
+    }
+}
+
+/** Renders the Markdown paragraph normally, replacing only latex: image placeholders with sized TeX canvases. */
+@Composable
+private fun LatexMarkdownText(
+    model: MarkdownComponentModel,
+    style: TextStyle,
+    contentChildType: IElementType? = null,
+    heading: Boolean = false,
+) {
+    val child = contentChildType?.let { type -> model.node.children.firstOrNull { it.type == type } } ?: model.node
+    val settings = annotatorSettings()
+    val styled = remember(model.content, child, style, settings) {
+        buildAnnotatedString {
+            pushStyle(style.toSpanStyle())
+            buildMarkdownAnnotatedString(model.content, child, settings)
+            pop()
+        }
+    }
+    val formulas = remember(styled) {
+        styled.getStringAnnotations(start = 0, end = styled.length)
+            .mapNotNull { range ->
+                if (range.item != MARKDOWN_TAG_IMAGE_URL) return@mapNotNull null
+                val link = styled.text.substring(range.start, range.end)
+                MathFormula.decodeLink(link)?.let { formula -> Triple(range, formula, link) }
+            }
+    }
+    if (formulas.isEmpty()) {
+        MarkdownText(styled, modifier = if (heading) Modifier.semantics { heading() } else Modifier, style = style)
+        return
+    }
+
+    val density = LocalDensity.current
+    val color = MaterialTheme.colorScheme.onSurface.toArgb()
+    val textSizePx = with(density) {
+        if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.dp.toPx()
+    }
+    val rendered = formulas.mapIndexed { index, (range, formula, _) ->
+        val drawable = remember(formula, textSizePx, color) {
+            runCatching {
+                JLatexMathDrawable.builder("\\textstyle $formula")
+                    .textSize(textSizePx)
+                    .color(color)
+                    .padding(1)
+                    .fitCanvas(true)
+                    .build()
+            }.getOrNull()
+        }
+        InlineFormula(index, range, formula, drawable)
+    }
+    val transformed = remember(styled, rendered.map { it.formula to (it.drawable != null) }) {
+        buildAnnotatedString {
+            var cursor = 0
+            rendered.forEach { item ->
+                append(styled.subSequence(cursor, item.range.start))
+                if (item.drawable == null) {
+                    append("\$${item.formula}\$")
+                } else {
+                    appendInlineContent(item.id, "\uFFFC")
+                }
+                cursor = item.range.end
+            }
+            append(styled.subSequence(cursor, styled.length))
+        }
+    }
+    val inlineContent = rendered.mapNotNull { item ->
+        val drawable = item.drawable ?: return@mapNotNull null
+        val width = with(density) { drawable.intrinsicWidth.coerceAtLeast(1).toSp() }
+        val height = with(density) { drawable.intrinsicHeight.coerceAtLeast(1).toSp() }
+        item.id to InlineTextContent(
+            Placeholder(width, height, PlaceholderVerticalAlign.TextCenter)
+        ) {
+            Canvas(Modifier.fillMaxWidth()) {
+                drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
+                drawable.draw(drawContext.canvas.nativeCanvas)
+            }
+        }
+    }.toMap()
+    CompositionLocalProvider(LocalMarkdownInlineContent provides markdownInlineContent(inlineContent)) {
+        MarkdownText(
+            transformed,
+            modifier = if (heading) Modifier.semantics { heading() } else Modifier,
+            style = style,
+        )
+    }
+}
+
+private data class InlineFormula(
+    val index: Int,
+    val range: AnnotatedString.Range<String>,
+    val formula: String,
+    val drawable: JLatexMathDrawable?,
+) {
+    val id: String get() = "latex-inline-$index"
+}
+
+@Composable
+private fun LatexFormulaBlock(formula: String, style: TextStyle) {
+    val density = LocalDensity.current
+    val color = MaterialTheme.colorScheme.onSurface.toArgb()
+    val textSizePx = with(density) {
+        if (style.fontSize.isSpecified) style.fontSize.toPx() * 1.1f else 17.dp.toPx()
+    }
+    val drawable = remember(formula, textSizePx, color) {
+        runCatching {
+            JLatexMathDrawable.builder("\\displaystyle $formula")
+                .textSize(textSizePx)
+                .color(color)
+                .padding(4)
+                .fitCanvas(true)
+                .build()
+        }.getOrNull()
+    }
+    if (drawable == null) {
+        Text(formula, style = style, color = MaterialTheme.colorScheme.error)
+        return
+    }
+    val width = with(density) { drawable.intrinsicWidth.coerceAtLeast(1).toDp() }
+    val height = with(density) { drawable.intrinsicHeight.coerceAtLeast(1).toDp() }
+    Box(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Canvas(Modifier.size(width, height)) {
+            drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
+            drawable.draw(drawContext.canvas.nativeCanvas)
+        }
+    }
+}
+
 /**
  * 预处理 Markdown 文本：
  * - 有连续空行段落 → 保留为 GFM 段落（空行分隔），让 mikepenz 渲染段落间距
@@ -282,48 +502,73 @@ private fun markdownWithHardBreaks(text: String): String {
     return sb.toString()
 }
 
-/**
- * 可折叠代码块：超过 [threshold] 行时默认收起（只显示前几行预览 + 行数 + 展开入口），
- * 点击标题栏切换展开/收起。样式对齐默认代码块（同背景/圆角/等宽字体）。
- */
+/** Chat-oriented code surface with a stable metadata/action bar and optional line-limit folding. */
 @Composable
-private fun FoldableCodeBlock(code: String, language: String?, style: TextStyle, threshold: Int) {
+private fun ChatCodeBlock(
+    code: String,
+    language: String?,
+    style: TextStyle,
+    collapsible: Boolean,
+    threshold: Int,
+) {
     val lineCount = code.count { it == '\n' } + 1
-    var expanded by remember(code) { mutableStateOf(lineCount <= threshold) }
+    val canFold = collapsible && lineCount > threshold
+    var expanded by remember(code, collapsible, threshold) { mutableStateOf(!canFold) }
+    var copied by remember(code) { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
     val colors = LocalMarkdownColors.current
-    val corner = LocalMarkdownDimens.current.codeBackgroundCornerSize
     val codePad = LocalMarkdownPadding.current.codeBlock
     val labelStyle = MaterialTheme.typography.labelSmall
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1400)
+            copied = false
+        }
+    }
 
     Column(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp)
-            .clip(RoundedCornerShape(corner))
-            .background(colors.codeBackground)
+        Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Row(
-            Modifier.fillMaxWidth().noRippleClickable { expanded = !expanded }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            Icon(Lucide.FileCode2, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                (language?.takeIf { it.isNotBlank() } ?: stringResource(R.string.code_language_plain)),
-                style = labelStyle, color = colors.codeText,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                language?.trim()?.takeIf { it.isNotEmpty() }?.uppercase()
+                    ?: stringResource(R.string.code_language_plain),
+                style = labelStyle.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 stringResource(R.string.code_block_lines_fmt, lineCount),
-                style = labelStyle, color = colors.codeText.copy(alpha = 0.7f),
+                style = labelStyle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
             Icon(
-                if (expanded) Lucide.ChevronUp else Lucide.ChevronDown, null,
-                Modifier.size(14.dp), tint = colors.codeText,
+                if (copied) Lucide.Check else Lucide.Copy,
+                stringResource(R.string.copy),
+                Modifier.size(36.dp).noRippleClickable {
+                    clipboard.setText(AnnotatedString(code))
+                    copied = true
+                }.padding(9.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
-                stringResource(if (expanded) R.string.collapse else R.string.expand),
-                style = labelStyle, color = colors.codeText.copy(alpha = 0.7f),
-            )
+            if (canFold) {
+                Icon(
+                    if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                    stringResource(if (expanded) R.string.collapse else R.string.expand),
+                    Modifier.size(36.dp).noRippleClickable { expanded = !expanded }.padding(9.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         val shown = if (expanded) code else code.lineSequence().take(threshold).joinToString("\n")
         Box(

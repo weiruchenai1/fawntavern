@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -91,17 +92,27 @@ fun <T : Any> ImportableListScreen(
     LaunchedEffect(Unit) { refresh() }
 
     val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
             scope.launch {
-                try {
-                    val name = importItem(uri)
-                    Toast.makeText(context, context.getString(R.string.toast_imported_fmt, name), Toast.LENGTH_SHORT).show()
-                    refresh()
-                } catch (e: Exception) {
-                    Toast.makeText(context, context.getString(R.string.toast_import_failed_fmt, e.message ?: ""), Toast.LENGTH_SHORT).show()
+                var imported = 0
+                var failed = 0
+                for (uri in uris) {
+                    try {
+                        importItem(uri)
+                        imported++
+                    } catch (_: Exception) {
+                        failed++
+                    }
                 }
+                if (imported > 0) {
+                    Toast.makeText(context, context.getString(R.string.toast_imported_files_fmt, imported), Toast.LENGTH_SHORT).show()
+                }
+                if (failed > 0) {
+                    Toast.makeText(context, context.getString(R.string.toast_import_failed_count_fmt, failed), Toast.LENGTH_SHORT).show()
+                }
+                refresh()
             }
         }
     }
@@ -140,6 +151,7 @@ fun <T : Any> ImportableListScreen(
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(stringResource(titleRes), onBack, actions) },
         floatingActionButton = {

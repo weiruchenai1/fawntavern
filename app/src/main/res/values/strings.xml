@@ -158,6 +158,9 @@
     <string name="toast_export_success">导出成功</string>
     <string name="toast_export_failed_fmt">导出失败: %s</string>
     <string name="toast_imported_files_fmt">已导入 %d 个文件</string>
+    <string name="toast_import_failed_count_fmt">有 %d 个文件导入失败</string>
+    <string name="file_too_large_to_send">文件过大（超过 20MB），无法发送</string>
+    <string name="attachment_send_failed">附件处理失败，请重试</string>
     <string name="toast_no_export_data_fmt">没有可导出的%s</string>
     <string name="toast_rename_title">重命名</string>
     <string name="toast_rename_name_label">名称</string>
@@ -369,6 +372,8 @@
     <string name="copied">已复制</string>
     <string name="copy_all">复制全部</string>
     <string name="edit_message">编辑消息</string>
+    <string name="editing_in_progress">编辑中</string>
+    <string name="input_content">输入内容</string>
     <string name="thinking_label">思考过程</string>
     <string name="thinking_running">思考中…</string>
     <string name="cot_deep_thinking">深度思考</string>

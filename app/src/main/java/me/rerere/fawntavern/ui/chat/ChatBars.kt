@@ -1,10 +1,7 @@
 package me.rerere.fawntavern.ui.chat
 
-import android.content.Context
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,8 +23,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldDecorator
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
@@ -44,10 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,6 +53,8 @@ import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Maximize
+import com.composables.icons.lucide.SquarePen
 import com.composables.icons.lucide.MessageCirclePlus
 import com.composables.icons.lucide.Package
 import com.composables.icons.lucide.Paperclip
@@ -105,12 +103,14 @@ internal fun ChatTopBar(title: String, subtitle: String, onDrawer: () -> Unit, o
 
 @Composable
 internal fun ChatBottomArea(
-    text: String,
-    onTextChange: (String) -> Unit,
+    state: TextFieldState,
     attachments: List<Attachment>,
     onRemoveAttachment: (Attachment) -> Unit,
     showAttachment: Boolean,
     onToggleAttachment: () -> Unit,
+    editing: Boolean = false,
+    onCancelEdit: () -> Unit = {},
+    onExpand: () -> Unit = {},
     onSend: () -> Unit,
     currentModelId: String = "",
     reasoning: ReasoningLevel = ReasoningLevel.AUTO,
@@ -129,8 +129,7 @@ internal fun ChatBottomArea(
     onQuickReply: (QuickReply) -> Unit = {},
     enterToSend: Boolean = true,
 ) {
-    val hasContent = text.isNotBlank() || attachments.isNotEmpty()
-    val context = LocalContext.current
+    val hasContent = state.text.isNotBlank() || attachments.isNotEmpty()
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).navigationBarsPadding().padding(horizontal = Space16, vertical = Space8)) {
         // 快捷回复行（UI 插槽扩展）：位于输入卡片上方，可横向滚动
         if (quickReplies.isNotEmpty()) {
@@ -155,91 +154,82 @@ internal fun ChatBottomArea(
             }
         }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow)) {
-            // 附件预览：位于输入框上方，可横向滚动
-            if (attachments.isNotEmpty()) {
-                LazyRow(
-                    Modifier.fillMaxWidth().padding(start = Space12, end = Space12, top = Space12),
-                    horizontalArrangement = Arrangement.spacedBy(Space8),
+            // 编辑态：输入框内部最上方显示"编辑中"，右侧取消按钮 X
+            if (editing) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Space12, end = Space8, top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    itemsIndexed(attachments) { _, att ->
-                        if (att.isImage) {
-                            val bmp = remember(att.uri) {
-                                try {
-                                    context.contentResolver.openInputStream(att.uri)?.use { BitmapFactory.decodeStream(it) }
-                                } catch (_: Exception) { null }
-                            }
-                            Box(Modifier.size(56.dp).clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
-                                if (bmp != null) {
-                                    Image(bitmap = bmp.asImageBitmap(), contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                                }
-                                Icon(Lucide.X, "Remove",
-                                    Modifier.size(16.dp).align(Alignment.TopEnd)
-                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), RoundedCornerShape(bottomStart = 4.dp))
-                                        .clickable { onRemoveAttachment(att) },
-                                    tint = MaterialTheme.colorScheme.onSurface)
-                            }
-                        } else {
-                            // 文件卡片：140×56dp，右上角移除 X 的样式与图片缩略图的完全一致
-                            val fileInfo = remember(att.uri) { getFileInfo(context, att.uri) }
-                            Box(Modifier.height(56.dp).width(140.dp).clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
-                                Column(Modifier.fillMaxSize().padding(start = 8.dp, top = 6.dp, bottom = 6.dp, end = 20.dp),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(fileInfo.first, style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(fileInfo.second, style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                Icon(Lucide.X, "Remove",
-                                    Modifier.size(16.dp).align(Alignment.TopEnd)
-                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), RoundedCornerShape(bottomStart = 4.dp))
-                                        .clickable { onRemoveAttachment(att) },
-                                    tint = MaterialTheme.colorScheme.onSurface)
-                            }
-                        }
-                    }
+                    Icon(Lucide.SquarePen, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.editing_in_progress), style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.weight(1f))
+                    Icon(
+                        Lucide.X, stringResource(R.string.cancel),
+                        Modifier.size(32.dp).noRippleClickable { onCancelEdit() }.padding(8.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-            BasicTextField(
-                value = text,
-                onValueChange = onTextChange,
-                textStyle = MaterialTheme.typography.titleSmall.copy(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                maxLines = 6,
-                // 回车发送：软键盘用 Send 动作；硬件 Enter（非 Shift）在 modifier 里拦截为发送，Shift+Enter 保留换行
-                keyboardOptions = if (enterToSend) {
-                    KeyboardOptions(imeAction = ImeAction.Send)
-                } else {
-                    KeyboardOptions.Default
-                },
-                keyboardActions = if (enterToSend) {
-                    KeyboardActions(onSend = { onSend() })
-                } else {
-                    KeyboardActions.Default
-                },
-                modifier = Modifier.fillMaxWidth()
-                    .padding(horizontal = Space12, vertical = if (attachments.isEmpty()) 12.dp else 8.dp)
-                    .heightIn(min = 40.dp)
-                    .then(if (enterToSend) Modifier.onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyUp && event.key == Key.Enter && !event.isShiftPressed) {
-                            onSend()
-                            true
-                        } else false
-                    } else Modifier),
-                decorationBox = { inner ->
-                    Box {
-                        if (text.isEmpty()) {
-                            Text(stringResource(R.string.input_hint), style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // 附件预览：位于输入框上方，可横向滚动
+            if (attachments.isNotEmpty()) {
+                InputAttachmentRow(
+                    attachments = attachments,
+                    onRemove = onRemoveAttachment,
+                    modifier = Modifier.padding(start = Space12, end = Space12, top = Space12),
+                )
+            }
+            // 展开按钮与输入文本同级（同一行）：图标随占位文本垂直居中，左右间距与底部工具行一致
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                BasicTextField(
+                    state = state,
+                    textStyle = MaterialTheme.typography.titleSmall.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    // 限高走 lineLimits 而非 heightIn：BTF2 在测量阶段自己滚动内部内容，
+                    // 外部限高只会裁掉超出部分
+                    lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 6),
+                    // 回车发送：软键盘用 Send 动作；硬件 Enter（非 Shift）在 modifier 里拦截为发送，Shift+Enter 保留换行
+                    keyboardOptions = if (enterToSend) {
+                        KeyboardOptions(imeAction = ImeAction.Send)
+                    } else {
+                        KeyboardOptions.Default
+                    },
+                    onKeyboardAction = if (enterToSend) ({ onSend() }) else null,
+                    modifier = Modifier.weight(1f)
+                        .padding(
+                            start = Space12, end = Space8,
+                            top = if (attachments.isEmpty()) 12.dp else 8.dp,
+                            bottom = if (attachments.isEmpty()) 12.dp else 8.dp,
+                        )
+                        .heightIn(min = 40.dp)
+                        .then(if (enterToSend) Modifier.onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyUp && event.key == Key.Enter && !event.isShiftPressed) {
+                                onSend()
+                                true
+                            } else false
+                        } else Modifier),
+                    decorator = TextFieldDecorator { inner ->
+                        // CenterStart：空态占位文本在字段内垂直居中，与右侧展开图标对齐
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                            if (state.text.isEmpty()) {
+                                Text(stringResource(R.string.input_hint), style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            inner()
                         }
-                        inner()
-                    }
-                },
-            )
+                    },
+                )
+                // 内联操作小图标：透明容器点击显圆形按压背景，尺寸/右缘间距与底部工具行一致
+                AppIconButton(
+                    icon = Lucide.Maximize,
+                    contentDescription = stringResource(R.string.expand),
+                    onClick = onExpand,
+                    modifier = Modifier.padding(end = Space12),
+                    size = 36.dp,
+                    iconSize = 24.dp,
+                )
+            }
             Row(Modifier.fillMaxWidth().padding(start = Space12, end = Space12, bottom = Space8), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 // 左侧工具图标组：统一 spacedBy(Space8) 间距，AppIconButton 点击时显示圆形按压背景
                 Row(horizontalArrangement = Arrangement.spacedBy(Space8), verticalAlignment = Alignment.CenterVertically) {
@@ -337,30 +327,4 @@ private fun AttachBtn(icon: ImageVector, label: String, onClick: () -> Unit = {}
         Spacer(Modifier.height(Space8))
         Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
     }
-}
-
-private fun getFileInfo(context: Context, uri: Uri): Pair<String, String> {
-    var name = uri.lastPathSegment?.substringAfterLast('/') ?: "file"
-    var size = 0L
-    try {
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (nameIdx >= 0) {
-                    val dn = cursor.getString(nameIdx)
-                    if (!dn.isNullOrBlank()) name = dn
-                }
-                val sizeIdx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                if (sizeIdx >= 0) size = cursor.getLong(sizeIdx)
-            }
-        }
-    } catch (_: Exception) {}
-    val ext = name.substringAfterLast('.', "").uppercase()
-    val fmt = if (ext.isNotBlank()) ext else context.getString(R.string.unknown_format)
-    val sizeStr = when {
-        size < 1024 -> "${size}B"
-        size < 1024 * 1024 -> "${size / 1024}KB"
-        else -> "%.1fMB".format(size.toDouble() / (1024 * 1024))
-    }
-    return Pair(name, if (size > 0) "$fmt  $sizeStr" else fmt)
 }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -110,17 +111,27 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     LaunchedEffect(Unit) { refresh() }
 
     val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
             scope.launch {
-                try {
-                    val card = CharacterRepository.import(context, uri)
-                    Toast.makeText(context, context.getString(R.string.toast_imported_fmt, card.name), Toast.LENGTH_SHORT).show()
-                    refresh()
-                } catch (e: Exception) {
-                    Toast.makeText(context, context.getString(R.string.toast_import_failed_fmt, e.message ?: ""), Toast.LENGTH_SHORT).show()
+                var imported = 0
+                var failed = 0
+                for (uri in uris) {
+                    try {
+                        CharacterRepository.import(context, uri)
+                        imported++
+                    } catch (_: Exception) {
+                        failed++
+                    }
                 }
+                if (imported > 0) {
+                    Toast.makeText(context, context.getString(R.string.toast_imported_files_fmt, imported), Toast.LENGTH_SHORT).show()
+                }
+                if (failed > 0) {
+                    Toast.makeText(context, context.getString(R.string.toast_import_failed_count_fmt, failed), Toast.LENGTH_SHORT).show()
+                }
+                refresh()
             }
         }
     }
@@ -184,6 +195,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
         BackHandler(onBack = onBack)
 
         Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(stringResource(R.string.characters), onBack) },
         floatingActionButton = {

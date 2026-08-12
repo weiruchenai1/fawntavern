@@ -158,6 +158,9 @@
     <string name="toast_export_success">Export successful</string>
     <string name="toast_export_failed_fmt">Export failed: %s</string>
     <string name="toast_imported_files_fmt">Imported %d files</string>
+    <string name="toast_import_failed_count_fmt">Failed to import %d file(s)</string>
+    <string name="file_too_large_to_send">File too large (over 20 MB), cannot send</string>
+    <string name="attachment_send_failed">Failed to process attachment, please retry</string>
     <string name="toast_no_export_data_fmt">No %s to export</string>
     <string name="toast_rename_title">Rename</string>
     <string name="toast_rename_name_label">Name</string>
@@ -369,6 +372,8 @@
     <string name="copied">Copied</string>
     <string name="copy_all">Copy all</string>
     <string name="edit_message">Edit message</string>
+    <string name="editing_in_progress">Editing</string>
+    <string name="input_content">Input content</string>
     <string name="thinking_label">Thinking</string>
     <string name="thinking_running">Thinking…</string>
     <string name="cot_deep_thinking">Deep thinking</string>

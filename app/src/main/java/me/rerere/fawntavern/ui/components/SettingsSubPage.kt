@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +36,9 @@ fun SettingsSubPage(
 ) {
     val scrollState = rememberScrollState()
     Scaffold(
+        // 全局 enableEdgeToEdge 后窗口不再随键盘缩放，必须自己让出 IME 高度：
+        // 否则滚动视口底部一直在键盘后面，点击时 bringIntoView 会把光标滚到被遮挡的位置
+        modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(title, onBack) },
     ) { padding ->

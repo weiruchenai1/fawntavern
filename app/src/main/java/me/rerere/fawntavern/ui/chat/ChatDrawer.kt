@@ -67,11 +67,13 @@ import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.settings.UserProfileStore
 import java.io.File
 import java.io.FileOutputStream
+import androidx.compose.foundation.text.input.TextFieldState
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.AppIconButton
+import me.rerere.fawntavern.ui.components.AppTextArea
 import me.rerere.fawntavern.ui.components.appClickable
 
 /** 根据当前小时返回对应的问候语字符串资源 ID */
@@ -219,7 +221,7 @@ fun ChatDrawerContent(
 
     if (showNameDialog) {
         var editName by remember { mutableStateOf(userName) }
-        var editDesc by remember { mutableStateOf(personaDescription) }
+        val editDesc = remember { TextFieldState(personaDescription) }
         AlertDialog(
             onDismissRequest = { showNameDialog = false },
             title = { Text(stringResource(R.string.edit_username)) },
@@ -235,13 +237,10 @@ fun ChatDrawerContent(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
-                        value = editDesc,
-                        onValueChange = { editDesc = it },
-                        label = { Text(stringResource(R.string.persona_description_label)) },
-                        minLines = 3,
-                        maxLines = 8,
-                        modifier = Modifier.fillMaxWidth(),
+                    AppTextArea(
+                        state = editDesc,
+                        label = stringResource(R.string.persona_description_label),
+                        minLines = 3, maxLines = 8,
                     )
                 }
             },
@@ -252,7 +251,7 @@ fun ChatDrawerContent(
                         userName = trimmed
                         UserProfileStore.setName(context, trimmed)
                     }
-                    personaDescription = editDesc.trim()
+                    personaDescription = editDesc.text.toString().trim()
                     UserProfileStore.setDescription(context, personaDescription)
                     showNameDialog = false
                 }) { Text(stringResource(R.string.confirm)) }

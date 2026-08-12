@@ -25,6 +25,23 @@ object AttachmentStore {
 
     fun dir(context: Context): File = File(context.filesDir, DIR).also { it.mkdirs() }
 
+    /** 发送前同步校验：非图片文件大小超过拷贝上限时拦截发送（返回 true），避免落盘失败后静默丢附件 */
+    fun isTooLarge(context: Context, uri: Uri): Boolean {
+        val size = querySize(context, uri) ?: return false  // 提供方不报大小 → 放行，由 persistFile 兜底
+        return size > MAX_FILE_BYTES
+    }
+
+    private fun querySize(context: Context, uri: Uri): Long? = try {
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (idx >= 0 && !cursor.isNull(idx)) cursor.getLong(idx) else null
+            } else null
+        }
+    } catch (_: Exception) {
+        null
+    }
+
     /**
      * 图片：解码（API 28+ 走 ImageDecoder，自动处理 EXIF 旋转与降采样）后重编码为 JPEG。
      * 返回 filesDir 相对路径；解码失败返回 null。

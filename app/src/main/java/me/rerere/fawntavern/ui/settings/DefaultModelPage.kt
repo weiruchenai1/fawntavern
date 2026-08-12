@@ -47,7 +47,10 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.ui.api.ProviderIcon
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import me.rerere.fawntavern.ui.components.AppIconButton
+import me.rerere.fawntavern.ui.components.AppTextArea
 import me.rerere.fawntavern.ui.components.ModelSelectorSheet
 import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 import me.rerere.fawntavern.ui.components.SettingsSubPage
@@ -277,7 +280,7 @@ private fun PromptSheet(
     }
     val hint = if (role == DefaultModelStore.ROLE_TITLE) stringResource(R.string.default_model_prompt_title_hint)
         else stringResource(R.string.default_model_prompt_summary_hint)
-    var text by remember { mutableStateOf(currentPrompt.ifBlank { defaultPrompt }) }
+    val text = rememberTextFieldState(currentPrompt.ifBlank { defaultPrompt })
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
         enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
@@ -292,22 +295,20 @@ private fun PromptSheet(
             Text(title, style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface)
 
-            OutlinedTextField(
-                value = text, onValueChange = { text = it },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 360.dp),
-                placeholder = { Text(hint,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            AppTextArea(
+                state = text,
+                placeholder = hint,
+                minLines = 6, maxLines = 15,
             )
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = { text = defaultPrompt }) {
+                TextButton(onClick = { text.setTextAndPlaceCursorAtEnd(defaultPrompt) }) {
                     Icon(Lucide.RotateCcw, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(Space4))
                     Text(stringResource(R.string.default_model_reset_prompt))
                 }
                 TextButton(onClick = {
-                    val trimmed = text.trim()
+                    val trimmed = text.text.toString().trim()
                     onSave(if (trimmed == defaultPrompt) "" else trimmed)
                 }) {
                     Text(stringResource(R.string.save))

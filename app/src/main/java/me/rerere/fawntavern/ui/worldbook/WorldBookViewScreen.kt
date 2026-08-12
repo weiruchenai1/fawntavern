@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,6 +23,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -64,6 +66,7 @@ import me.rerere.fawntavern.data.worldbook.WorldBookPos
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
+import me.rerere.fawntavern.ui.components.AppTextArea
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
@@ -139,6 +142,7 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(book.name, onBack) }
     ) { padding ->
@@ -224,7 +228,7 @@ private fun statusBadge(entry: WorldBookEntry): Pair<String, androidx.compose.ui
 @Composable
 private fun EntryEditDialog(entry: WorldBookEntry, onDismiss: () -> Unit, onSave: (WorldBookEntry) -> Unit) {
     var eComment by remember(entry) { mutableStateOf(entry.comment) }
-    var eContent by remember(entry) { mutableStateOf(entry.content) }
+    val eContent = remember(entry) { TextFieldState(entry.content) }
     var eKeys by remember(entry) { mutableStateOf(entry.keys.joinToString(", ")) }
     var eSecondary by remember(entry) { mutableStateOf(entry.keySecondary.joinToString(", ")) }
     var eEnabled by remember(entry) { mutableStateOf(entry.enabled) }
@@ -319,8 +323,11 @@ private fun EntryEditDialog(entry: WorldBookEntry, onDismiss: () -> Unit, onSave
                         Slider(eProbability.toFloat(), { eProbability = it.toInt() }, valueRange = 0f..100f)
                     }
                 }
-                OutlinedTextField(eContent, { eContent = it }, label = { Text(stringResource(R.string.entry_content_label)) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp))
+                AppTextArea(
+                    state = eContent,
+                    label = stringResource(R.string.entry_content_label),
+                    minLines = 5, maxLines = 14,
+                )
 
                 // ── 高级（默认折叠） ──
                 Row(Modifier.fillMaxWidth().clickable { showAdvanced = !showAdvanced },
@@ -373,7 +380,7 @@ private fun EntryEditDialog(entry: WorldBookEntry, onDismiss: () -> Unit, onSave
         confirmButton = {
             Button(onClick = {
                 onSave(entry.copy(
-                    comment = eComment, content = eContent,
+                    comment = eComment, content = eContent.text.toString(),
                     keys = eKeys.split(",").map { it.trim() }.filter { it.isNotBlank() },
                     keySecondary = eSecondary.split(",").map { it.trim() }.filter { it.isNotBlank() },
                     enabled = eEnabled,
