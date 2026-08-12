@@ -636,5 +636,11 @@
     <string name="collapse">Collapse</string>
     <string name="code_block_lines_fmt">%1$d lines</string>
     <string name="code_language_plain">code</string>
+    <string name="markdown_table">Table</string>
+    <string name="download">Download</string>
+    <string name="image_saved_to_gallery">Image saved to gallery</string>
+    <string name="image_save_failed">Failed to save image</string>
+    <string name="file_saved">File saved</string>
+    <string name="file_save_failed">Failed to save file</string>
 
 </resources>

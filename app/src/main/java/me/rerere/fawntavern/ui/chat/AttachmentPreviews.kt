@@ -24,7 +24,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -121,10 +124,12 @@ private fun ImageAttachmentTile(
     model: Any,
     onRemove: (() -> Unit)? = null,
 ) {
+    var showPreview by remember(model) { mutableStateOf(false) }
     Box(
         Modifier.size(AttachmentHeight)
             .clip(AttachmentShape)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable { showPreview = true },
     ) {
         AsyncImage(
             model = model,
@@ -134,6 +139,9 @@ private fun ImageAttachmentTile(
             error = androidx.compose.ui.graphics.vector.rememberVectorPainter(Lucide.ImageOff),
         )
         if (onRemove != null) RemoveAttachmentButton(onRemove)
+    }
+    if (showPreview) {
+        ImagePreviewDialog(model = model, onDismiss = { showPreview = false })
     }
 }
 

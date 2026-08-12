@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -24,9 +27,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Brain
@@ -188,15 +194,15 @@ internal fun PrefToggle(
     }
 }
 
-/** 整数行数步进器（自动折叠代码块的行数阈值） */
+/** 自动折叠代码块的行数阈值：支持按钮步进和直接输入。 */
 @Composable
-internal fun PrefLineStepper(
+internal fun PrefLineInput(
     icon: ImageVector,
     label: String,
     value: Int,
-    onMinus: () -> Unit,
-    onPlus: () -> Unit,
+    onValueChange: (Int) -> Unit,
 ) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -207,13 +213,37 @@ internal fun PrefLineStepper(
         Text(label, style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f))
-        Row(verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            StepBtn(PrefIconMinus, onMinus)
-            Text("$value", style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 4.dp))
-            StepBtn(PrefIconPlus, onPlus)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            StepBtn(PrefIconMinus) {
+                onValueChange((value - 1).coerceAtLeast(1))
+            }
+            BasicTextField(
+                value = text,
+                onValueChange = { input ->
+                    val digits = input.filter(Char::isDigit).take(3)
+                    text = digits
+                    digits.toIntOrNull()?.let { onValueChange(it.coerceIn(1, 999)) }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.width(36.dp).onFocusChanged { state ->
+                    if (!state.isFocused) {
+                        val normalized = text.toIntOrNull()?.coerceIn(1, 999) ?: value
+                        text = normalized.toString()
+                        if (normalized != value) onValueChange(normalized)
+                    }
+                },
+                textStyle = MaterialTheme.typography.titleSmall.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                ),
+            )
+            StepBtn(PrefIconPlus) {
+                onValueChange((value + 1).coerceAtMost(999))
+            }
         }
     }
 }

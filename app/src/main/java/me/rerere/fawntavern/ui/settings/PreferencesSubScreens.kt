@@ -101,12 +101,11 @@ internal fun RenderingSettingsScreen(onBack: () -> Unit) {
             PrefToggle(PrefIconMessageSquareText, stringResource(R.string.character_markdown), prefs.characterMarkdown) { save(prefs.copy(characterMarkdown = it)) }
             PrefToggle(PrefIconFold, stringResource(R.string.auto_collapse_code), prefs.autoCollapseCode) { save(prefs.copy(autoCollapseCode = it)) }
             if (prefs.autoCollapseCode) {
-                PrefLineStepper(
+                PrefLineInput(
                     icon = PrefIconRows,
                     label = stringResource(R.string.auto_collapse_code_lines),
                     value = prefs.codeCollapseLines,
-                    onMinus = { save(prefs.copy(codeCollapseLines = (prefs.codeCollapseLines - 1).coerceAtLeast(1))) },
-                    onPlus = { save(prefs.copy(codeCollapseLines = (prefs.codeCollapseLines + 1).coerceAtMost(999))) },
+                    onValueChange = { save(prefs.copy(codeCollapseLines = it)) },
                 )
             }
         }

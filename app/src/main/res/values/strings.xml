@@ -636,5 +636,11 @@
     <string name="collapse">收起</string>
     <string name="code_block_lines_fmt">%1$d 行</string>
     <string name="code_language_plain">代码</string>
+    <string name="markdown_table">表格</string>
+    <string name="download">下载</string>
+    <string name="image_saved_to_gallery">图片已保存到相册</string>
+    <string name="image_save_failed">图片保存失败</string>
+    <string name="file_saved">文件已保存</string>
+    <string name="file_save_failed">文件保存失败</string>
 
 </resources>

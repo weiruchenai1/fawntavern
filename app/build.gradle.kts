@@ -104,6 +104,8 @@ dependencies {
     // Markdown 渲染（纯 Compose）
     implementation(libs.markdown.renderer.m3)
     implementation(libs.jlatexmath.android)
+    implementation(libs.jlatexmath.font.greek)
+    implementation(libs.jlatexmath.font.cyrillic)
     implementation(libs.reorderable)
 
     // 网络（SSE 流式 + 模型列表/余额查询）

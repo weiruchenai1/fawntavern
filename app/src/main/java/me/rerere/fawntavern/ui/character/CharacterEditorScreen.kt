@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -25,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -34,12 +36,15 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -93,7 +99,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName: String = card.name) {
     val context = LocalContext.current
@@ -291,35 +297,55 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
         val greeting = remember(idx) {
             TextFieldState(if (idx != null) greetings.getOrElse(idx) { "" } else "")
         }
-        AlertDialog(
-            onDismissRequest = { showGreetingDialog = false; editingGreetingIdx = null },
-            title = { Text(if (idx != null) stringResource(R.string.edit_greeting) else stringResource(R.string.add_greeting)) },
-            text = {
-                AppTextArea(
-                    state = greeting,
-                    label = stringResource(R.string.greeting_content),
-                    minLines = 5, maxLines = 14,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val trimmed = greeting.text.toString().trim()
-                    if (trimmed.isNotBlank()) {
-                        greetings = if (idx != null) {
-                            greetings.toMutableList().also { it[idx] = trimmed }
-                        } else {
-                            greetings + trimmed
-                        }
-                    }
-                    showGreetingDialog = false; editingGreetingIdx = null
-                }) { Text(stringResource(R.string.confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showGreetingDialog = false; editingGreetingIdx = null
-                }) { Text(stringResource(R.string.cancel)) }
-            }
+        val greetingSheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
         )
+        ModalBottomSheet(
+            onDismissRequest = { showGreetingDialog = false; editingGreetingIdx = null },
+            sheetState = greetingSheetState,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().fillMaxHeight(0.8f)
+                    .padding(horizontal = 16.dp).imePadding(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (idx != null) stringResource(R.string.edit_greeting)
+                        else stringResource(R.string.add_greeting),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = {
+                        val trimmed = greeting.text.toString().trim()
+                        if (trimmed.isNotBlank()) {
+                            greetings = if (idx != null) {
+                                greetings.toMutableList().also { it[idx] = trimmed }
+                            } else {
+                                greetings + trimmed
+                            }
+                        }
+                        showGreetingDialog = false
+                        editingGreetingIdx = null
+                    }) {
+                        Text(stringResource(R.string.confirm))
+                    }
+                }
+                androidx.compose.foundation.text.BasicTextField(
+                    state = greeting,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    lineLimits = TextFieldLineLimits.MultiLine(),
+                    modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 24.dp),
+                )
+            }
+        }
     }
 
     deletingGreetingIdx?.let { idx ->
