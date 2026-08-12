@@ -962,6 +962,18 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 删除消息的全部版本（整条消息） */
+    fun deleteAllVersions(ts: Long) {
+        if (generating) return
+        val s = session ?: return
+        overlays = overlays - ts
+        viewModelScope.launch {
+            ensurePersisted(s)
+            ChatRepository.deleteAllVersions(ctx, s.id, ts)
+            resyncSession(s.id)
+        }
+    }
+
     fun updateMessage(ts: Long, content: String) {
         val s = session ?: return
         val cur = overlays[ts] ?: s.messages.firstOrNull { it.ts == ts }

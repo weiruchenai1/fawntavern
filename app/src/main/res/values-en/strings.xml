@@ -8,6 +8,8 @@
     <string name="confirm">OK</string>
     <string name="save">Save</string>
     <string name="delete">Delete</string>
+    <string name="delete_current_version">Delete current version</string>
+    <string name="delete_all_versions">Delete all versions</string>
     <string name="edit">Edit</string>
     <string name="rename">Rename</string>
     <string name="import_label">Import</string>
@@ -604,6 +606,8 @@
     <string name="behavior_startup">Behavior &amp; startup</string>
     <string name="auto_collapse_thinking">Auto-collapse thinking</string>
     <string name="confirm_regenerate">Confirm before regenerating</string>
+    <string name="confirm_delete_current_version">Confirm before deleting current version</string>
+    <string name="confirm_delete_all_versions">Confirm before deleting all versions</string>
     <string name="message_nav_buttons">Message navigation buttons</string>
     <string name="nav_always">Always show</string>
     <string name="nav_on_scroll">Show on scroll</string>
@@ -619,6 +623,10 @@
     <string name="long_press_haptic">Long-press haptics</string>
     <string name="confirm_regenerate_title">Confirm regeneration</string>
     <string name="confirm_regenerate_msg">This will regenerate the reply for this message. Continue?</string>
+    <string name="confirm_delete_current_version_title">Delete current version</string>
+    <string name="confirm_delete_current_version_msg">This will delete the current version of this message. Continue?</string>
+    <string name="confirm_delete_all_versions_title">Delete all versions</string>
+    <string name="confirm_delete_all_versions_msg">This will delete all versions of this message. Continue?</string>
     <string name="token_stats_fmt">%1$s tokens</string>
     <string name="input_tokens">Input tokens</string>
     <string name="output_tokens">Output tokens</string>

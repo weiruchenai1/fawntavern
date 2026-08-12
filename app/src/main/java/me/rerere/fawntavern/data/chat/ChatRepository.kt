@@ -101,6 +101,13 @@ object ChatRepository {
         d.touchSession(sessionId, System.currentTimeMillis())
     }
 
+    /** 删除整条消息（全部版本） */
+    suspend fun deleteAllVersions(context: Context, sessionId: String, ts: Long) {
+        val d = dao(context)
+        d.deleteMessageRow(sessionId, ts)
+        d.touchSession(sessionId, System.currentTimeMillis())
+    }
+
     /** 编辑单条消息正文（DB 落盘） */
     suspend fun editMessage(context: Context, sessionId: String, ts: Long, content: String) {
         val d = dao(context)

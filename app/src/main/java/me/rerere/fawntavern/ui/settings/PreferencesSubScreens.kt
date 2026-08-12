@@ -126,6 +126,8 @@ internal fun BehaviorStartupScreen(onBack: () -> Unit) {
         PrefSection(stringResource(R.string.behavior_startup)) {
             PrefToggle(PrefIconFold, stringResource(R.string.auto_collapse_thinking), prefs.autoCollapseThinking) { save(prefs.copy(autoCollapseThinking = it)) }
             PrefToggle(PrefIconShield, stringResource(R.string.confirm_regenerate), prefs.confirmRegenerate) { save(prefs.copy(confirmRegenerate = it)) }
+            PrefToggle(PrefIconShield, stringResource(R.string.confirm_delete_current_version), prefs.confirmDeleteCurrentVersion) { save(prefs.copy(confirmDeleteCurrentVersion = it)) }
+            PrefToggle(PrefIconShield, stringResource(R.string.confirm_delete_all_versions), prefs.confirmDeleteAllVersions) { save(prefs.copy(confirmDeleteAllVersions = it)) }
             Column(Modifier.padding(horizontal = 12.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {

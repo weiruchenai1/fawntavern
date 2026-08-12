@@ -120,6 +120,9 @@ fun ChatScreen(
     var scrollToBottomTrigger by remember { mutableStateOf(0) }
     // 重新生成前确认：偏好开启时把待执行的重答存这里，弹框确认后执行
     var pendingRegenerate by remember { mutableStateOf<(() -> Unit)?>(null) }
+    // 删除前确认：偏好开启时把待执行的删除存这里，弹框确认后执行
+    var pendingDeleteCurrentVersion by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pendingDeleteAllVersions by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -374,6 +377,14 @@ fun ChatScreen(
     // 重新生成前弹出确认：偏好开启时先弹确认框，确认后再执行真正的重答
     fun maybeRegenerate(action: () -> Unit) {
         if (prefs.confirmRegenerate) pendingRegenerate = action else action()
+    }
+    // 删除当前版本前弹出确认：偏好开启时先弹确认框
+    fun maybeDeleteCurrentVersion(action: () -> Unit) {
+        if (prefs.confirmDeleteCurrentVersion) pendingDeleteCurrentVersion = action else action()
+    }
+    // 删除全部版本前弹出确认：偏好开启时先弹确认框
+    fun maybeDeleteAllVersions(action: () -> Unit) {
+        if (prefs.confirmDeleteAllVersions) pendingDeleteAllVersions = action else action()
     }
     // 侧边栏触觉反馈：抽屉打开时给一次短震动（走 Vibrator，独立于长按触觉闸门）
     LaunchedEffect(drawerState.isOpen) {
@@ -700,13 +711,25 @@ fun ChatScreen(
                 vm.startEdit(menuTs)
                 menuTargetIdx = null
             },
-            onDelete = {
-                val wasLast = menuMsg.ts == vm.session?.messages?.lastOrNull()?.ts
-                vm.deleteMessage(menuTs)
-                // 删除末条（整条或当前分支）导致内容高度骤变，钉回底部避免落点漂移
-                if (wasLast) scrollToBottomTrigger++
+            onDeleteCurrentVersion = {
+                val ts = menuTs
+                maybeDeleteCurrentVersion {
+                    val wasLast = menuMsg.ts == vm.session?.messages?.lastOrNull()?.ts
+                    vm.deleteMessage(ts)
+                    if (wasLast) scrollToBottomTrigger++
+                }
                 menuTargetIdx = null
             },
+            onDeleteAllVersions = {
+                val ts = menuTs
+                maybeDeleteAllVersions {
+                    val wasLast = menuMsg.ts == vm.session?.messages?.lastOrNull()?.ts
+                    vm.deleteAllVersions(ts)
+                    if (wasLast) scrollToBottomTrigger++
+                }
+                menuTargetIdx = null
+            },
+            hasMultipleVersions = menuMsg.alts.size > 1,
         )
     }
 
@@ -770,6 +793,42 @@ fun ChatScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingRegenerate = null }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    // ── 删除当前版本确认对话框 ──
+    pendingDeleteCurrentVersion?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteCurrentVersion = null },
+            title = { Text(stringResource(R.string.confirm_delete_current_version_title)) },
+            text = { Text(stringResource(R.string.confirm_delete_current_version_msg)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDeleteCurrentVersion = null
+                    action()
+                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteCurrentVersion = null }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    // ── 删除全部版本确认对话框 ──
+    pendingDeleteAllVersions?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteAllVersions = null },
+            title = { Text(stringResource(R.string.confirm_delete_all_versions_title)) },
+            text = { Text(stringResource(R.string.confirm_delete_all_versions_msg)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDeleteAllVersions = null
+                    action()
+                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteAllVersions = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }

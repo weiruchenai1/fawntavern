@@ -32,7 +32,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.SquarePen
 import com.composables.icons.lucide.Trash2
 
-// 消息长按菜单，基于 Figma 节点 19-385：底部弹窗，3 个操作
+// 消息长按菜单
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +40,9 @@ fun MessageMenu(
     onDismiss: () -> Unit,
     onSelectCopy: () -> Unit = {},
     onEdit: () -> Unit = {},
-    onDelete: () -> Unit = {},
+    onDeleteCurrentVersion: () -> Unit = {},
+    onDeleteAllVersions: () -> Unit = {},
+    hasMultipleVersions: Boolean = true,
 ) {
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
@@ -86,21 +88,37 @@ fun MessageMenu(
                 onClick = { onEdit() }
             )
 
-            // 删除（错误样式，Figma：errorContainer 背景 + error 文字）
+            // 删除当前版本
             MenuRow(
                 icon = {
                     Icon(
                         Lucide.Trash2,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.error // 原 Figma 值 #BA1A1A
+                        tint = MaterialTheme.colorScheme.error
                     )
                 },
-                label = stringResource(R.string.delete),
+                label = stringResource(R.string.delete_current_version),
                 labelColor = MaterialTheme.colorScheme.error,
-                containerColor = MaterialTheme.colorScheme.errorContainer, // 原 Figma 值 #FFDAD6
-                onClick = { onDelete() }
+                onClick = { onDeleteCurrentVersion() }
             )
+
+            // 删除全部版本，仅多版本时显示
+            if (hasMultipleVersions) {
+                MenuRow(
+                    icon = {
+                        Icon(
+                            Lucide.Trash2,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    label = stringResource(R.string.delete_all_versions),
+                    labelColor = MaterialTheme.colorScheme.error,
+                    onClick = { onDeleteAllVersions() }
+                )
+            }
         }
     }
 }

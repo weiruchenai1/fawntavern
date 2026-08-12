@@ -8,6 +8,8 @@
     <string name="confirm">确定</string>
     <string name="save">保存</string>
     <string name="delete">删除</string>
+    <string name="delete_current_version">删除当前版本</string>
+    <string name="delete_all_versions">删除全部版本</string>
     <string name="edit">编辑</string>
     <string name="rename">重命名</string>
     <string name="import_label">导入</string>
@@ -604,6 +606,8 @@
     <string name="behavior_startup">行为与启动</string>
     <string name="auto_collapse_thinking">自动折叠思考</string>
     <string name="confirm_regenerate">重新生成前弹出确认</string>
+    <string name="confirm_delete_current_version">删除当前版本前弹出确认</string>
+    <string name="confirm_delete_all_versions">删除全部版本前弹出确认</string>
     <string name="message_nav_buttons">消息导航按钮</string>
     <string name="nav_always">始终显示</string>
     <string name="nav_on_scroll">滚动时显示</string>
@@ -619,6 +623,10 @@
     <string name="long_press_haptic">长按触觉反馈</string>
     <string name="confirm_regenerate_title">确认重新生成</string>
     <string name="confirm_regenerate_msg">将重新生成该条消息的回复，确定继续吗？</string>
+    <string name="confirm_delete_current_version_title">删除当前版本</string>
+    <string name="confirm_delete_current_version_msg">将删除该消息的当前版本，确定继续吗？</string>
+    <string name="confirm_delete_all_versions_title">删除全部版本</string>
+    <string name="confirm_delete_all_versions_msg">将删除该消息的全部版本，确定继续吗？</string>
     <string name="token_stats_fmt">%1$s tokens</string>
     <string name="input_tokens">输入 token</string>
     <string name="output_tokens">输出 token</string>

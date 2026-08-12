@@ -34,12 +34,14 @@ data class Preferences(
     // ── 行为与启动 ──
     val autoCollapseThinking: Boolean = true,
     val confirmRegenerate: Boolean = false,
+    val confirmDeleteCurrentVersion: Boolean = true,
+    val confirmDeleteAllVersions: Boolean = true,
     val navButtonsMode: NavButtonsMode = NavButtonsMode.ON_SCROLL,
     val showChatListDate: Boolean = false,
     val newChatOnCharSwitch: Boolean = false,
     val newChatOnDeleteTopic: Boolean = false,
-    val newChatOnLaunch: Boolean = false,
-    val enterToSend: Boolean = true,
+    val newChatOnLaunch: Boolean = true,
+    val enterToSend: Boolean = false,
 
     // ── 触觉反馈 ──
     /** 设置页开关切换时的触觉反馈 */
@@ -74,6 +76,8 @@ object PreferencesStore {
     private const val K_CODE_COLLAPSE_LINES = "codeCollapseLines"
     private const val K_AUTO_COLLAPSE_THINKING = "autoCollapseThinking"
     private const val K_CONFIRM_REGENERATE = "confirmRegenerate"
+    private const val K_CONFIRM_DELETE_CURRENT_VERSION = "confirmDeleteCurrentVersion"
+    private const val K_CONFIRM_DELETE_ALL_VERSIONS = "confirmDeleteAllVersions"
     private const val K_NAV_BUTTONS_MODE = "navButtonsMode"
     private const val K_SHOW_CHAT_LIST_DATE = "showChatListDate"
     private const val K_NEW_CHAT_ON_CHAR_SWITCH = "newChatOnCharSwitch"
@@ -111,6 +115,8 @@ object PreferencesStore {
             codeCollapseLines = p.getInt(K_CODE_COLLAPSE_LINES, d.codeCollapseLines),
             autoCollapseThinking = p.getBoolean(K_AUTO_COLLAPSE_THINKING, d.autoCollapseThinking),
             confirmRegenerate = p.getBoolean(K_CONFIRM_REGENERATE, d.confirmRegenerate),
+            confirmDeleteCurrentVersion = p.getBoolean(K_CONFIRM_DELETE_CURRENT_VERSION, d.confirmDeleteCurrentVersion),
+            confirmDeleteAllVersions = p.getBoolean(K_CONFIRM_DELETE_ALL_VERSIONS, d.confirmDeleteAllVersions),
             navButtonsMode = navMode(p.getString(K_NAV_BUTTONS_MODE, null)),
             showChatListDate = p.getBoolean(K_SHOW_CHAT_LIST_DATE, d.showChatListDate),
             newChatOnCharSwitch = p.getBoolean(K_NEW_CHAT_ON_CHAR_SWITCH, d.newChatOnCharSwitch),
@@ -144,6 +150,8 @@ object PreferencesStore {
             .putInt(K_CODE_COLLAPSE_LINES, s.codeCollapseLines.coerceIn(1, 999))
             .putBoolean(K_AUTO_COLLAPSE_THINKING, s.autoCollapseThinking)
             .putBoolean(K_CONFIRM_REGENERATE, s.confirmRegenerate)
+            .putBoolean(K_CONFIRM_DELETE_CURRENT_VERSION, s.confirmDeleteCurrentVersion)
+            .putBoolean(K_CONFIRM_DELETE_ALL_VERSIONS, s.confirmDeleteAllVersions)
             .putString(K_NAV_BUTTONS_MODE, s.navButtonsMode.name)
             .putBoolean(K_SHOW_CHAT_LIST_DATE, s.showChatListDate)
             .putBoolean(K_NEW_CHAT_ON_CHAR_SWITCH, s.newChatOnCharSwitch)
