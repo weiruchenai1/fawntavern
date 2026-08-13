@@ -21,22 +21,15 @@ internal object ConversationOps {
         card: CharacterCard?,
         charFile: String,
         charNameFallback: String,
-        userName: String,
     ): ChatSession {
         val sessionId = java.util.UUID.randomUUID().toString()
         val name = (card?.name ?: "").ifBlank { charNameFallback }
-        val greetingContext = MacroContext(
-            charName = name,
-            userName = userName,
-            card = card,
-            sessionId = sessionId,
-        )
         val greetings = buildList {
             card?.firstMes?.takeIf { it.isNotBlank() }?.let {
-                add(MacroEngine.render(it, greetingContext))
+                add(it)
             }
             card?.alternateGreetings?.forEach { g ->
-                if (g.isNotBlank()) add(MacroEngine.render(g, greetingContext))
+                if (g.isNotBlank()) add(g)
             }
         }
         return ChatSession(

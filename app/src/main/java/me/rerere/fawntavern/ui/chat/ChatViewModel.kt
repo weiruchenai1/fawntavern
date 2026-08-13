@@ -197,7 +197,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val defaultName = CharacterRepository.ensureDefaultCard(ctx, ctx.getString(R.string.default_character))
             if (ChatRepository.count(ctx) == 0) {
-                session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName, userName)
+                session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName)
             }
             ChatRepository.sessionsFlow(ctx).collect {
                 sessions = it
@@ -205,7 +205,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // 应用启动时新建对话：每次启动都从空白对话开始（内存态，发首条消息才落盘）
                     session = if (PreferencesStore.get(ctx).newChatOnLaunch) {
                         val card = loadCard(defaultName)
-                        ConversationOps.newSession(card, defaultName, defaultName, userName)
+                        ConversationOps.newSession(card, defaultName, defaultName)
                     } else it.firstOrNull()?.let { summary -> ChatRepository.get(ctx, summary.id) }
                 }
             }
@@ -277,34 +277,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
     fun reloadUserProfile() {
-        val newUserName = UserProfileStore.getName(ctx)
-        if (userName != newUserName) {
-            userName = newUserName
-            val current = session
-            // 尚未开始的会话只有角色开场白，直接从角色卡原始模板重建，
-            // 让 {{user}} 在用户名保存后立即按新值显示。
-            if (current != null && current.messages.none { it.role == "user" }) {
-                val refreshed = ConversationOps.newSession(
-                    currentCard,
-                    current.charFile,
-                    current.charName,
-                    newUserName,
-                )
-                val greeting = refreshed.messages.firstOrNull()?.copy(
-                    ts = current.messages.firstOrNull()?.ts ?: refreshed.messages.first().ts,
-                )
-                val updated = current.copy(messages = listOfNotNull(greeting))
-                session = updated
-                greeting?.let { overlays = overlays + (it.ts to it) }
-                viewModelScope.launch {
-                    if (ChatRepository.get(ctx, current.id) != null) {
-                        ChatRepository.save(ctx, updated)
-                    } else {
-                        greeting?.let { overlays = overlays - it.ts }
-                    }
-                }
-            }
-        }
+        userName = UserProfileStore.getName(ctx)
         viewModelScope.launch {
             userAvatarBitmap = withContext(Dispatchers.IO) { loadAvatarBitmap() }
         }
@@ -368,7 +341,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val alreadyNew = cur != null && cur.messages.none { it.role == "user" }
         if (generating || alreadyNew) return
         viewModelScope.launch {
-            val s = ConversationOps.newSession(currentCard, cur?.charFile ?: "", cur?.charName ?: "", userName)
+            val s = ConversationOps.newSession(currentCard, cur?.charFile ?: "", cur?.charName ?: "")
             session = s
             ChatRepository.save(ctx, s)
         }
@@ -388,7 +361,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             val card = if (fileName.isBlank()) null else loadCard(fileName)
             currentCard = card
-            session = ConversationOps.newSession(card, fileName, displayName, userName)
+            session = ConversationOps.newSession(card, fileName, displayName)
         }
     }
 
@@ -402,11 +375,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 // 留在当前角色：默认优先切到该角色的其他会话；偏好"删除话题后新建对话"
                 // 开启时总是新建（内存态，不落盘）。没有其他会话时也回退到新建。
                 session = if (PreferencesStore.get(ctx).newChatOnDeleteTopic) {
-                    ConversationOps.newSession(currentCard, curCharFile, curCharName, userName)
+                    ConversationOps.newSession(currentCard, curCharFile, curCharName)
                 } else {
                     fresh.firstOrNull { it.charFile == curCharFile }
                         ?.let { ChatRepository.get(ctx, it.id) }
-                        ?: ConversationOps.newSession(currentCard, curCharFile, curCharName, userName)
+                        ?: ConversationOps.newSession(currentCard, curCharFile, curCharName)
                 }
             }
         }
@@ -449,12 +422,12 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 session = fresh.firstOrNull { it.charFile == cur.charFile }
                     ?.let { ChatRepository.get(ctx, it.id) }
                     ?: if (card != null) {
-                        ConversationOps.newSession(card, cur.charFile, cur.charName, userName)
+                        ConversationOps.newSession(card, cur.charFile, cur.charName)
                     } else {
                         val defName = CharacterRepository.defaultCardName(ctx)
                             ?: CharacterRepository.ensureDefaultCard(ctx, ctx.getString(R.string.default_character))
                         currentCard = loadCard(defName)
-                        ConversationOps.newSession(currentCard, defName, defName, userName)
+                        ConversationOps.newSession(currentCard, defName, defName)
                     }
             }
             // 世界书/预设（含预设私有正则）也可能被清空
@@ -1015,6 +988,13 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         session = fresh
         val row = fresh.messages.firstOrNull { it.ts == ts }
         overlays = if (row != null) overlays + (ts to row) else overlays - ts
+    }
+
+    fun updateUserProfile(name: String, description: String) {
+        val trimmedName = name.trim().ifBlank { "user" }
+        UserProfileStore.setName(ctx, trimmedName)
+        UserProfileStore.setDescription(ctx, description)
+        reloadUserProfile()
     }
 
     // ── IO 辅助 ──

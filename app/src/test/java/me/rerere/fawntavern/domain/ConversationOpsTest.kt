@@ -10,15 +10,15 @@ import org.junit.Test
 
 class ConversationOpsTest {
     @Test
-    fun newSessionResolvesGreetingMacrosWithCurrentContext() {
+    fun newSessionPreservesGreetingMacrosForLiveRendering() {
         val card = CharacterCard(
             name = "Fawn",
             firstMes = "Hello {{user}}, I am {{char}}.",
         )
 
-        val session = ConversationOps.newSession(card, "fawn", "fallback", "Alice")
+        val session = ConversationOps.newSession(card, "fawn", "fallback")
 
-        assertEquals("Hello Alice, I am Fawn.", session.messages.single().content)
+        assertEquals("Hello {{user}}, I am {{char}}.", session.messages.single().content)
     }
 
     @Test

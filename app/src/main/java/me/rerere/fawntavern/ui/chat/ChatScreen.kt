@@ -420,7 +420,7 @@ fun ChatScreen(
                     onDeleteSession = { id -> deleteSessionId = id },
                     showChatListDate = prefs.showChatListDate,
                     longPressHaptic = prefs.longPressHaptic,
-                    onUserProfileChanged = vm::reloadUserProfile,
+                    onUserProfileChanged = vm::updateUserProfile,
                 )
                 }
             },

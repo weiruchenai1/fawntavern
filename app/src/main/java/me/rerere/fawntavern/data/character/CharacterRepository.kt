@@ -130,13 +130,13 @@ object CharacterRepository {
 
         val json = JSONObject(jsonStr)
 
+        val parsed = CharacterParser.parse(json)
         val displayName = JsonFileDir.queryDisplayName(context, uri)
-        val name = displayName
-            ?.removeSuffix(".json")?.removeSuffix(".png")
-            ?.takeIf { it.isNotBlank() }
-            ?: json.optJSONObject("data")?.optString("name", "")?.takeIf { it.isNotBlank() }
-            ?: json.optString("name", "").takeIf { it.isNotBlank() }
-            ?: "character_${System.currentTimeMillis()}"
+        val requestedName = parsed.name.ifBlank {
+            displayName?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
+                ?: "character_${System.currentTimeMillis()}"
+        }
+        val name = uniqueFileName(context, requestedName)
 
         val file = File(charsDir(context), "$name.json")
         file.writeText(jsonStr)
@@ -158,7 +158,7 @@ object CharacterRepository {
             }
         }
 
-        CharacterParser.parse(json, name)
+        parsed
     }
 
     suspend fun delete(context: Context, name: String) = withContext(Dispatchers.IO) {
@@ -259,7 +259,7 @@ object CharacterRepository {
         // 1. 尝试直接按 JSON 解析（纯 JSON 文件）
         try { return String(bytes).also { JSONObject(it) } } catch (_: Exception) {}
 
-        // 2. 尝试解析 PNG 块（关键字为 "chara" 的 tEXt/zTXt）
+        // 2. 尝试解析 PNG 块（关键字为 "chara" / "ccv3" 的 tEXt/zTXt）
         if (bytes.size >= 8 && bytes[0] == 0x89.toByte()) {
             return extractFromPngChunks(bytes)
         }
@@ -272,8 +272,10 @@ object CharacterRepository {
         return null
     }
 
-    /** 遍历 PNG 块，寻找关键字为 "chara" 的 tEXt/zTXt 块。 */
+    /** 遍历全部 PNG 块；有效 ccv3 优先，否则回退到 chara。 */
     private fun extractFromPngChunks(bytes: ByteArray): String? {
+        var charaJson: String? = null
+        var ccv3Json: String? = null
         var pos = 8 // 跳过 PNG 签名
         while (pos + 12 <= bytes.size) {
             val len = readInt32BE(bytes, pos)
@@ -291,7 +293,9 @@ object CharacterRepository {
                             val textStart = nullIdx + 1
                             val textLen = (dataStart + len) - textStart
                             val b64 = String(bytes, textStart, textLen).trim()
-                            return decodeBase64Json(b64)
+                            decodeBase64Json(b64)?.let { decoded ->
+                                if (keyword == "ccv3") ccv3Json = decoded else charaJson = decoded
+                            }
                         }
                     }
                 }
@@ -312,7 +316,9 @@ object CharacterRepository {
                                     while (!inflater.finished()) out.write(buf, 0, inflater.inflate(buf))
                                     inflater.end()
                                     val b64 = String(out.toByteArray()).trim()
-                                    return decodeBase64Json(b64)
+                                    decodeBase64Json(b64)?.let { decoded ->
+                                        if (keyword == "ccv3") ccv3Json = decoded else charaJson = decoded
+                                    }
                                 } catch (_: Exception) {}
                             }
                         }
@@ -321,7 +327,21 @@ object CharacterRepository {
             }
             pos = dataStart + len + 4 // +4 为 CRC
         }
-        return null
+        return ccv3Json ?: charaJson
+    }
+
+    private fun uniqueFileName(context: Context, requestedName: String): String {
+        val safe = requestedName
+            .replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001F]"), "_")
+            .trim().trim('.')
+            .ifBlank { "character_${System.currentTimeMillis()}" }
+        var candidate = safe
+        var suffix = 2
+        while (File(charsDir(context), "$candidate.json").exists() || imageFile(context, candidate).exists()) {
+            candidate = "$safe ($suffix)"
+            suffix++
+        }
+        return candidate
     }
 
     /** 在原始字节中搜索 "chara\0"，提取其后的 base64。 */
