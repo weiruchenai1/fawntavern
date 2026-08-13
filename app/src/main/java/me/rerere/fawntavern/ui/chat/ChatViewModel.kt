@@ -13,10 +13,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.data.PromptContextLoader
 import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
@@ -38,14 +39,12 @@ import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.chat.MsgFile
-import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
 import me.rerere.fawntavern.data.settings.SearchStore
-import me.rerere.fawntavern.data.settings.TtsStore
-import me.rerere.fawntavern.data.speech.TtsEngine
 import me.rerere.fawntavern.data.speech.TtsUiState
 import me.rerere.fawntavern.data.settings.UserProfileStore
+import me.rerere.fawntavern.data.settings.UserAvatarStore
 import me.rerere.fawntavern.data.settings.PromptLogStore
 import me.rerere.fawntavern.data.settings.PreferencesStore
 import me.rerere.fawntavern.data.settings.CharacterModelStore
@@ -54,9 +53,9 @@ import me.rerere.fawntavern.data.settings.GlobalVariableStore
 import me.rerere.fawntavern.data.settings.ThinkingStore
 import me.rerere.fawntavern.data.settings.WorldInfoSettingsStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
-import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import me.rerere.fawntavern.domain.ConversationOps
 import me.rerere.fawntavern.domain.GenerationController
+import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.domain.MacroVariableState
 import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.domain.PromptLog
@@ -112,6 +111,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // 当前角色关联的世界书/预设（随角色卡切换加载，生成时进入 Prompt 拼装）
     var activeWorldBooks by mutableStateOf<List<WorldBook>>(emptyList()); private set
     var activePreset by mutableStateOf<StPreset?>(null); private set
+    private var loadedPromptCharFile: String? = null
+    private var promptContextRevision = 0L
     // 输入草稿放这里，Activity 重建后不丢。BTF2 的 TextFieldState 即单一事实源，
     // 输入框与展开面板持有同一实例，两边改动天然同步，不需要 onTextChange 回写
     val inputState = TextFieldState()
@@ -146,11 +147,13 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** TTS 朗读实时状态（悬浮工具栏展示/控制用），随引擎播放同步更新 */
     var ttsUi by mutableStateOf(TtsUiState()); private set
 
-    private val ttsEngine by lazy {
-        TtsEngine(ctx) { TtsStore.getSetting(ctx) }.also { engine ->
-            viewModelScope.launch { engine.ui.collect { ttsUi = it } }
+    private val ttsControllerDelegate = lazy {
+        ChatTtsController(ctx).also { controller ->
+            viewModelScope.launch { controller.ui.collect { ttsUi = it } }
+            viewModelScope.launch { controller.speakingTs.collect { speakingTs = it } }
         }
     }
+    private val ttsController by ttsControllerDelegate
 
     /** 当前预设私有的正则（关联该预设的聊天才生效），转成引擎统一类型 */
     private val presetRegex: List<CharRegex>
@@ -212,10 +215,13 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         // 会话的角色变化时加载对应角色卡，并恢复该角色记忆的模型
         viewModelScope.launch {
-            snapshotFlow { session?.charFile }.collect { file ->
-                currentCard = if (file.isNullOrBlank()) null else loadCard(file)
-                charImageBitmap = if (file.isNullOrBlank()) null else loadCharImage(file)
-                loadPromptData()
+            snapshotFlow { session?.charFile }.collectLatest { file ->
+                val charFile = file.orEmpty()
+                val revision = invalidatePromptContext()
+                val loaded = PromptContextLoader.load(ctx, charFile)
+                val image = if (charFile.isBlank()) null else loadCharImage(charFile)
+                if (session?.charFile.orEmpty() != charFile) return@collectLatest
+                applyPromptContext(loaded, image, revision)
                 // 恢复该角色的模型：角色记忆 > 默认模型聊天卡片
                 val name = currentCard?.name
                 val charModel = if (!name.isNullOrBlank()) CharacterModelStore.get(ctx, name).takeIf { it.isNotBlank() } else null
@@ -234,8 +240,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        super.onCleared()
-        ttsEngine.release()
+        if (ttsControllerDelegate.isInitialized()) ttsController.release()
     }
 
     // ── 配置 / 用户资料 ──
@@ -279,7 +284,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun reloadUserProfile() {
         userName = UserProfileStore.getName(ctx)
         viewModelScope.launch {
-            userAvatarBitmap = withContext(Dispatchers.IO) { loadAvatarBitmap() }
+            userAvatarBitmap = withContext(Dispatchers.IO) { UserAvatarStore.load(ctx) }
         }
     }
 
@@ -287,29 +292,47 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshCurrentCard() {
         val file = session?.charFile ?: return
         if (file.isBlank()) return
+        val revision = invalidatePromptContext()
         viewModelScope.launch {
-            currentCard = loadCard(file)
-            charImageBitmap = loadCharImage(file)
-            loadPromptData()
+            applyPromptContext(PromptContextLoader.load(ctx, file), loadCharImage(file), revision)
         }
     }
 
     /** 从世界书/预设页返回或数据管理后刷新：关联内容与预设私有正则可能已被增删改 */
     fun reloadPromptData() {
+        val revision = invalidatePromptContext()
         viewModelScope.launch {
-            loadPromptData()
+            loadPromptData(revision)
         }
     }
 
     /** 按当前角色卡加载关联的世界书与预设（缺失/损坏的静默跳过） */
-    private suspend fun loadPromptData() {
-        val card = currentCard
-        activeWorldBooks = if (card == null) emptyList() else {
-            (card.enabledWorldBooks + card.world).filter { it.isNotBlank() }.distinct()
-                .mapNotNull { name -> try { WorldBookRepository.load(ctx, name) } catch (_: Exception) { null } }
-        }
-        activePreset = card?.linkedPreset?.takeIf { it.isNotBlank() }
-            ?.let { name -> try { PresetRepository.load(ctx, name) } catch (_: Exception) { null } }
+    private suspend fun loadPromptData(revision: Long) {
+        val file = session?.charFile.orEmpty()
+        applyPromptContext(
+            PromptContextLoader.load(ctx, file),
+            if (file.isBlank()) null else loadCharImage(file),
+            revision,
+        )
+    }
+
+    private fun invalidatePromptContext(): Long {
+        loadedPromptCharFile = null
+        return ++promptContextRevision
+    }
+
+    private fun applyPromptContext(
+        loaded: PromptContextLoader.Loaded,
+        image: Bitmap?,
+        revision: Long,
+    ) {
+        if (promptContextRevision != revision) return
+        if (session?.charFile.orEmpty() != loaded.charFile) return
+        currentCard = loaded.card
+        activeWorldBooks = loaded.worldBooks
+        activePreset = loaded.preset
+        charImageBitmap = image
+        loadedPromptCharFile = loaded.charFile
     }
 
     fun currentProviderAndModel(): Pair<ApiProvider, String>? {
@@ -366,6 +389,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteSession(id: String) {
+        if (!GenerationActionGuard.allowsMutation(generating)) return
         viewModelScope.launch {
             val curCharFile = session?.charFile ?: ""
             val curCharName = session?.charName ?: ""
@@ -409,6 +433,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 数据管理页可能清空了聊天记录/角色卡，返回时重新加载并校验当前会话 */
     fun refreshAfterDataManagement() {
+        val revision = invalidatePromptContext()
         viewModelScope.launch {
             val fresh = ChatRepository.listSummaries(ctx)
             sessions = fresh
@@ -431,7 +456,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     }
             }
             // 世界书/预设（含预设私有正则）也可能被清空
-            loadPromptData()
+            loadPromptData(revision)
         }
     }
 
@@ -439,6 +464,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun sendMessage(): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
+        if (loadedPromptCharFile != session?.charFile.orEmpty()) return SendOutcome.SKIPPED
         val text = inputText.trim()
         val atts = attachments
         if (text.isBlank() && atts.isEmpty()) return SendOutcome.SKIPPED
@@ -562,41 +588,22 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 朗读/停止朗读指定 AI 消息：同一消息再次点击即停止，换消息则打断旧朗读 */
     fun speakMessage(ts: Long) {
-        if (speakingTs == ts) {
-            stopSpeaking()
-            return
-        }
         val s = session ?: return
         val msg = overlays[ts] ?: s.messages.firstOrNull { it.ts == ts } ?: return
-        val text = msg.content.trim()
-        if (text.isBlank()) return
-        stopSpeaking()
-        speakingTs = ts
-        ttsEngine.speak(text) {
-            // 朗读完成（含被新朗读打断/手动停止）：仍是本条才复位，避免误清新条目的状态
-            if (speakingTs == ts) speakingTs = null
-        }
+        ttsController.speak(ts, msg.content)
     }
 
     fun stopSpeaking() {
-        ttsEngine.stop()
-        speakingTs = null
+        ttsController.stop()
     }
 
-    fun pauseTts() = ttsEngine.pause()
-    fun resumeTts() = ttsEngine.resume()
-    fun fastForwardTts() = ttsEngine.fastForward()
+    fun pauseTts() = ttsController.pause()
+    fun resumeTts() = ttsController.resume()
+    fun fastForwardTts() = ttsController.fastForward()
 
     /** 循环切换朗读速度：0.8x → 1.0x → 1.2x → 1.5x → 0.8x */
     fun cycleTtsSpeed() {
-        val next = when (ttsUi.speed) {
-            0.8f -> 1.0f
-            1.0f -> 1.2f
-            1.2f -> 1.5f
-            1.5f -> 0.8f
-            else -> 1.0f
-        }
-        ttsEngine.setSpeed(next)
+        ttsController.cycleSpeed()
     }
 
     /** 重新计算 UI 插槽类扩展的产出（快捷回复等）。扩展配置变更后调用（如从扩展设置返回）。 */
@@ -622,6 +629,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** AI 消息重答：保留旧版本，新回复作为新版本（可左右切换）；其后的消息保留，由所有版本共享 */
     fun regenerateAi(ts: Long): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
+        if (loadedPromptCharFile != session?.charFile.orEmpty()) return SendOutcome.SKIPPED
         val s = session ?: return SendOutcome.SKIPPED
         val idx = s.messages.indexOfFirst { it.ts == ts }
         // 同步预判仅用于 SendOutcome（提示"先选模型"/是否滚动）；真正的目标计算在 runGeneration
@@ -636,6 +644,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 用户消息重答：对其后的 AI 回复生成新版本 */
     fun regenerateAfterUser(ts: Long): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
+        if (loadedPromptCharFile != session?.charFile.orEmpty()) return SendOutcome.SKIPPED
         val s = session ?: return SendOutcome.SKIPPED
         val idx = s.messages.indexOfFirst { it.ts == ts }
         if (idx < 0) return SendOutcome.SKIPPED
@@ -1009,10 +1018,4 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         try { BitmapFactory.decodeFile(f.absolutePath) } catch (_: Exception) { null }
     }
 
-    private fun loadAvatarBitmap(): Bitmap? {
-        val path = UserProfileStore.getAvatarPath(ctx) ?: return null
-        val file = File(path)
-        if (!file.exists()) return null
-        return try { BitmapFactory.decodeFile(path) } catch (_: Exception) { null }
-    }
 }

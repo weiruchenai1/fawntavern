@@ -8,6 +8,8 @@ import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ApiToolCall
 import me.rerere.fawntavern.data.api.ChatApi
+import me.rerere.fawntavern.data.api.GenParams
+import me.rerere.fawntavern.data.api.StreamEnd
 import me.rerere.fawntavern.data.api.ToolSpec
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.MsgSearch
@@ -20,7 +22,24 @@ import me.rerere.fawntavern.data.chat.MsgSearch
  * 支持函数工具多轮循环（联网搜索等）：模型发起工具调用 → [ToolExecutor] 执行 →
  * 结果以工具消息回传 → 续下一轮流式，直到模型不再调用工具。
  */
-internal class GenerationController {
+internal fun interface GenerationStreamClient {
+    suspend fun stream(
+        provider: ApiProvider,
+        modelId: String,
+        messages: List<ApiMessage>,
+        params: GenParams?,
+        tools: List<ToolSpec>,
+        isCancelled: () -> Boolean,
+        onDelta: (content: String, reasoning: String) -> Unit,
+    ): StreamEnd
+}
+
+internal class GenerationController(
+    private val streamClient: GenerationStreamClient = GenerationStreamClient { provider, modelId, messages,
+                                                                                params, tools, isCancelled, onDelta ->
+        ChatApi.streamChat(provider, modelId, messages, params, tools, isCancelled, onDelta)
+    },
+) {
 
     /** 工具执行器（由调用方提供）。搜索类工具同时产出时间线步骤状态（MsgSearch）。 */
     interface ToolExecutor {
@@ -115,7 +134,7 @@ internal class GenerationController {
                 val reasoningRoundStart = synchronized(lock) { reasoningBuf.length }
                 val estimatedInput = estimatePromptTokens()
                 promptTokens += estimatedInput
-                val end = ChatApi.streamChat(
+                val end = streamClient.stream(
                     provider = provider,
                     modelId = modelId,
                     messages = apiMessages,

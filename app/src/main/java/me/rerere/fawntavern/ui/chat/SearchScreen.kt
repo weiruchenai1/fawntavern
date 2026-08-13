@@ -9,16 +9,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -43,23 +40,20 @@ import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquare
 import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.chat.ChatRepository
-import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.settings.SearchHistoryStore
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
-import me.rerere.fawntavern.ui.components.Space16
 
 /** 一条消息命中结果 */
 private data class SearchHit(
-    val session: ChatSession,
+    val sessionId: String,
+    val title: String,
     val snippet: String,
 )
 
@@ -74,11 +68,17 @@ fun SearchScreen(
     var history by remember { mutableStateOf(SearchHistoryStore.getHistory(context)) }
     val focusRequester = remember { FocusRequester() }
 
-    // 当前角色卡的会话（搜索范围）
-    var sessions by remember { mutableStateOf<List<ChatSession>>(emptyList()) }
-    LaunchedEffect(charFile) {
-        sessions = withContext(Dispatchers.IO) {
-            ChatRepository.list(context).filter { it.charFile == charFile }
+    var hits by remember { mutableStateOf<List<SearchHit>>(emptyList()) }
+    LaunchedEffect(charFile, query) {
+        val q = query.trim()
+        if (q.isBlank()) {
+            hits = emptyList()
+            return@LaunchedEffect
+        }
+        hits = emptyList()
+        delay(250)
+        hits = ChatRepository.searchMessages(context, charFile, q).map {
+            SearchHit(it.sessionId, it.title, buildSnippet(it.content, q))
         }
     }
 
@@ -91,16 +91,6 @@ fun SearchScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(stringResource(R.string.search_chats), onBack) }
     ) { padding ->
-        // 在当前角色卡的会话里搜消息内容，每个会话取首个命中片段
-        val hits: List<SearchHit> = if (query.isBlank()) emptyList() else {
-            val q = query.trim()
-            sessions.mapNotNull { s ->
-                val msg = s.messages.firstOrNull { it.content.contains(q, ignoreCase = true) }
-                    ?: return@mapNotNull null
-                SearchHit(s, buildSnippet(msg.content, q))
-            }
-        }
-
         Column(Modifier.fillMaxSize().padding(padding)) {
             // ── 搜索输入框 ──
             Row(
@@ -186,15 +176,13 @@ fun SearchScreen(
                     Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    itemsIndexed(hits, key = { _, h -> h.session.id }) { _, hit ->
-                        val title = hit.session.messages.firstOrNull { it.role == "user" }
-                            ?.content?.replace('\n', ' ')?.take(24)
-                            ?: stringResource(R.string.new_chat)
+                    itemsIndexed(hits, key = { _, h -> h.sessionId }) { _, hit ->
+                        val title = hit.title.ifBlank { stringResource(R.string.new_chat) }
                         Row(
                             Modifier.fillMaxWidth()
                                 .clickable {
                                     SearchHistoryStore.add(context, query.trim())
-                                    onOpenSession(hit.session.id)
+                                    onOpenSession(hit.sessionId)
                                 }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,

@@ -241,6 +241,7 @@
     <string name="new_character">New Character</string>
     <string name="edit_character">Edit Character</string>
     <string name="char_import_failed_fmt">Cannot parse character card. Make sure it\'s a valid PNG/JSON SillyTavern card.</string>
+    <string name="char_save_failed_fmt">Failed to save character card: %s</string>
     <string name="char_file_not_found">Character file not found: %s</string>
 
     <!-- Presets -->

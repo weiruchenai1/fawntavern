@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -80,6 +81,7 @@ import me.rerere.fawntavern.ui.components.Space16
 @Composable
 fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = {}) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var names by remember { mutableStateOf<List<String>>(emptyList()) }
     var chars by remember { mutableStateOf<Map<String, CharacterCard>>(emptyMap()) }
@@ -126,10 +128,10 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                     }
                 }
                 if (imported > 0) {
-                    Toast.makeText(context, context.getString(R.string.toast_imported_files_fmt, imported), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.toast_imported_files_fmt, imported), Toast.LENGTH_SHORT).show()
                 }
                 if (failed > 0) {
-                    Toast.makeText(context, context.getString(R.string.toast_import_failed_count_fmt, failed), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.toast_import_failed_count_fmt, failed), Toast.LENGTH_SHORT).show()
                 }
                 refresh()
             }
@@ -145,9 +147,9 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri)?.use { it.write(data) }
                 }
-                Toast.makeText(context, context.getString(R.string.toast_export_success), Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, resources.getString(R.string.toast_export_success), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(context, context.getString(R.string.toast_export_failed_fmt, e.message ?: ""), Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, resources.getString(R.string.toast_export_failed_fmt, e.message ?: ""), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -165,7 +167,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
             onConfirm = {
                 scope.launch {
                     CharacterRepository.delete(context, name)
-                    Toast.makeText(context, context.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
                     refresh()
                 }
                 showDeleteDialog = null

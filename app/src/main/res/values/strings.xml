@@ -239,6 +239,7 @@
     <string name="new_character">新建角色</string>
     <string name="edit_character">编辑角色</string>
     <string name="char_import_failed_fmt">无法解析角色卡，请确认是 PNG/JSON 格式的 SillyTavern 角色卡</string>
+    <string name="char_save_failed_fmt">角色卡保存失败：%s</string>
     <string name="char_file_not_found">角色文件不存在: %s</string>
 
     <!-- Presets -->

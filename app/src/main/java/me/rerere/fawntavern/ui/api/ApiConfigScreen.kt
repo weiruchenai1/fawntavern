@@ -21,6 +21,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import me.rerere.fawntavern.R
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -53,6 +54,7 @@ val API_TYPES = listOf("openai" to "OpenAI", "google" to "Google", "claude" to "
 @Composable
 fun ApiConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     var config by remember { mutableStateOf(ApiConfigStore.loadConfig(context)) }
     val configWasRecovered = remember { ApiConfigStore.consumeCorruptionNotice(context) }
     val configRecoveredMessage = stringResource(R.string.api_config_recovered)
@@ -83,7 +85,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
                 onSave = { updated ->
                     config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
                     save()
-                    Toast.makeText(context, context.getString(R.string.saved), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.saved), Toast.LENGTH_SHORT).show()
                 },
                 onDelete = {
                     config = config.copy(providers = config.providers.filter { it.id != prov.id })
@@ -107,7 +109,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
                 onSave = { newProv ->
                     config = config.copy(providers = config.providers + newProv)
                     save()
-                    Toast.makeText(context, context.getString(R.string.saved), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.saved), Toast.LENGTH_SHORT).show()
                     adding = false
                     editingId = newProv.id
                 },
@@ -695,6 +697,7 @@ private sealed interface TestState {
 @Composable
 private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
 
     var selectedModel by remember(prov.id) { mutableStateOf(prov.models.firstOrNull()?.id ?: "") }
@@ -730,8 +733,8 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
                 val r = ConnectionTester.testToolCall(prov, selectedModel)
                 TestState.Ok(
                     if (r.toolName.isNotBlank())
-                        context.getString(R.string.test_tool_called_fmt, r.toolName, r.args)
-                    else context.getString(R.string.test_tool_not_called_fmt, r.text)
+                        resources.getString(R.string.test_tool_called_fmt, r.toolName, r.args)
+                    else resources.getString(R.string.test_tool_not_called_fmt, r.text)
                 )
             }.getOrElse { TestState.Err(it.message ?: it.toString()) }
         }

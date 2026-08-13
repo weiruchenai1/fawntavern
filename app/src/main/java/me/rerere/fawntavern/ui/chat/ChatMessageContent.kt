@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.ui.chat
 
 import android.Manifest
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
@@ -45,7 +46,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -62,8 +62,10 @@ import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -81,9 +83,7 @@ import androidx.compose.ui.unit.times
 import androidx.core.content.ContextCompat
 import com.mikepenz.markdown.annotator.annotatorSettings
 import com.mikepenz.markdown.annotator.buildMarkdownAnnotatedString
-import com.mikepenz.markdown.compose.LocalMarkdownColors
 import com.mikepenz.markdown.compose.LocalMarkdownComponents
-import com.mikepenz.markdown.compose.LocalMarkdownPadding
 import com.mikepenz.markdown.compose.MarkdownElement
 import com.mikepenz.markdown.compose.components.CurrentComponentsBridge
 import com.mikepenz.markdown.compose.components.MarkdownComponent
@@ -104,9 +104,6 @@ import com.mikepenz.markdown.model.ReferenceLinkHandlerImpl
 import com.mikepenz.markdown.model.State
 import com.mikepenz.markdown.model.markdownPadding
 import com.mikepenz.markdown.utils.MARKDOWN_TAG_IMAGE_URL
-import com.composables.icons.lucide.Check
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.Lucide
@@ -125,7 +122,6 @@ import ru.noties.jlatexmath.JLatexMathSplitter
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Base64
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -650,7 +646,8 @@ private fun ChatMarkdownTable(
     renderMath: Boolean,
 ) {
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
+    val resources = LocalResources.current
+    val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     val graphicsLayer = rememberGraphicsLayer()
     var isSaving by remember { mutableStateOf(false) }
@@ -669,7 +666,7 @@ private fun ChatMarkdownTable(
             isSaving = false
             Toast.makeText(
                 context,
-                context.getString(if (saved) R.string.image_saved_to_gallery else R.string.image_save_failed),
+                resources.getString(if (saved) R.string.image_saved_to_gallery else R.string.image_save_failed),
                 Toast.LENGTH_SHORT,
             ).show()
         }
@@ -703,7 +700,9 @@ private fun ChatMarkdownTable(
                 Lucide.Copy,
                 stringResource(R.string.copy),
                 Modifier.size(36.dp).noRippleClickable {
-                    clipboard.setText(AnnotatedString(tableSource))
+                    scope.launch {
+                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("table", tableSource)))
+                    }
                     Toast.makeText(context, R.string.copied, Toast.LENGTH_SHORT).show()
                 }.padding(9.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1088,140 +1087,6 @@ private fun LatexFormulaBlock(
     }
 }
 
-/** Chat-oriented code surface with a stable metadata/action bar and optional line-limit folding. */
-@Composable
-private fun ChatCodeBlock(
-    code: String,
-    language: String?,
-    style: TextStyle,
-    collapsible: Boolean,
-    threshold: Int,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val lineCount = code.count { it == '\n' } + 1
-    val canFold = lineCount > threshold
-    // null 表示遵循自动折叠策略；用户点过后保存明确选择。不能把 code 放进 remember key，
-    // 否则流式每个 token 都会把刚刚展开的代码块重新折叠。
-    var expansionOverride by remember(collapsible, threshold) { mutableStateOf<Boolean?>(null) }
-    val expanded = expansionOverride ?: !(collapsible && canFold)
-    var copied by remember(code) { mutableStateOf(false) }
-    val clipboard = LocalClipboardManager.current
-    val colors = LocalMarkdownColors.current
-    val codePad = LocalMarkdownPadding.current.codeBlock
-    val labelStyle = MaterialTheme.typography.labelSmall
-    val normalizedLanguage = language?.trim()?.lowercase().orEmpty()
-    val fileType = remember(normalizedLanguage) { codeFileType(normalizedLanguage) }
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(fileType.mimeType),
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val saved = withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
-                        writer.write(code)
-                        true
-                    } == true
-                }.getOrDefault(false)
-            }
-            Toast.makeText(
-                context,
-                context.getString(if (saved) R.string.file_saved else R.string.file_save_failed),
-                Toast.LENGTH_SHORT,
-            ).show()
-        }
-    }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(1400)
-            copied = false
-        }
-    }
-
-    Column(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Row(
-            Modifier.fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .padding(start = 10.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                normalizedLanguage.takeIf { it.isNotEmpty() }?.uppercase()
-                    ?: stringResource(R.string.code_language_plain),
-                style = labelStyle.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-            Icon(
-                if (copied) Lucide.Check else Lucide.Copy,
-                stringResource(R.string.copy),
-                Modifier.size(36.dp).noRippleClickable {
-                    clipboard.setText(AnnotatedString(code))
-                    copied = true
-                }.padding(9.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Icon(
-                Lucide.Download,
-                stringResource(R.string.download),
-                Modifier.size(36.dp).noRippleClickable {
-                    exportLauncher.launch(
-                        "FawnTavern-code-${System.currentTimeMillis()}.${fileType.extension}",
-                    )
-                }.padding(9.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (canFold) {
-                Icon(
-                    if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
-                    stringResource(if (expanded) R.string.collapse else R.string.expand),
-                    Modifier.size(36.dp).noRippleClickable { expansionOverride = !expanded }.padding(9.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        val visibleCode = remember(code, expanded, threshold) {
-            if (expanded) code else code.lineSequence().take(threshold).joinToString("\n")
-        }
-        Box(
-            Modifier.fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-        ) {
-            Text(
-                visibleCode,
-                style = style,
-                color = colors.codeText,
-                softWrap = false,
-                modifier = Modifier.padding(codePad),
-            )
-        }
-    }
-}
-
-private data class CodeFileType(val extension: String, val mimeType: String)
-
-private fun codeFileType(language: String): CodeFileType = when (language) {
-    "html", "htm" -> CodeFileType("html", "text/html")
-    "css" -> CodeFileType("css", "text/css")
-    "javascript", "js" -> CodeFileType("js", "text/javascript")
-    "typescript", "ts" -> CodeFileType("ts", "text/plain")
-    "json" -> CodeFileType("json", "application/json")
-    "xml" -> CodeFileType("xml", "application/xml")
-    "markdown", "md" -> CodeFileType("md", "text/markdown")
-    "kotlin", "kt" -> CodeFileType("kt", "text/plain")
-    "java" -> CodeFileType("java", "text/x-java")
-    "python", "py" -> CodeFileType("py", "text/x-python")
-    "shell", "bash", "sh" -> CodeFileType("sh", "text/x-shellscript")
-    "sql" -> CodeFileType("sql", "application/sql")
-    else -> CodeFileType("txt", "text/plain")
-}
-
 /** 三个依次呼吸亮起的小圆点，用于流式生成等待状态。 */
 @Composable
 fun StreamingDots(
@@ -1253,7 +1118,7 @@ fun StreamingDots(
             val center = time * 3f
             val dist = kotlin.math.abs((i - center + 4.5f) % 3f - 1.5f)
             // 高斯核：exp(-d² / 2σ²)，光斑中心最亮，向两侧平滑衰减
-            val raw = kotlin.math.exp(-(dist * dist) / (2f * sigma * sigma)).toFloat()
+            val raw = kotlin.math.exp(-(dist * dist) / (2f * sigma * sigma))
             val alpha = 0.12f + raw * 0.83f
 
             Box(

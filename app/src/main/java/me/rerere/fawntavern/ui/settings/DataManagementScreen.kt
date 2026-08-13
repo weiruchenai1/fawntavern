@@ -77,8 +77,6 @@ import java.io.File
 @Composable
 private fun DataCategory.label(): String = stringResource(labelResId)
 
-private fun DataCategory.label(ctx: android.content.Context): String = ctx.getString(labelResId)
-
 private data class DataCategory(
     val key: String,
     val labelResId: Int,
@@ -106,7 +104,10 @@ private fun AppBackup.Section.labelResId(): Int = when (this) {
 }
 
 @Composable
-fun DataManagementScreen(onBack: () -> Unit) {
+fun DataManagementScreen(
+    onBack: () -> Unit,
+    destructiveActionsEnabled: Boolean = true,
+) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
@@ -216,12 +217,16 @@ fun DataManagementScreen(onBack: () -> Unit) {
             title = { Text(stringResource(R.string.clear_category_title_fmt, cat.label())) },
             text = { Text(stringResource(R.string.clear_category_msg_fmt, cnt, cat.label())) },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(enabled = destructiveActionsEnabled, onClick = {
                     scope.launch {
                         working = true
                         withContext(Dispatchers.IO) { cat.clear(context) }
                         refresh()
-                        Toast.makeText(context, context.getString(R.string.toast_cleared_fmt, cat.label(context)), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            resources.getString(R.string.toast_cleared_fmt, resources.getString(cat.labelResId)),
+                            Toast.LENGTH_SHORT,
+                        ).show()
                     }
                     showClearCategory = null
                 }) { Text(stringResource(R.string.clear_category_btn), color = MaterialTheme.colorScheme.error) }
@@ -240,14 +245,14 @@ fun DataManagementScreen(onBack: () -> Unit) {
             title = { Text(stringResource(R.string.clear_all_title)) },
             text = { Text(stringResource(R.string.clear_all_msg)) },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(enabled = destructiveActionsEnabled, onClick = {
                     scope.launch {
                         working = true
                         withContext(Dispatchers.IO) {
                             categories.forEach { it.clear(context) }
                         }
                         refresh()
-                        Toast.makeText(context, context.getString(R.string.toast_cleared_all), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, resources.getString(R.string.toast_cleared_all), Toast.LENGTH_SHORT).show()
                     }
                     showClearAll = false
                 }) { Text(stringResource(R.string.clear_all_btn), color = MaterialTheme.colorScheme.error) }
@@ -262,10 +267,10 @@ fun DataManagementScreen(onBack: () -> Unit) {
             title = { Text(stringResource(R.string.reset_api_title)) },
             text = { Text(stringResource(R.string.reset_api_msg)) },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(enabled = destructiveActionsEnabled, onClick = {
                     apiCount = ApiConfigStore.resetToDefaults(context).providers.size
                     showResetApi = false
-                    Toast.makeText(context, context.getString(R.string.toast_api_reset), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.toast_api_reset), Toast.LENGTH_SHORT).show()
                 }) { Text(stringResource(R.string.reset_btn), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { showResetApi = false }) { Text(stringResource(R.string.cancel)) } }
@@ -285,9 +290,9 @@ fun DataManagementScreen(onBack: () -> Unit) {
                             AppBackup.export(context, out, pendingExportSections)
                         } ?: error("Unable to create backup")
                     }
-                    Toast.makeText(context, context.getString(R.string.toast_export_success), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.toast_export_success), Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
-                    Toast.makeText(context, context.getString(R.string.toast_export_failed_fmt, e.message ?: ""), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.toast_export_failed_fmt, e.message ?: ""), Toast.LENGTH_SHORT).show()
                 }
                 working = false
             }
@@ -321,7 +326,7 @@ fun DataManagementScreen(onBack: () -> Unit) {
                     importAvailableSections = inspected.second
                     importSections = inspected.second
                 } catch (e: Exception) {
-                    Toast.makeText(context, context.getString(R.string.toast_import_failed_fmt, e.message ?: ""), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.toast_import_failed_fmt, e.message ?: ""), Toast.LENGTH_SHORT).show()
                 }
                 working = false
             }
@@ -352,12 +357,14 @@ fun DataManagementScreen(onBack: () -> Unit) {
             selected = importSections,
             showSensitiveWarning = false,
             confirmLabel = stringResource(R.string.import_backup_confirm),
+            confirmEnabled = destructiveActionsEnabled,
             onSelectedChange = { importSections = it },
             onDismiss = {
                 pendingImportFile?.delete()
                 pendingImportFile = null
             },
             onConfirm = {
+                if (!destructiveActionsEnabled) return@BackupSelectionDialog
                 val cached = pendingImportFile ?: return@BackupSelectionDialog
                 pendingImportFile = null
                 scope.launch {
@@ -370,13 +377,13 @@ fun DataManagementScreen(onBack: () -> Unit) {
                         val message = if (result.files > 0 || result.sessions > 0) {
                             backupImportedMessage(result.files, result.sessions)
                         } else {
-                            context.getString(R.string.toast_backup_content_imported)
+                            resources.getString(R.string.toast_backup_content_imported)
                         }
                         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Toast.makeText(
                             context,
-                            context.getString(R.string.toast_import_failed_fmt, e.message ?: ""),
+                            resources.getString(R.string.toast_import_failed_fmt, e.message ?: ""),
                             Toast.LENGTH_SHORT,
                         ).show()
                     } finally {
@@ -408,7 +415,7 @@ fun DataManagementScreen(onBack: () -> Unit) {
                 size = size,
                 fileCount = fileCount,
                 onClear = { showClearCategory = cat },
-                enabled = count > 0,
+                enabled = count > 0 && destructiveActionsEnabled,
             )
         }
 
@@ -416,6 +423,7 @@ fun DataManagementScreen(onBack: () -> Unit) {
         ApiConfigCard(
             providerCount = apiCount,
             onReset = { showResetApi = true },
+            enabled = destructiveActionsEnabled,
         )
 
         HorizontalDivider(
@@ -434,7 +442,7 @@ fun DataManagementScreen(onBack: () -> Unit) {
                         "application/zip", "application/x-zip-compressed", "application/octet-stream"))
                 },
                 modifier = Modifier.weight(1f),
-                enabled = !working,
+                enabled = !working && destructiveActionsEnabled,
             ) {
                 Icon(Lucide.ArrowDownToLine, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(Space8))
@@ -455,7 +463,7 @@ fun DataManagementScreen(onBack: () -> Unit) {
         Button(
             onClick = { showClearAll = true },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !working && totalItems > 0,
+            enabled = !working && destructiveActionsEnabled && totalItems > 0,
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer,
                 contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -485,6 +493,7 @@ private fun BackupSelectionDialog(
     onSelectedChange: (Set<AppBackup.Section>) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
+    confirmEnabled: Boolean = true,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -525,7 +534,9 @@ private fun BackupSelectionDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm, enabled = selected.isNotEmpty()) { Text(confirmLabel) }
+            TextButton(onClick = onConfirm, enabled = selected.isNotEmpty() && confirmEnabled) {
+                Text(confirmLabel)
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
@@ -636,7 +647,11 @@ private fun CategoryCard(
 }
 
 @Composable
-private fun ApiConfigCard(providerCount: Int, onReset: () -> Unit) {
+private fun ApiConfigCard(
+    providerCount: Int,
+    onReset: () -> Unit,
+    enabled: Boolean = true,
+) {
     Column(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
@@ -659,6 +674,7 @@ private fun ApiConfigCard(providerCount: Int, onReset: () -> Unit) {
         OutlinedButton(
             onClick = onReset,
             modifier = Modifier.fillMaxWidth(),
+            enabled = enabled,
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = MaterialTheme.colorScheme.error,
             ),

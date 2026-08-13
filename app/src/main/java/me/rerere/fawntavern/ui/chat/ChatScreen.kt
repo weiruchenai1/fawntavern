@@ -1,5 +1,6 @@
 package me.rerere.fawntavern.ui.chat
 
+import android.content.ClipData
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -8,12 +9,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
@@ -32,10 +35,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -43,12 +46,13 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -64,6 +68,7 @@ import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.PreferencesStore
 import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.data.settings.ThemeMode
+import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.ui.api.ApiConfigScreen
 import me.rerere.fawntavern.ui.character.CharacterListScreen
 import me.rerere.fawntavern.ui.preset.PresetListScreen
@@ -83,10 +88,7 @@ import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.vibrate
 
-/** 聊天之上的全屏页面，以返回栈方式叠放（栈顶显示，返回键弹出） */
-private enum class Screen {
-    Settings, Presets, Characters, WorldBooks, ApiConfig, DataMgmt, FontSize, Preferences, PromptLog, Search, Extensions, About, DefaultModel, WebSearch, Tts,
-}
+private typealias Screen = ChatDestination
 
 @Composable
 fun ChatScreen(
@@ -100,22 +102,20 @@ fun ChatScreen(
     val drawerState = rememberInteractiveDrawerState()
     val scope = rememberCoroutineScope()
     // ── 页面返回栈（纯 UI 状态） ──
-    val nav = remember {
-        mutableStateListOf<Screen>().apply { if (startAtSettings) add(Screen.Settings) }
-    }
+    val nav = rememberChatNavigationStack(startAtSettings)
     fun navBack() { nav.removeLastOrNull() }
     // ── 弹层标志 ──
-    var showAttachment by remember { mutableStateOf(false) }
+    var showAttachment by rememberSaveable { mutableStateOf(false) }
     val modelSelector = rememberModelSelectorState(vm.displayModelSpec() ?: "", vm.apiConfig.providers)
-    var showReasoningPicker by remember { mutableStateOf(false) }
-    var showSearch by remember { mutableStateOf(false) }
-    var showCharPicker by remember { mutableStateOf(false) }
+    var showReasoningPicker by rememberSaveable { mutableStateOf(false) }
+    var showSearch by rememberSaveable { mutableStateOf(false) }
+    var showCharPicker by rememberSaveable { mutableStateOf(false) }
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
     // ── 消息操作弹窗状态（按消息 ts 定位，与分页/内存窗口无关） ──
-    var menuTargetIdx by remember { mutableStateOf<Long?>(null) }
+    var menuTargetIdx by rememberSaveable { mutableStateOf<Long?>(null) }
     /** 全屏底部面板内容（消息全文/输入框全文共用），非 null 时显示 */
     var copyPanel by remember { mutableStateOf<CopyPanel?>(null) }
-    var deleteSessionId by remember { mutableStateOf<String?>(null) }
+    var deleteSessionId by rememberSaveable { mutableStateOf<String?>(null) }
     var renameSession by remember { mutableStateOf<Pair<String, String>?>(null) }
     var scrollToBottomTrigger by remember { mutableStateOf(0) }
     // 重新生成前确认：偏好开启时把待执行的重答存这里，弹框确认后执行
@@ -125,12 +125,15 @@ fun ChatScreen(
     var pendingDeleteAllVersions by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val ctx = LocalContext.current
-    val clipboard = LocalClipboardManager.current
+    val resources = LocalResources.current
+    val clipboard = LocalClipboard.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
     fun copyText(text: String) {
-        clipboard.setText(AnnotatedString(text))
-        Toast.makeText(ctx, ctx.getString(R.string.copied), Toast.LENGTH_SHORT).show()
+        scope.launch {
+            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("text", text)))
+        }
+        Toast.makeText(ctx, resources.getString(R.string.copied), Toast.LENGTH_SHORT).show()
     }
 
     // 发送/重答的统一善后：成功则钉到底部（重答中间消息时不滚动，原地生成）；
@@ -139,12 +142,12 @@ fun ChatScreen(
         when (outcome) {
             ChatViewModel.SendOutcome.STARTED -> if (scroll) scrollToBottomTrigger++
             ChatViewModel.SendOutcome.NO_MODEL -> {
-                Toast.makeText(ctx, ctx.getString(R.string.select_model_first), Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, resources.getString(R.string.select_model_first), Toast.LENGTH_SHORT).show()
                 modelSelector.open()
             }
             ChatViewModel.SendOutcome.SKIPPED -> {}
             ChatViewModel.SendOutcome.FILE_TOO_LARGE ->
-                Toast.makeText(ctx, ctx.getString(R.string.file_too_large_to_send), Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, resources.getString(R.string.file_too_large_to_send), Toast.LENGTH_SHORT).show()
         }
     }
     // 附件落盘失败（提供方不报大小等兜底场景）：附件与输入已恢复，这里弹提示
@@ -188,7 +191,7 @@ fun ChatScreen(
     // ── TTS 悬浮窗：挂在 App 窗口之上，朗读时悬浮于屏幕任意页面；初始位置在顶栏下方左缘 ──
     val density = LocalDensity.current
     val ttsBarOffset = with(density) {
-        Offset(Space16.toPx(), statusBarHeightPx(ctx).toFloat() + 48.dp.toPx())
+        Offset(Space16.toPx(), WindowInsets.statusBars.getTop(this).toFloat() + 48.dp.toPx())
     }
     FloatingWindow(
         tag = "tts_controller",
@@ -257,10 +260,13 @@ fun ChatScreen(
         }
         Screen.DataMgmt -> {
             screenStateHolder.SaveableStateProvider("DataMgmt") {
-                DataManagementScreen(onBack = {
-                    navBack()
-                    vm.refreshAfterDataManagement()
-                })
+                DataManagementScreen(
+                    onBack = {
+                        navBack()
+                        vm.refreshAfterDataManagement()
+                    },
+                    destructiveActionsEnabled = GenerationActionGuard.allowsMutation(vm.generating),
+                )
             }
             return
         }
@@ -448,7 +454,7 @@ fun ChatScreen(
                         onCancelEdit = { vm.cancelEdit() },
                         onExpand = {
                             if (vm.inputText.isNotBlank()) {
-                                copyPanel = CopyPanel(ctx.getString(R.string.input_content), vm.inputText, editable = true)
+                                copyPanel = CopyPanel(resources.getString(R.string.input_content), vm.inputText, editable = true)
                             }
                         },
                         currentModelId = displayModelId,
@@ -705,7 +711,7 @@ fun ChatScreen(
         MessageMenu(
             onDismiss = { menuTargetIdx = null },
             onSelectCopy = {
-                copyPanel = CopyPanel(ctx.getString(R.string.select_copy), menuMsg.content)
+                copyPanel = CopyPanel(resources.getString(R.string.select_copy), menuMsg.content)
                 menuTargetIdx = null
             },
             onEdit = {
@@ -769,7 +775,7 @@ fun ChatScreen(
             title = { Text(stringResource(R.string.delete_chat_title)) },
             text = { Text(stringResource(R.string.delete_chat_msg)) },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(enabled = GenerationActionGuard.allowsMutation(vm.generating), onClick = {
                     vm.deleteSession(id)
                     deleteSessionId = null
                 }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
@@ -902,8 +908,3 @@ private fun isImageUri(context: android.content.Context, uri: Uri): Boolean {
 }
 
 /** 状态栏高度（px），用于把悬浮窗初始位置放到顶栏之下 */
-private fun statusBarHeightPx(context: android.content.Context): Int {
-    val resId = context.resources.getIdentifier("status_bar_height", "dimen", "android")
-    return if (resId > 0) context.resources.getDimensionPixelSize(resId) else 0
-}
-

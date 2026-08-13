@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -66,6 +67,7 @@ import me.rerere.fawntavern.R
 @Composable
 internal fun ImagePreviewDialog(model: Any, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var isSaving by remember(model) { mutableStateOf(false) }
     var scale by remember(model) { mutableFloatStateOf(1f) }
@@ -78,7 +80,7 @@ internal fun ImagePreviewDialog(model: Any, onDismiss: () -> Unit) {
             isSaving = false
             Toast.makeText(
                 context,
-                context.getString(if (saved) R.string.image_saved_to_gallery else R.string.image_save_failed),
+                resources.getString(if (saved) R.string.image_saved_to_gallery else R.string.image_save_failed),
                 Toast.LENGTH_SHORT,
             ).show()
         }

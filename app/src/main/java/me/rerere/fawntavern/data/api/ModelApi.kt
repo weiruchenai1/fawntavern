@@ -77,12 +77,12 @@ object ModelApi {
         )
     }
 
-    // ── Google Gemini: GET {base}/models?key= ────────────
+    // ── Google Gemini: GET {base}/models ─────────────────
 
     private fun listGoogleModels(provider: ApiProvider): List<ModelInfo> {
         val body = httpGet(
-            url = "${provider.baseUrl.trimEnd('/')}/models?key=${provider.apiKey}&pageSize=1000",
-            headers = emptyMap(),
+            url = "${provider.baseUrl.trimEnd('/')}/models?pageSize=1000",
+            headers = mapOf("x-goog-api-key" to provider.apiKey),
         )
         val json = JSONObject(body)
         val models = json.optJSONArray("models") ?: return emptyList()

@@ -53,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -472,6 +473,7 @@ private fun DepthSegmented(depth: String, onChange: (String) -> Unit) {
 @Composable
 private fun SearchTesterCard(options: SearchServiceOptions) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var query by remember(options.id) { mutableStateOf("") }
     var running by remember { mutableStateOf(false) }
@@ -501,11 +503,11 @@ private fun SearchTesterCard(options: SearchServiceOptions) {
                             val result = createSearchService(options)
                                 .search(query, SearchCommonOptions(SearchStore.getResultSize(context)), options)
                                 .getOrThrow()
-                            if (result.items.isEmpty()) context.getString(R.string.web_search_no_results)
+                            if (result.items.isEmpty()) resources.getString(R.string.web_search_no_results)
                             else result.items.take(3).joinToString("\n\n") {
                                 "${it.title}\n${it.url}\n${it.text}"
                             }
-                        }.getOrElse { context.getString(R.string.web_search_error_fmt, it.message ?: "") }
+                        }.getOrElse { resources.getString(R.string.web_search_error_fmt, it.message ?: "") }
                     }
                     output = text
                     running = false

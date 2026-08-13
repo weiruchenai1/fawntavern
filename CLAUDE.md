@@ -13,19 +13,20 @@ FawnTavern — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3�
 ./gradlew installDebug       # 构建并安装 debug 版到已连接的设备/模拟器
 ./gradlew assembleRelease    # 构建 release APK
 ./gradlew installRelease     # 构建并安装 release 版到已连接的设备/模拟器
-./gradlew lint               # Android lint
+./gradlew testDebugUnitTest  # 运行 debug JVM 单元测试
+./gradlew lint               # 运行 Android 静态检查
 ```
 
 - 需要 JDK 17；minSdk 26、compile/targetSdk 37；Android SDK 路径在 `local.properties` 中。
 - debug 版包名带 `.debug` 后缀，与 release 版可并存安装、数据互不干扰。
 - release 签名读根目录的 `keystore.properties`（不入库）；文件缺失时 release 走未签名，debug 构建不受影响。
-- 目前没有单元测试或仪器测试（`app/src/test` 和 `app/src/androidTest` 不存在）。
+- JVM 单元测试位于 `app/src/test`，通过 `testDebugUnitTest` 运行；目前没有仪器测试（`app/src/androidTest` 不存在）。
 - 依赖版本集中在 `gradle/libs.versions.toml`（AGP 9.x、Kotlin 2.4、Compose BOM）。
 - 开发过程中的验证方式是安装到设备/模拟器上实际运行查看。
 
 ## 架构
 
-单 Activity 的 Compose 应用，**没有使用导航库**。`MainActivity` 渲染 `ChatScreen`（`ui/chat/ChatScreen.kt`），它既是主聊天界面，也是导航器：文件内有一个私有 `Screen` 枚举和一个 `mutableStateListOf<Screen>` 返回栈，渲染栈顶页面（`when (nav.lastOrNull())`），返回即弹栈。新增页面：加一个枚举值 + 一个 `when` 分支，入口处 `nav.add(Screen.X)`。模型/角色选择等弹层仍用布尔标志 + `ModalBottomSheet`。
+单 Activity 的 Compose 应用，**没有使用导航库**。`MainActivity` 渲染 `ChatScreen`（`ui/chat/ChatScreen.kt`），它既是主聊天界面，也是导航器：文件内有一个私有 `Screen` 枚举和一个由自定义 Saver 持久化的 `SnapshotStateList<Screen>` 返回栈，渲染栈顶页面（`when (nav.lastOrNull())`），返回即弹栈。新增页面：加一个枚举值 + 一个 `when` 分支，入口处 `nav.add(Screen.X)`。模型/角色选择等弹层仍用布尔标志 + `ModalBottomSheet`。
 
 **消息列表的滚动位置由 `ui/chat/ChatScrollController.kt` 单一持有**，`ChatScreen` 不直接碰 `LazyListState`，只在每次重组把外部依赖刷进 `scrollCtrl.inputs`。位置变更只有两个原语，**不可混用**：`requestScrollToItem`（登记待生效位置、下一次**测量**采用，内容增长与位置更新同帧完成，无先画错再纠正的闪烁；钉底传越界索引，clamp 后停在列表末尾的 1dp 锚点行）用于钉底与锚定；`animateScrollToItem`/`scrollToItem` 走 `scroll {}`，仅用于导航按钮跳转——`requestScrollToItem` 在 `isScrollInProgress` 时会自己 `launch { scroll {} }` 抢占，塞进 `scroll {}` 块里等于取消自己。三条到底部的路径：`snapToBottom()` 单帧（流式跟随、IME 高度变化）、`pinToBottom()` 同帧登记 + 跨帧收敛（发送/切会话/点回到底部——Markdown 异步解析，远距离跳转要几帧才长到真实高度）、`switchAnchored()` 切分支落点锚定。并发安全靠 `pinJob` + `MutatorMutex`：任何新钉底**原子作废**在途的那个，绝不允许两个收敛循环互抢。跟随规则只有两条——**上划即停跟**、**落点触底即跟随**，都在 `settleDrag()`（手指抬起且惯性走完）一处判；fling 阶段靠 `dragging` 标志让位，不让位会把用户甩出的惯性硬截停。右下角的悬浮导航按钮栏（`ui/chat/ScrollNavButtons.kt`：顶部/上一条/下一条/底部）滚动时出现、静止两秒后隐藏，连续点上/下一条靠 `navAnchorIndex` 链式推进（不受动画途中 `firstVisibleItemIndex` 尚未落位的影响），手指一碰即失效。控制器实例提升到 `when (nav.lastOrNull())` **之上**（全屏页面命中时聊天区域整个离开组合，其内 remember 全毁），但 `runLoops()` 的两个长循环留在聊天区域内，随其在屏/离屏启停。
 
@@ -44,7 +45,7 @@ FawnTavern — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3�
 
 **SillyTavern 兼容性**是数据层的核心：`CharacterRepository.import` 可以从纯 JSON 文件、或从 PNG 的 `tEXt`/`zTXt` 块（关键字为 `chara`/`ccv3`，base64/zlib 编码）中提取角色 JSON，并自动将内嵌的 `character_book` 提取为独立的世界书文件。导入/导出格式需保持与 SillyTavern 兼容。正则脚本有两个来源：角色卡内嵌（`extensions.regex_scripts` → `CharacterCard.regexScripts`，随角色卡生效）与**预设私有**（存进预设 JSON 的 `regex_scripts` 数组 → `StPreset.regexScripts`，`RegexScript.toCharRegex()` 转成统一类型，**只在关联该预设的聊天里生效**——不再有全局 `regex/` 目录；在 `PresetEditorScreen` 的「正则」Tab 内导入/编辑/删除，随预设一起落盘），统一由 `data/character/RegexEngine` 套用（对齐 ST 的 JS `/pattern/flags` 字面量与 `$1`/`{{match}}` 替换语法）——**显示侧** `applyForDisplay`（`ChatMessageContent` 按消息深度用 `depthKey` 做 remember 缓存，避免新消息到达时重算旧消息）与**发送侧** `applyForPrompt`（`PromptBuilder.assemble` 构建请求时逐条历史套用）互补：`promptOnly` 只在发送侧生效、`markdownOnly` 只在显示侧生效、两个标志都为 false 的两侧都生效。
 
-**尚未接线的功能**：世界书激活引擎已覆盖 ST 的高价值子集（constant、正则/普通关键词、次级关键词 selectiveLogic、probability 掷骰、条目级 scanDepth/caseSensitive/matchWholeWords 覆盖、递归激活、inclusion group、sticky/cooldown/delay 定时效果，默认扫描深度同 ST 为 2 条消息），但 **minActivations、token 预算参与激活、向量化/语义激活** 未实现（前者需全局 WI 设置界面，后者需 embedding 后端）；群组聊天（talkativeness/群卡合并）未实现。
+**世界书功能边界**：激活引擎已实现 constant、正则/普通关键词、次级关键词 selectiveLogic、probability 掷骰、条目级 scanDepth/caseSensitive/matchWholeWords 覆盖、递归激活、inclusion group、sticky/cooldown/delay 定时效果、minActivations 与 token 预算，默认扫描深度同 ST 为 2 条消息。`vectorized` 字段可导入、编辑并原样保存，但向量化条目当前不参与激活，因为尚无 embedding/语义检索后端。群组聊天尚未实现；角色卡的 `talkativeness` 字段仅解析和保留，不参与当前的单角色生成流程，也没有群卡合并逻辑。
 
 **已接线的生成参数**：采样参数下发覆盖 temperature/topP/topK/maxTokens 与 frequency/presence penalty、seed（各 provider 按官方支持度路由，Claude 不支持 penalty/seed）；思考预算档位由聊天输入区模型按钮右侧的按钮切换（`ReasoningPickerSheet` → `ThinkingStore` 按 `"providerId::modelId"` 分模型记忆 → `PromptBuilder` 打进 `GenParams.reasoning` → `data/api/Reasoning.kt` 按 provider 下发）。
 

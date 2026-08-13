@@ -186,7 +186,7 @@ internal object ClaudeAdapter : ProviderAdapter {
      * 一条协议无关消息可展开为多条协议消息：带工具调用的 assistant 展开为
      * "assistant(tool_use，优先用原始块回显签名) + user(tool_result)"。
      */
-    private fun encodeMessage(m: ApiMessage): List<JSONObject> {
+    internal fun encodeMessage(m: ApiMessage): List<JSONObject> {
         if (m.toolCalls.isNotEmpty()) {
             val content = if (m.rawBlocks.isNotBlank()) {
                 runCatching { JSONArray(m.rawBlocks) }.getOrNull()

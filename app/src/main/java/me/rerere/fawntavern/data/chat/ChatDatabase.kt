@@ -75,6 +75,17 @@ internal data class SessionSummaryRow(
     val preview: String?,
 )
 
+internal data class ChatSearchRow(
+    val sessionId: String,
+    val title: String,
+    val content: String,
+)
+
+internal data class AttachmentColumns(
+    val imagesJson: String,
+    val filesJson: String,
+)
+
 @Dao
 internal interface ChatDao {
 
@@ -97,6 +108,31 @@ internal interface ChatDao {
         ORDER BY pinned DESC, updatedAt DESC
     """)
     suspend fun listSummaries(): List<SessionSummaryRow>
+
+    /** 每个会话只返回最早的一条命中消息，避免搜索页把完整聊天历史载入内存。 */
+    @Query("""
+        SELECT s.id AS sessionId,
+            CASE WHEN s.title != '' THEN s.title ELSE COALESCE(
+                (SELECT content FROM messages p
+                 WHERE p.sessionId = s.id AND p.role = 'user'
+                 ORDER BY p.ts ASC LIMIT 1), '') END AS title,
+            m.content AS content
+        FROM sessions s
+        JOIN messages m ON m.sessionId = s.id
+        WHERE s.charFile = :charFile
+          AND instr(lower(m.content), lower(:query)) > 0
+          AND m.ts = (
+              SELECT MIN(hit.ts) FROM messages hit
+              WHERE hit.sessionId = s.id
+                AND instr(lower(hit.content), lower(:query)) > 0
+          )
+        ORDER BY s.updatedAt DESC
+        LIMIT :limit
+    """)
+    suspend fun searchMessages(charFile: String, query: String, limit: Int): List<ChatSearchRow>
+
+    @Query("SELECT imagesJson, filesJson FROM messages WHERE imagesJson != '' OR filesJson != ''")
+    suspend fun listAttachmentColumns(): List<AttachmentColumns>
 
     @Query("SELECT COUNT(*) FROM sessions")
     suspend fun countSessions(): Int

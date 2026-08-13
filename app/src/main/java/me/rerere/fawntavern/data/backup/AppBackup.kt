@@ -252,7 +252,7 @@ object AppBackup {
         zip.closeEntry()
     }
 
-    private fun extractValidated(input: InputStream, staging: File) {
+    internal fun extractValidated(input: InputStream, staging: File) {
         var entries = 0
         var totalBytes = 0L
         ZipInputStream(input).use { zip ->

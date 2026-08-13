@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.FilePlus
@@ -67,6 +68,7 @@ fun <T : Any> ImportableListScreen(
     actions: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var names by remember { mutableStateOf<List<String>>(emptyList()) }
     var items by remember { mutableStateOf<Map<String, T>>(emptyMap()) }
@@ -107,10 +109,10 @@ fun <T : Any> ImportableListScreen(
                     }
                 }
                 if (imported > 0) {
-                    Toast.makeText(context, context.getString(R.string.toast_imported_files_fmt, imported), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.toast_imported_files_fmt, imported), Toast.LENGTH_SHORT).show()
                 }
                 if (failed > 0) {
-                    Toast.makeText(context, context.getString(R.string.toast_import_failed_count_fmt, failed), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.toast_import_failed_count_fmt, failed), Toast.LENGTH_SHORT).show()
                 }
                 refresh()
             }
@@ -124,7 +126,7 @@ fun <T : Any> ImportableListScreen(
             onConfirm = { newName ->
                 scope.launch {
                     if (renameItem(oldName, newName)) {
-                        Toast.makeText(context, context.getString(R.string.toast_renamed), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, resources.getString(R.string.toast_renamed), Toast.LENGTH_SHORT).show()
                         refresh()
                     }
                 }
@@ -141,7 +143,7 @@ fun <T : Any> ImportableListScreen(
             onConfirm = {
                 scope.launch {
                     deleteItem(name)
-                    Toast.makeText(context, context.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
                     refresh()
                 }
                 showDeleteDialog = null

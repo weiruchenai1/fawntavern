@@ -31,6 +31,17 @@ object ChatRepository {
 
     suspend fun count(context: Context): Int = dao(context).countSessions()
 
+    data class SearchResult(val sessionId: String, val title: String, val content: String)
+
+    suspend fun searchMessages(
+        context: Context,
+        charFile: String,
+        query: String,
+        limit: Int = 100,
+    ): List<SearchResult> = dao(context).searchMessages(charFile, query, limit).map {
+        SearchResult(it.sessionId, it.title, it.content)
+    }
+
     /** 列出全部会话，按更新时间倒序 */
     suspend fun list(context: Context): List<ChatSession> =
         dao(context).listAll().map { it.toModel() }
@@ -171,11 +182,14 @@ object ChatRepository {
 
     /** 删除已不被任何消息引用的附件；导入、删消息和删会话后均可安全调用。 */
     suspend fun collectUnusedAttachments(context: Context) {
-        val referenced = list(context).asSequence()
-            .flatMap { it.messages.asSequence() }
-            .flatMap { message -> message.images.asSequence() + message.files.asSequence().map { it.path } }
-            .map { it.substringAfterLast('/') }
-            .toSet()
+        val referenced = dao(context).listAttachmentColumns().asSequence().flatMap { row ->
+            val images = if (row.imagesJson.isBlank()) emptyList() else
+                runCatching { json.decodeFromString<List<String>>(row.imagesJson) }.getOrDefault(emptyList())
+            val files = if (row.filesJson.isBlank()) emptyList() else
+                runCatching { json.decodeFromString<List<MsgFile>>(row.filesJson) }.getOrDefault(emptyList())
+                    .map { it.path }
+            (images + files).asSequence()
+        }.map { it.substringAfterLast('/') }.toSet()
         withContext(Dispatchers.IO) {
             AttachmentStore.dir(context).listFiles()?.forEach { file ->
                 if (file.isFile && file.name !in referenced) file.delete()

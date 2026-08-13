@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -328,6 +329,7 @@ private fun TtsProviderEditScreen(
     onSave: (TTSProviderSetting) -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     // 测试引擎按当前草稿配置合成，字段变更即时生效
     val draftState = remember(service.id) { mutableStateOf(service) }
     var draft by draftState
@@ -358,7 +360,7 @@ private fun TtsProviderEditScreen(
                 onClick = {
                     if (testing) return@Button
                     testing = true
-                    testEngine.speak(context.getString(R.string.tts_test_text)) { testing = false }
+                    testEngine.speak(resources.getString(R.string.tts_test_text)) { testing = false }
                 },
                 enabled = !testing,
             ) {

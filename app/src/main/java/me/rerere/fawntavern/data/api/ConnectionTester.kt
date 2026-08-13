@@ -99,8 +99,11 @@ object ConnectionTester {
             }
             applyCustomBodies(model)
         }
-        val resp = post("${provider.baseUrl.trimEnd('/')}/models/${model.id}:generateContent?key=${provider.apiKey}",
-            model.applyHeaders(emptyMap()), body)
+        val resp = post(
+            "${provider.baseUrl.trimEnd('/')}/models/${model.id}:generateContent",
+            model.applyHeaders(mapOf("x-goog-api-key" to provider.apiKey)),
+            body,
+        )
         val parts = resp.optJSONArray("candidates")?.optJSONObject(0)
             ?.optJSONObject("content")?.optJSONArray("parts")
         var text = ""; var name = ""; var args = ""

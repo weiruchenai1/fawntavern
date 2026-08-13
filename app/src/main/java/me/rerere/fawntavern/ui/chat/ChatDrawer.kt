@@ -1,7 +1,5 @@
 package me.rerere.fawntavern.ui.chat
 
-import android.content.Context
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -64,9 +62,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.chat.ChatSession
+import me.rerere.fawntavern.data.settings.UserAvatarStore
 import me.rerere.fawntavern.data.settings.UserProfileStore
-import java.io.File
-import java.io.FileOutputStream
 import androidx.compose.foundation.text.input.TextFieldState
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
@@ -131,7 +128,7 @@ fun ChatDrawerContent(
     var avatarColor by remember {
         mutableStateOf(Color(UserProfileStore.getAvatarColor(context).toULong()))
     }
-    var avatarBitmap by remember { mutableStateOf(loadAvatarBitmap(context)) }
+    var avatarBitmap by remember { mutableStateOf(UserAvatarStore.load(context)) }
     var showAvatarDialog by remember { mutableStateOf(false) }
     var showNameDialog by remember { mutableStateOf(false) }
 
@@ -140,21 +137,7 @@ fun ChatDrawerContent(
     ) { uri: Uri? ->
         if (uri != null) {
             scope.launch {
-                try {
-                    withContext(Dispatchers.IO) {
-                        val input = context.contentResolver.openInputStream(uri)
-                            ?: return@withContext
-                        val bytes = input.readBytes()
-                        input.close()
-                        val avatarsDir = File(context.filesDir, "avatars").also { it.mkdirs() }
-                        val destFile = File(avatarsDir, "user_avatar")
-                        FileOutputStream(destFile).use { it.write(bytes) }
-                        UserProfileStore.setAvatarPath(context, destFile.absolutePath)
-                        withContext(Dispatchers.Main) {
-                            avatarBitmap = loadAvatarBitmap(context)
-                        }
-                    }
-                } catch (_: Exception) {}
+                UserAvatarStore.save(context, uri)?.let { avatarBitmap = it }
             }
         }
     }
@@ -192,10 +175,7 @@ fun ChatDrawerContent(
                         OutlinedButton(
                             onClick = {
                                 scope.launch {
-                                    withContext(Dispatchers.IO) {
-                                        UserProfileStore.setAvatarPath(context, null)
-                                        File(context.filesDir, "avatars/user_avatar").delete()
-                                    }
+                                    withContext(Dispatchers.IO) { UserAvatarStore.delete(context) }
                                     avatarBitmap = null
                                 }
                             },
@@ -541,11 +521,4 @@ private fun AvatarCircle(
                 tint = Color.White)
         }
     }
-}
-
-private fun loadAvatarBitmap(context: Context): android.graphics.Bitmap? {
-    val path = UserProfileStore.getAvatarPath(context) ?: return null
-    val file = File(path)
-    if (!file.exists()) return null
-    return try { BitmapFactory.decodeFile(path) } catch (_: Exception) { null }
 }

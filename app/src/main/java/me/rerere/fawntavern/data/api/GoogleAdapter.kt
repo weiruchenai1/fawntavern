@@ -124,7 +124,7 @@ internal object GoogleAdapter : ProviderAdapter {
      * 一条协议无关消息可展开为多条 contents：带工具调用的 assistant 展开为
      * "model(functionCall) + user(functionResponse)" 两条。
      */
-    private fun encodeContents(m: ApiMessage): List<JSONObject> {
+    internal fun encodeContents(m: ApiMessage): List<JSONObject> {
         if (m.toolCalls.isNotEmpty()) {
             val modelParts = JSONArray()
             if (m.content.isNotBlank()) modelParts.put(JSONObject().put("text", m.content))

@@ -155,7 +155,7 @@ internal object OpenAiAdapter : ProviderAdapter {
      * "assistant(tool_calls) + 每个调用一条 role=tool 结果"。
      * 纯文本时 content 用字符串（兼容面最大）；带图片时用多 part 数组。
      */
-    private fun encodeMessage(m: ApiMessage): List<JSONObject> {
+    internal fun encodeMessage(m: ApiMessage): List<JSONObject> {
         if (m.toolCalls.isNotEmpty()) {
             val out = mutableListOf<JSONObject>()
             out += JSONObject().apply {

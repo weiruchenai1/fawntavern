@@ -14,6 +14,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.zip.CRC32
 import java.util.zip.Inflater
 
@@ -120,6 +122,33 @@ object CharacterRepository {
         if (!file.exists()) throw IllegalStateException("角色文件不存在: $name")
         CharacterParser.parse(JSONObject(file.readText()), name)
     }
+
+    /** 在数据层原子更新角色卡 JSON；变换或写盘失败会抛错，原文件保持不变。 */
+    suspend fun updateJson(context: Context, name: String, transform: (JSONObject) -> Unit) =
+        withContext(Dispatchers.IO) {
+            val file = File(charsDir(context), "$name.json")
+            require(file.isFile) { "角色文件不存在: $name" }
+            val json = JSONObject(file.readText())
+            transform(json.optJSONObject("data") ?: json)
+
+            val temp = File.createTempFile("${file.nameWithoutExtension}_", ".tmp", file.parentFile)
+            try {
+                temp.outputStream().bufferedWriter().use { writer ->
+                    writer.write(json.toString(2))
+                }
+                try {
+                    Files.move(
+                        temp.toPath(), file.toPath(),
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING,
+                    )
+                } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+                    Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                }
+            } finally {
+                temp.delete()
+            }
+        }
 
     suspend fun import(context: Context, uri: Uri): CharacterCard = withContext(Dispatchers.IO) {
         val rawBytes = context.contentResolver.openInputStream(uri)?.readBytes()

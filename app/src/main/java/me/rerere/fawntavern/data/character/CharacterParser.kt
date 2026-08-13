@@ -104,6 +104,7 @@ object CharacterParser {
                     val substituteRegex = when (val v = r.opt("substituteRegex")) {
                         is Boolean -> if (v) 1 else 0
                         is Number -> v.toInt()
+                        null -> 0
                         else -> 0
                     }
                     regexScripts.add(

@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -92,6 +93,7 @@ fun PresetEditorScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     // The repository may emit a fresh StPreset while this screen is open. Keep the local draft
     // for the lifetime of this editor instance; the parent creates a new instance when opening
@@ -163,7 +165,7 @@ fun PresetEditorScreen(
                             PresetEditorAction.EditPrompt(
                                 PromptItem(
                                     identifier = java.util.UUID.randomUUID().toString(),
-                                    name = context.getString(R.string.new_prompt),
+                                    name = resources.getString(R.string.new_prompt),
                                 ),
                             ),
                         )

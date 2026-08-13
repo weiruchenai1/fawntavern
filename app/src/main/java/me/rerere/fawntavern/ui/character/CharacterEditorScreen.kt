@@ -53,6 +53,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import android.widget.Toast
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,12 +99,12 @@ import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.settings.ModelCard
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
 
 @OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName: String = card.name) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(card.name) }
     // 多行字段用 TextFieldState（BTF2）：限高交给 AppTextArea 的 lineLimits，滚动在测量期完成
@@ -219,23 +221,22 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
         )
     }
 
-    // 就地修改角色卡 JSON 文件的 data 节点
-    suspend fun patchCard(block: (JSONObject) -> Unit) = withContext(Dispatchers.IO) {
-        try {
-            val f = File(CharacterRepository.charsDir(context), "$cardFileName.json")
-            if (f.exists()) {
-                val json = JSONObject(f.readText())
-                val d = json.optJSONObject("data") ?: json
-                block(d)
-                f.writeText(json.toString(2))
-            }
-        } catch (_: Exception) {}
+    suspend fun patchCard(block: (JSONObject) -> Unit): Boolean = try {
+        CharacterRepository.updateJson(context, cardFileName, block)
+        true
+    } catch (e: Exception) {
+        Toast.makeText(
+            context,
+            resources.getString(R.string.char_save_failed_fmt, e.message.orEmpty()),
+            Toast.LENGTH_SHORT,
+        ).show()
+        false
     }
 
     // 返回时保存全部可编辑字段
     fun saveAndBack() {
         scope.launch {
-            patchCard { d ->
+            val saved = patchCard { d ->
                 d.put("name", name.trim())
                 d.put("description", description.text.toString())
                 d.put("personality", personality.text.toString())
@@ -261,7 +262,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                         .put("role", depthPromptRole))
                 }
             }
-            onBack()
+            if (saved) onBack()
         }
     }
 

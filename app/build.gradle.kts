@@ -130,5 +130,9 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     ksp(libs.androidx.room.compiler)
 
-    testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.junit)
+    testImplementation(libs.json)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.room.testing)
+    testImplementation(libs.robolectric)
 }
