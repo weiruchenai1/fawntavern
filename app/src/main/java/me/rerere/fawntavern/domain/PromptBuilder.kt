@@ -70,6 +70,7 @@ internal object PromptBuilder {
         val maxContext: Int = 0,   // 上下文 token 上限（0 = 不裁剪，无预设时）
         val maxTokens: Int = 0,    // 为回复预留的 token
         val timedWi: Map<String, Int> = emptyMap(),  // 世界书定时效果状态（entryKey → 激活时的消息数），随会话持久化
+        val macroContext: MacroContext = MacroContext(),
     )
 
     fun build(
@@ -87,11 +88,33 @@ internal object PromptBuilder {
         extraPre: List<Piece> = emptyList(),
         extraPost: List<Piece> = emptyList(),
         extraDepth: List<DepthPiece> = emptyList(),
+        sessionId: String = "",
+        input: String = "",
+        model: String = "",
+        summary: String = "",
+        enabledExtensions: Set<String> = emptySet(),
+        pickSalt: Int = 0,
     ): Built {
         val charName = card?.name ?: ""
         val maxContext = preset?.maxContext?.takeIf { it > 0 } ?: 0
+        val baseMacroContext = MacroContext(
+            charName = charName,
+            userName = userName,
+            card = card,
+            persona = userDescription,
+            history = history,
+            input = input,
+            model = model,
+            maxContextTokens = maxContext,
+            maxResponseTokens = preset?.maxTokens?.takeIf { it > 0 } ?: 0,
+            summary = summary,
+            enabledExtensions = enabledExtensions,
+            sessionId = sessionId,
+            pickSalt = pickSalt,
+        )
         val (wi, newTimed) = activateWorldInfo(
             card, worldBooks, history, userName, timedWi, updateTimed, wiSettings, maxContext,
+            baseMacroContext,
         )
         fun bucket(pos: String) = wi.filter { it.position == pos }
             .map { Piece("system", it.content, PromptSource.WORLD_INFO, it.comment) }
@@ -108,7 +131,8 @@ internal object PromptBuilder {
             .map { DepthPiece("system", it.content, AN_DEPTH, PromptSource.WORLD_INFO, it.comment) }
         // outlet：不自动注入，只填充 {{outlet::名字}} 宏取用的映射（正文先过宏）
         val outletMap = wi.filter { it.position == WorldBookPos.OUTLET && it.outletName.isNotBlank() }
-            .associate { it.outletName.trim() to applyMacros(it.content, charName, userName).trim() }
+            .associate { it.outletName.trim() to MacroEngine.render(it.content, baseMacroContext).trim() }
+        val macroContext = baseMacroContext.copy(outlets = outletMap)
 
         val orderToggles = preset?.promptOrder
             ?.let { po -> po.firstOrNull { it.characterId == 100001 } ?: po.firstOrNull() }
@@ -135,10 +159,10 @@ internal object PromptBuilder {
             else -> null
         }
 
-        // 宏替换 + {{outlet::}} 取用（outlet 内容已在上面过宏）
-        fun finalize(text: String) = applyOutlets(applyMacros(text, charName, userName), outletMap).trim()
+        fun finalize(text: String, salt: Int = 0) =
+            MacroEngine.render(text, macroContext.copy(pickSalt = pickSalt * 31 + salt)).trim()
         fun macro(pieces: List<Piece>) = pieces
-            .map { it.copy(content = finalize(it.content)) }
+            .mapIndexed { index, piece -> piece.copy(content = finalize(piece.content, index)) }
             .filter { it.content.isNotBlank() }
 
         // 角色注入提示（Character's Note）：按其深度并入深度注入
@@ -147,11 +171,12 @@ internal object PromptBuilder {
         }
 
         return Built(
-            preHistory = macro(assembled.pre) + extraPre.filter { it.content.isNotBlank() },
-            postHistory = macro(assembled.post) + extraPost.filter { it.content.isNotBlank() },
+            preHistory = macro(assembled.pre + extraPre),
+            postHistory = macro(assembled.post + extraPost),
             depthInjections = (wiDepth + wiAn + assembled.injections + listOfNotNull(cardDepth))
+                .plus(extraDepth)
                 .map { it.copy(content = finalize(it.content)) }
-                .filter { it.content.isNotBlank() } + extraDepth.filter { it.content.isNotBlank() },
+                .filter { it.content.isNotBlank() },
             promptRegex = promptRegex,
             genParams = genParams,
             userName = userName,
@@ -160,6 +185,7 @@ internal object PromptBuilder {
             maxContext = maxContext,
             maxTokens = preset?.maxTokens?.takeIf { it > 0 } ?: 0,
             timedWi = newTimed,
+            macroContext = macroContext,
         )
     }
 
@@ -173,14 +199,6 @@ internal object PromptBuilder {
     /** 作者注释缺省深度（本 App 无独立作者注释，an_top/an_bottom 映射到此深度） */
     private const val AN_DEPTH = 4
 
-    /** 替换 {{outlet::名字}} 为对应 outlet 条目正文（大小写不敏感；无对应留空） */
-    private fun applyOutlets(text: String, outlets: Map<String, String>): String {
-        if (!text.contains("{{outlet::", ignoreCase = true)) return text
-        return Regex("\\{\\{outlet::([^}]+)}}", RegexOption.IGNORE_CASE).replace(text) { m ->
-            outlets[m.groupValues[1].trim()] ?: ""
-        }
-    }
-
     /** 请求前合成完整消息数组。baseDir 为 filesDir（附件相对路径的根），null 时跳过附件 */
     fun assemble(built: Built, history: List<ChatMessage>, baseDir: File?): List<ApiMessage> {
         val hist = history.filter { it.content.isNotBlank() || it.images.isNotEmpty() || it.files.isNotEmpty() }
@@ -189,6 +207,10 @@ internal object PromptBuilder {
             var content = RegexEngine.applyForPrompt(
                 m.content, built.promptRegex, depth = n0 - 1 - i, role = m.role,
                 userName = built.userName, charName = built.charName,
+            )
+            content = MacroEngine.render(
+                content,
+                built.macroContext.copy(history = hist, pickSalt = built.macroContext.pickSalt * 31 + i),
             )
             if (m.files.isNotEmpty() && baseDir != null) {
                 val blocks = m.files.mapNotNull { f ->
@@ -245,10 +267,6 @@ internal object PromptBuilder {
         }
         return cjk + (other + 3) / 4
     }
-
-    /** 替换 {{char}}/{{user}}/{{newline}}、时间日期与随机宏（详见 [Macros]） */
-    fun applyMacros(text: String, charName: String, userName: String): String =
-        Macros.apply(text, charName, userName)
 
     // ── 拼装主体 ────────────────────────────────────────────
 
@@ -394,6 +412,7 @@ internal object PromptBuilder {
         updateTimed: Boolean,
         settings: WorldInfoSettings,
         maxContext: Int,
+        macroContext: MacroContext,
     ): Pair<List<WorldBookEntry>, Map<String, Int>> {
         val loaded = worldBooks.flatMap { it.entries.values }
         val loadedContents = loaded.mapTo(HashSet()) { it.content }
@@ -437,7 +456,7 @@ internal object PromptBuilder {
                     val key = entryKey(e)
                     if (key in activated) continue
                     if (shouldActivate(e, messages, recurse.toString(), round, m, timedWi,
-                            charName, userName, gScanDepth, settings)) {
+                            charName, userName, gScanDepth, settings, macroContext)) {
                         activated[key] = e
                         newThisRound += e
                     }
@@ -462,7 +481,9 @@ internal object PromptBuilder {
             }
         }
 
-        var result = filterInclusionGroups(activatedMap.values.toList(), messages, scanDepth, charName, userName, settings)
+        var result = filterInclusionGroups(
+            activatedMap.values.toList(), messages, scanDepth, charName, userName, settings, macroContext,
+        )
         // 概率掷骰：sticky 保持期免掷
         result = result.filter { e ->
             val sticky = stickyActive(timedWi[entryKey(e)], e.sticky, m)
@@ -522,7 +543,7 @@ internal object PromptBuilder {
     private fun shouldActivate(
         e: WorldBookEntry, messages: List<String>, recurseText: String, round: Int,
         m: Int, timedWi: Map<String, Int>, charName: String, userName: String,
-        globalScanDepth: Int, settings: WorldInfoSettings,
+        globalScanDepth: Int, settings: WorldInfoSettings, macroContext: MacroContext,
     ): Boolean {
         if (e.delay > 0 && m < e.delay) return false          // 聊天不足 N 条前不激活
         val a = timedWi[entryKey(e)]
@@ -535,15 +556,18 @@ internal object PromptBuilder {
         val depth = e.scanDepth ?: globalScanDepth
         val realScan = messages.takeLast(depth).joinToString("\n")
         val haystack = if (e.excludeRecursion || recurseText.isBlank()) realScan else realScan + "\n" + recurseText
-        return keywordMatch(e, haystack, charName, userName, settings)
+        return keywordMatch(e, haystack, charName, userName, settings, macroContext)
     }
 
     /** 主关键词 + selectiveLogic 次级关键词判定 */
-    private fun keywordMatch(e: WorldBookEntry, haystack: String, charName: String, userName: String, settings: WorldInfoSettings): Boolean {
-        val primary = e.keys.any { matchKey(haystack, it, e, charName, userName, settings) }
+    private fun keywordMatch(
+        e: WorldBookEntry, haystack: String, charName: String, userName: String,
+        settings: WorldInfoSettings, macroContext: MacroContext,
+    ): Boolean {
+        val primary = e.keys.any { matchKey(haystack, it, e, charName, userName, settings, macroContext) }
         if (!primary) return false
         if (e.keySecondary.isEmpty()) return true
-        val matches = e.keySecondary.map { matchKey(haystack, it, e, charName, userName, settings) }
+        val matches = e.keySecondary.map { matchKey(haystack, it, e, charName, userName, settings, macroContext) }
         return when (e.selectiveLogic) {
             1 -> !matches.all { it }   // NOT_ALL
             2 -> matches.none { it }   // NOT_ANY
@@ -553,10 +577,15 @@ internal object PromptBuilder {
     }
 
     /** 关键词命中计数（inclusion group 评分用） */
-    private fun keywordScore(e: WorldBookEntry, messages: List<String>, globalScanDepth: Int, charName: String, userName: String, settings: WorldInfoSettings): Int {
+    private fun keywordScore(
+        e: WorldBookEntry, messages: List<String>, globalScanDepth: Int, charName: String,
+        userName: String, settings: WorldInfoSettings, macroContext: MacroContext,
+    ): Int {
         val depth = e.scanDepth ?: globalScanDepth
         val scan = messages.takeLast(depth).joinToString("\n")
-        return (e.keys + e.keySecondary).count { matchKey(scan, it, e, charName, userName, settings) }
+        return (e.keys + e.keySecondary).count {
+            matchKey(scan, it, e, charName, userName, settings, macroContext)
+        }
     }
 
     /**
@@ -565,7 +594,7 @@ internal object PromptBuilder {
      */
     private fun filterInclusionGroups(
         entries: List<WorldBookEntry>, messages: List<String>, globalScanDepth: Int,
-        charName: String, userName: String, settings: WorldInfoSettings,
+        charName: String, userName: String, settings: WorldInfoSettings, macroContext: MacroContext,
     ): List<WorldBookEntry> {
         val grouped = entries.filter { it.group.isNotBlank() }
         if (grouped.isEmpty()) return entries
@@ -582,7 +611,9 @@ internal object PromptBuilder {
             val pool = overrides.ifEmpty { members }
             val winner = when {
                 settings.useGroupScoring || pool.any { it.useGroupScoring } ->
-                    pool.maxByOrNull { keywordScore(it, messages, globalScanDepth, charName, userName, settings) }!!
+                    pool.maxByOrNull {
+                        keywordScore(it, messages, globalScanDepth, charName, userName, settings, macroContext)
+                    }!!
                 else -> weightedPick(pool)
             }
             members.forEach { if (entryKey(it) != entryKey(winner)) losers.add(entryKey(it)) }
@@ -602,9 +633,12 @@ internal object PromptBuilder {
     }
 
     /** 对齐 ST WorldInfoBuffer.matchKeys：正则 key 优先，普通 key 按（条目覆盖 or 全局默认的）大小写/全词设置匹配 */
-    private fun matchKey(haystack: String, rawKey: String, e: WorldBookEntry, charName: String, userName: String, settings: WorldInfoSettings): Boolean {
+    private fun matchKey(
+        haystack: String, rawKey: String, e: WorldBookEntry, charName: String, userName: String,
+        settings: WorldInfoSettings, macroContext: MacroContext,
+    ): Boolean {
         // ST 在匹配前对 key 做宏替换
-        val key = applyMacros(rawKey, charName, userName).trim()
+        val key = MacroEngine.render(rawKey, macroContext).trim()
         if (key.isEmpty()) return false
         parseRegexKey(key)?.let { return it.containsMatchIn(haystack) }
         val cs = e.caseSensitive ?: settings.caseSensitive

@@ -1,5 +1,9 @@
 package me.rerere.fawntavern.data.character
 
+import me.rerere.fawntavern.domain.MacroContext
+import me.rerere.fawntavern.domain.MacroEngine
+import me.rerere.fawntavern.domain.MacroRenderPolicy
+
 /**
  * SillyTavern 显示用正则引擎。
  *
@@ -80,8 +84,9 @@ object RegexEngine {
             val compiled = compile(findRaw) ?: continue
             text = replace(text, compiled, s.replaceString, s.trimStrings)
         }
-        // 最终宏替换：捕捉内容中可能残留的 {{user}}/{{char}}/{{newline}}
-        return substituteMacros(text, userName, charName)
+        // PromptBuilder 在正则之后使用完整 MacroContext 展开正文。显示侧没有该阶段，
+        // 因此仅显示侧在这里处理基础宏；也避免转义宏在发送链被消费两次。
+        return if (forPrompt) text else substituteMacros(text, userName, charName)
     }
 
     /**
@@ -190,15 +195,10 @@ object RegexEngine {
      * 当 [escape] = true 时，用户名/角色名用 [Regex.escape] 转义（用于 findRegex 中的 substituteRegex=2 模式）。
      */
     private fun substituteMacros(text: String, userName: String, charName: String, escape: Boolean = false): String {
-        var t = text.replace("{{newline}}", "\n", ignoreCase = true)
-        if (userName.isNotBlank()) {
-            val v = if (escape) Regex.escape(userName) else userName
-            t = t.replace("{{user}}", v, ignoreCase = true)
-        }
-        if (charName.isNotBlank()) {
-            val v = if (escape) Regex.escape(charName) else charName
-            t = t.replace("{{char}}", v, ignoreCase = true)
-        }
-        return t
+        val context = MacroContext(
+            userName = if (escape) Regex.escape(userName) else userName,
+            charName = if (escape) Regex.escape(charName) else charName,
+        )
+        return MacroEngine.render(text, context, MacroRenderPolicy.MESSAGE_DISPLAY)
     }
 }

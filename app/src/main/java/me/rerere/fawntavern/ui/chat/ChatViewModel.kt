@@ -58,6 +58,7 @@ import me.rerere.fawntavern.domain.ConversationOps
 import me.rerere.fawntavern.domain.GenerationController
 import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.domain.PromptLog
+import org.json.JSONObject
 import me.rerere.fawntavern.extension.BuiltinExtensions
 import me.rerere.fawntavern.extension.ExtensionStore
 import me.rerere.fawntavern.extension.GenerationContext
@@ -194,7 +195,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val defaultName = CharacterRepository.ensureDefaultCard(ctx, ctx.getString(R.string.default_character))
             if (ChatRepository.count(ctx) == 0) {
-                session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName)
+                session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName, userName)
             }
             ChatRepository.sessionsFlow(ctx).collect {
                 sessions = it
@@ -202,7 +203,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     // 应用启动时新建对话：每次启动都从空白对话开始（内存态，发首条消息才落盘）
                     session = if (PreferencesStore.get(ctx).newChatOnLaunch) {
                         val card = loadCard(defaultName)
-                        ConversationOps.newSession(card, defaultName, defaultName)
+                        ConversationOps.newSession(card, defaultName, defaultName, userName)
                     } else it.firstOrNull()?.let { summary -> ChatRepository.get(ctx, summary.id) }
                 }
             }
@@ -285,6 +286,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     currentCard,
                     current.charFile,
                     current.charName,
+                    newUserName,
                 )
                 val greeting = refreshed.messages.firstOrNull()?.copy(
                     ts = current.messages.firstOrNull()?.ts ?: refreshed.messages.first().ts,
@@ -364,7 +366,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val alreadyNew = cur != null && cur.messages.none { it.role == "user" }
         if (generating || alreadyNew) return
         viewModelScope.launch {
-            val s = ConversationOps.newSession(currentCard, cur?.charFile ?: "", cur?.charName ?: "")
+            val s = ConversationOps.newSession(currentCard, cur?.charFile ?: "", cur?.charName ?: "", userName)
             session = s
             ChatRepository.save(ctx, s)
         }
@@ -384,7 +386,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }
             val card = if (fileName.isBlank()) null else loadCard(fileName)
             currentCard = card
-            session = ConversationOps.newSession(card, fileName, displayName)
+            session = ConversationOps.newSession(card, fileName, displayName, userName)
         }
     }
 
@@ -398,11 +400,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 // 留在当前角色：默认优先切到该角色的其他会话；偏好"删除话题后新建对话"
                 // 开启时总是新建（内存态，不落盘）。没有其他会话时也回退到新建。
                 session = if (PreferencesStore.get(ctx).newChatOnDeleteTopic) {
-                    ConversationOps.newSession(currentCard, curCharFile, curCharName)
+                    ConversationOps.newSession(currentCard, curCharFile, curCharName, userName)
                 } else {
                     fresh.firstOrNull { it.charFile == curCharFile }
                         ?.let { ChatRepository.get(ctx, it.id) }
-                        ?: ConversationOps.newSession(currentCard, curCharFile, curCharName)
+                        ?: ConversationOps.newSession(currentCard, curCharFile, curCharName, userName)
                 }
             }
         }
@@ -445,12 +447,12 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 session = fresh.firstOrNull { it.charFile == cur.charFile }
                     ?.let { ChatRepository.get(ctx, it.id) }
                     ?: if (card != null) {
-                        ConversationOps.newSession(card, cur.charFile, cur.charName)
+                        ConversationOps.newSession(card, cur.charFile, cur.charName, userName)
                     } else {
                         val defName = CharacterRepository.defaultCardName(ctx)
                             ?: CharacterRepository.ensureDefaultCard(ctx, ctx.getString(R.string.default_character))
                         currentCard = loadCard(defName)
-                        ConversationOps.newSession(currentCard, defName, defName)
+                        ConversationOps.newSession(currentCard, defName, defName, userName)
                     }
             }
             // 世界书/预设（含预设私有正则）也可能被清空
@@ -730,7 +732,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val extraPost = mutableListOf<PromptBuilder.Piece>()
         val extraDepth = mutableListOf<PromptBuilder.DepthPiece>()
         var historySkip = 0
-        for (ext in ExtensionStore.enabledExtensions(ctx)) {
+        val enabledExtensions = ExtensionStore.enabledExtensions(ctx)
+        for (ext in enabledExtensions) {
             if (ext !is PromptContributor) continue
             val c = ext.contribute(
                 PromptContext(
@@ -780,6 +783,14 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             extraPre = extraPre,
             extraPost = extraPost,
             extraDepth = extraDepth,
+            sessionId = base.id,
+            input = base.messages.lastOrNull { it.role == "user" }?.content.orEmpty(),
+            model = modelId,
+            summary = runCatching {
+                JSONObject(base.extState["builtin.summarize"].orEmpty()).optString("summary")
+            }.getOrDefault(""),
+            enabledExtensions = enabledExtensions.flatMap { listOf(it.info.id, it.info.name) }.toSet(),
+            pickSalt = genMessage.alts.size,
         )
         val finalMsg = generation.run(
             promptHistory = slicedPromptHistory,

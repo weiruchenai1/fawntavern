@@ -17,17 +17,30 @@ internal object ConversationOps {
         maxOf(System.currentTimeMillis(), (s.messages.maxOfOrNull { it.ts } ?: 0L) + 1)
 
     /** 新会话：有角色卡时以开场白（first_mes + 备选开场白，可左右切换）作为首条消息 */
-    fun newSession(card: CharacterCard?, charFile: String, charNameFallback: String): ChatSession {
+    fun newSession(
+        card: CharacterCard?,
+        charFile: String,
+        charNameFallback: String,
+        userName: String,
+    ): ChatSession {
+        val sessionId = java.util.UUID.randomUUID().toString()
         val name = (card?.name ?: "").ifBlank { charNameFallback }
+        val greetingContext = MacroContext(
+            charName = name,
+            userName = userName,
+            card = card,
+            sessionId = sessionId,
+        )
         val greetings = buildList {
             card?.firstMes?.takeIf { it.isNotBlank() }?.let {
-                add(Macros.apply(it, name, userName = "", replaceUser = false))
+                add(MacroEngine.render(it, greetingContext))
             }
             card?.alternateGreetings?.forEach { g ->
-                if (g.isNotBlank()) add(Macros.apply(g, name, userName = "", replaceUser = false))
+                if (g.isNotBlank()) add(MacroEngine.render(g, greetingContext))
             }
         }
         return ChatSession(
+            id = sessionId,
             charFile = charFile,
             charName = name,
             messages = if (greetings.isEmpty()) emptyList() else listOf(
