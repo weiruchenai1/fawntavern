@@ -27,10 +27,8 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
-import me.rerere.fawntavern.data.api.ApiToolCall
 import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.ReasoningLevel
-import me.rerere.fawntavern.data.api.ToolSpec
 import me.rerere.fawntavern.data.api.supportsBuiltInTool
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
@@ -40,13 +38,9 @@ import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.chat.MsgFile
-import me.rerere.fawntavern.data.chat.MsgSearch
-import me.rerere.fawntavern.data.chat.SearchCitation
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
-import me.rerere.fawntavern.data.search.SearchCommonOptions
-import me.rerere.fawntavern.data.search.createSearchService
 import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.data.settings.TtsStore
 import me.rerere.fawntavern.data.speech.TtsEngine
@@ -165,6 +159,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val generation = GenerationController()
     private val ctx: Application get() = getApplication()
+    private val messageCoordinator by lazy { ChatMessageCoordinator(ctx) }
+    private val searchTool by lazy { ChatSearchTool(ctx) }
 
     /**
      * 当前会话消息的分页流（Paging 3）。随 [session] 的 id 切换：初始加载偏移定位到最后一页，
@@ -767,8 +763,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             built = built,
             filesDir = ctx.filesDir,
             streaming = currentCard?.streaming ?: true,
-            tools = if (webSearchOn) listOf(webSearchToolSpec()) else emptyList(),
-            toolExecutor = if (webSearchOn) searchToolExecutor() else null,
+            tools = if (webSearchOn) listOf(searchTool.spec()) else emptyList(),
+            toolExecutor = if (webSearchOn) searchTool.executor() else null,
             errorText = { e -> ctx.getString(R.string.chat_error_fmt, e.message ?: "") },
             onUpdate = { overlays = overlays + (it.ts to it) },
         )
@@ -784,68 +780,6 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (session?.id == sessionId) session = done
             runExtensionLifecycle(done)
             maybeGenerateTitle(done)
-        }
-    }
-
-    /**
-     * search_web 工具声明：描述里要求模型自行提炼关键词（而非照抄用户原话）、
-     * 必要时换关键词多搜几次。参数只有一个 query，各协议 Adapter 自行包装 schema。
-     */
-    private fun webSearchToolSpec(): ToolSpec {
-        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-        return ToolSpec(
-            name = "search_web",
-            description = """
-                Search the web for up-to-date or specific information.
-                Use this when the conversation needs current facts, news, or verification.
-                Think first, then distill focused search keywords yourself - do NOT copy the user's message verbatim.
-                If results are insufficient, refine the keywords and search again (multiple calls allowed).
-                Today is $today.
-            """.trimIndent(),
-            parametersSchema = """{"type":"object","properties":{"query":{"type":"string","description":"Focused search keywords"}},"required":["query"]}""",
-        )
-    }
-
-    /** search_web 的执行器：跑当前选中的搜索服务，产出回传给模型的 JSON 与时间线步骤状态 */
-    private fun searchToolExecutor() = object : GenerationController.ToolExecutor {
-        fun queryOf(call: ApiToolCall): String =
-            runCatching { org.json.JSONObject(call.arguments).optString("query") }
-                .getOrDefault("").trim()
-
-        override fun describe(call: ApiToolCall): MsgSearch? {
-            if (call.name != "search_web") return null
-            val q = queryOf(call)
-            if (q.isBlank()) return null
-            return MsgSearch(query = q, provider = SearchStore.getSelected(ctx).displayName, searching = true)
-        }
-
-        override suspend fun execute(call: ApiToolCall): Pair<String, MsgSearch?> {
-            if (call.name != "search_web") return """{"error":"unknown tool"}""" to null
-            val q = queryOf(call)
-            if (q.isBlank()) return """{"error":"missing query"}""" to null
-            val options = SearchStore.getSelected(ctx)
-            // 失败直接抛给 GenerationController：包装成错误 JSON 回传模型，时间线步骤落回非搜索态
-            val result = createSearchService(options)
-                .search(q, SearchCommonOptions(SearchStore.getResultSize(ctx)), options)
-                .getOrThrow()
-            val items = org.json.JSONArray()
-            result.items.forEachIndexed { i, item ->
-                items.put(org.json.JSONObject()
-                    .put("index", i + 1)
-                    .put("title", item.title)
-                    .put("url", item.url)
-                    .put("content", item.text))
-            }
-            val payload = org.json.JSONObject().apply {
-                put("query", q)
-                result.answer?.takeIf { it.isNotBlank() }?.let { put("answer", it) }
-                put("items", items)
-            }
-            return payload.toString() to MsgSearch(
-                query = q,
-                provider = options.displayName,
-                items = result.items.map { SearchCitation(it.title, it.url, it.text) },
-            )
         }
     }
 
@@ -950,9 +884,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val optimistic = ConversationOps.switchAltOne(cur, dir) ?: return  // 到边界无切换：直接返回
         overlays = overlays + (ts to optimistic)
         viewModelScope.launch {
-            ensurePersisted(s)
-            ChatRepository.switchAlt(ctx, s.id, ts, dir)
-            reconcileOverlay(s.id, ts)
+            messageCoordinator.switchAlt(s, ts, dir)?.let { fresh ->
+                reconcileMessageMutation(s.id, ts, fresh)
+            }
         }
     }
 
@@ -963,9 +897,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // 删除是"移除行"，overlay 无法表示；撤掉该 ts 可能存在的 overlay，直接走 DB + 分页刷新
         overlays = overlays - ts
         viewModelScope.launch {
-            ensurePersisted(s)
-            ChatRepository.deleteMessage(ctx, s.id, ts)
-            resyncSession(s.id)
+            messageCoordinator.deleteMessage(s, ts)?.let { fresh ->
+                reconcileMessageMutation(s.id, ts, fresh)
+            }
         }
     }
 
@@ -975,9 +909,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val s = session ?: return
         overlays = overlays - ts
         viewModelScope.launch {
-            ensurePersisted(s)
-            ChatRepository.deleteAllVersions(ctx, s.id, ts)
-            resyncSession(s.id)
+            messageCoordinator.deleteAllVersions(s, ts)?.let { fresh ->
+                reconcileMessageMutation(s.id, ts, fresh)
+            }
         }
     }
 
@@ -986,9 +920,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val cur = overlays[ts] ?: s.messages.firstOrNull { it.ts == ts }
         if (cur != null) overlays = overlays + (ts to cur.copy(content = content))
         viewModelScope.launch {
-            ensurePersisted(s)
-            ChatRepository.editMessage(ctx, s.id, ts, content)
-            reconcileOverlay(s.id, ts)
+            messageCoordinator.updateMessage(s, ts, content)?.let { fresh ->
+                reconcileMessageMutation(s.id, ts, fresh)
+            }
         }
     }
 
@@ -998,25 +932,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 单条 DB 变更后把 overlay 校准到 DB 权威结果并同步内存会话（陈旧乐观值在此被纠正） */
-    private suspend fun reconcileOverlay(sid: String, ts: Long) {
-        val fresh = ChatRepository.get(ctx, sid) ?: return
+    private fun reconcileMessageMutation(sid: String, ts: Long, fresh: ChatSession) {
         if (session?.id != sid) return
         session = fresh
         val row = fresh.messages.firstOrNull { it.ts == ts }
         overlays = if (row != null) overlays + (ts to row) else overlays - ts
-    }
-
-    /**
-     * 首次修改前把仅存在于内存的会话（如只有开场白、尚未发消息的新会话）整存落盘，
-     * 使其消息进入 DB / 分页，随后的按 ts 单条操作才有行可改。仅浏览角色不触发落盘。
-     */
-    private suspend fun ensurePersisted(s: ChatSession) {
-        if (ChatRepository.get(ctx, s.id) == null) ChatRepository.save(ctx, s)
-    }
-
-    /** 单条消息落盘后把内存会话同步回 DB（供下次生成拼装历史 + 菜单/编辑按 ts 取消息） */
-    private suspend fun resyncSession(sid: String) {
-        ChatRepository.get(ctx, sid)?.let { fresh -> if (session?.id == sid) session = fresh }
     }
 
     // ── IO 辅助 ──

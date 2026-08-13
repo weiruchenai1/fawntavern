@@ -180,14 +180,14 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
     val stateHolder = rememberSaveableStateHolder()
     if (selectedChar != null) {
-        stateHolder.SaveableStateProvider("editor") {
-            BackHandler { selectedChar = null; imageVersion++; refresh() }
-            CharacterEditorScreen(
-                card = selectedChar!!,
-                onBack = { selectedChar = null; imageVersion++; refresh() },
-                cardFileName = editingFileName,
-            )
-        }
+        // 编辑器里的 TextFieldState 只属于当前这次编辑。不要放进固定 key 的
+        // SaveableStateProvider，否则打开另一张卡时会恢复上一张卡的角色定义。
+        BackHandler { selectedChar = null; imageVersion++; refresh() }
+        CharacterEditorScreen(
+            card = selectedChar!!,
+            onBack = { selectedChar = null; imageVersion++; refresh() },
+            cardFileName = editingFileName,
+        )
         return
     }
 

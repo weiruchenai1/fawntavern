@@ -93,26 +93,25 @@ fun PresetEditorScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var editable by remember { mutableStateOf(preset) }
-    var editingPrompt by remember { mutableStateOf<PromptItem?>(null) }
-    // 正则编辑/删除目标：按下标定位 editable.regexScripts 中的条目
-    var editingRegexIdx by remember { mutableStateOf<Int?>(null) }
-    var deleteRegexIdx by remember { mutableStateOf<Int?>(null) }
+    // The repository may emit a fresh StPreset while this screen is open. Keep the local draft
+    // for the lifetime of this editor instance; the parent creates a new instance when opening
+    // another preset.
+    var state by remember { mutableStateOf(PresetEditorState(preset)) }
+    fun dispatch(action: PresetEditorAction) {
+        state = reducePresetEditor(state, action)
+    }
 
     // 退出即落盘：保存当前编辑结果后再执行返回导航
     fun saveAndBack() {
         scope.launch {
-            runCatching { PresetRepository.save(context, editable) }
+            runCatching { PresetRepository.save(context, state.draft) }
             onBack()
         }
     }
 
     // 系统返回键：编辑弹窗打开时不拦截（交给弹窗自身），否则保存并返回
-    BackHandler(enabled = editingPrompt == null && editingRegexIdx == null) { saveAndBack() }
-    var tab by remember { mutableIntStateOf(0) }
+    BackHandler(enabled = !state.hasOpenModal) { saveAndBack() }
     val tabs = listOf(stringResource(R.string.basic_params), stringResource(R.string.prompts), stringResource(R.string.regex_tab))
-
-    var deleteConfirmIdx by remember { mutableStateOf<Int?>(null) }
 
     Scaffold(
         modifier = Modifier.imePadding(),
@@ -121,18 +120,21 @@ fun PresetEditorScreen(
             Column {
                 AppTopBar(preset.name, onBack = { saveAndBack() })
                 PrimaryScrollableTabRow(
-                    selectedTabIndex = tab,
+                    selectedTabIndex = state.selectedTab,
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.primary,
                     edgePadding = 16.dp,
                 ) {
                     tabs.forEachIndexed { i, title ->
                         val count = when (i) {
-                            1 -> editable.prompts.size
-                            2 -> editable.regexScripts.size
+                            1 -> state.draft.prompts.size
+                            2 -> state.draft.regexScripts.size
                             else -> null
                         }
-                        Tab(i == tab, { tab = i }) {
+                        Tab(
+                            selected = i == state.selectedTab,
+                            onClick = { dispatch(PresetEditorAction.SelectTab(i)) },
+                        ) {
                             Text(
                                 if (count != null) "$title $count" else title,
                                 Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
@@ -145,100 +147,75 @@ fun PresetEditorScreen(
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            when (tab) {
-                0 -> BasicParamsTab(editable) { editable = it }
+            when (state.selectedTab) {
+                0 -> BasicParamsTab(state.draft) {
+                    dispatch(PresetEditorAction.UpdateDraft(it))
+                }
                 1 -> PromptsTab(
-                    prompts = editable.prompts,
-                    onEdit = { editingPrompt = it },
-                    onToggle = { idx ->
-                        editable = editable.copy(prompts = editable.prompts.toMutableList().also {
-                            it[idx] = it[idx].copy(enabled = !it[idx].enabled)
-                        })
-                    },
-                    onDeleteRequest = { idx -> deleteConfirmIdx = idx },
-                    onReorder = { reordered -> editable = editable.copy(prompts = reordered) },
+                    prompts = state.draft.prompts,
+                    onEdit = { dispatch(PresetEditorAction.EditPrompt(it)) },
+                    onToggle = { dispatch(PresetEditorAction.TogglePrompt(it)) },
+                    onDeleteRequest = { dispatch(PresetEditorAction.RequestPromptDelete(it)) },
+                    onReorder = { dispatch(PresetEditorAction.ReorderPrompts(it)) },
                     onAdd = {
                         // 只打开编辑框，保存时才真正加入列表
-                        editingPrompt = PromptItem(
-                            identifier = java.util.UUID.randomUUID().toString(),
-                            name = context.getString(R.string.new_prompt),
+                        dispatch(
+                            PresetEditorAction.EditPrompt(
+                                PromptItem(
+                                    identifier = java.util.UUID.randomUUID().toString(),
+                                    name = context.getString(R.string.new_prompt),
+                                ),
+                            ),
                         )
                     }
                 )
                 2 -> RegexTab(
-                    scripts = editable.regexScripts,
-                    onEdit = { idx -> editingRegexIdx = idx },
-                    onToggle = { idx ->
-                        editable = editable.copy(regexScripts = editable.regexScripts.toMutableList().also {
-                            it[idx] = it[idx].copy(disabled = !it[idx].disabled)
-                        })
-                    },
-                    onDeleteRequest = { idx -> deleteRegexIdx = idx },
-                    onImport = { script ->
-                        editable = editable.copy(regexScripts = editable.regexScripts + script)
-                    },
+                    scripts = state.draft.regexScripts,
+                    onEdit = { dispatch(PresetEditorAction.EditRegex(it)) },
+                    onToggle = { dispatch(PresetEditorAction.ToggleRegex(it)) },
+                    onDeleteRequest = { dispatch(PresetEditorAction.RequestRegexDelete(it)) },
+                    onImport = { dispatch(PresetEditorAction.ImportRegex(it)) },
                 )
             }
         }
     }
 
-    deleteConfirmIdx?.let { idx ->
-        val name = editable.prompts.getOrNull(idx)?.name?.ifBlank { stringResource(R.string.unnamed_prompt) } ?: stringResource(R.string.unnamed_prompt)
+    state.deletePromptIdentifier?.let { identifier ->
+        val name = state.draft.prompts.firstOrNull { it.identifier == identifier }
+            ?.name?.ifBlank { stringResource(R.string.unnamed_prompt) }
+            ?: stringResource(R.string.unnamed_prompt)
         ConfirmDeleteDialog(
             title = stringResource(R.string.delete_prompt_title),
             text = stringResource(R.string.delete_prompt_msg_fmt, name),
-            onConfirm = {
-                editable = editable.copy(
-                    prompts = editable.prompts.toMutableList().also { it.removeAt(idx) }
-                )
-                deleteConfirmIdx = null
-            },
-            onDismiss = { deleteConfirmIdx = null },
+            onConfirm = { dispatch(PresetEditorAction.ConfirmPromptDelete) },
+            onDismiss = { dispatch(PresetEditorAction.DismissPromptDelete) },
         )
     }
 
-    editingPrompt?.let { item ->
+    state.editingPrompt?.let { item ->
         PromptEditDialog(
             item = item,
-            onDismiss = { editingPrompt = null },
-            onSave = { updated ->
-                editable = editable.copy(prompts = editable.prompts.toMutableList().also { l ->
-                    val idx = l.indexOfFirst { it.identifier == item.identifier }
-                    if (idx >= 0) l[idx] = updated else l.add(updated)
-                })
-                editingPrompt = null
-            }
+            onDismiss = { dispatch(PresetEditorAction.DismissPromptEditor) },
+            onSave = { dispatch(PresetEditorAction.SavePrompt(it)) },
         )
     }
 
-    deleteRegexIdx?.let { idx ->
-        val name = editable.regexScripts.getOrNull(idx)?.scriptName?.ifBlank { stringResource(R.string.unnamed_prompt) } ?: stringResource(R.string.unnamed_prompt)
+    state.deleteRegex?.let { regex ->
+        val name = regex.scriptName.ifBlank { stringResource(R.string.unnamed_prompt) }
         ConfirmDeleteDialog(
             title = stringResource(R.string.delete_regex_title),
             text = stringResource(R.string.delete_prompt_msg_fmt, name),
-            onConfirm = {
-                editable = editable.copy(
-                    regexScripts = editable.regexScripts.toMutableList().also { it.removeAt(idx) }
-                )
-                deleteRegexIdx = null
-            },
-            onDismiss = { deleteRegexIdx = null },
+            onConfirm = { dispatch(PresetEditorAction.ConfirmRegexDelete) },
+            onDismiss = { dispatch(PresetEditorAction.DismissRegexDelete) },
         )
     }
 
-    editingRegexIdx?.let { idx ->
-        editable.regexScripts.getOrNull(idx)?.let { script ->
-            RegexEditDialog(
-                script = script,
-                onDismiss = { editingRegexIdx = null },
-                onSave = { updated ->
-                    editable = editable.copy(regexScripts = editable.regexScripts.toMutableList().also {
-                        it[idx] = updated
-                    })
-                    editingRegexIdx = null
-                }
-            )
-        } ?: run { editingRegexIdx = null }
+    state.editingRegex?.let { script ->
+        RegexEditDialog(
+            script = script,
+            onDismiss = { dispatch(PresetEditorAction.DismissRegexEditor) },
+            onSave = { dispatch(PresetEditorAction.SaveRegex(it)) },
+        )
     }
 }
 
@@ -275,8 +252,8 @@ private fun BasicParamsTab(p: StPreset, onUpdate: (StPreset) -> Unit) {
 private fun PromptsTab(
     prompts: List<PromptItem>,
     onEdit: (PromptItem) -> Unit,
-    onToggle: (Int) -> Unit,
-    onDeleteRequest: (Int) -> Unit,
+    onToggle: (String) -> Unit,
+    onDeleteRequest: (String) -> Unit,
     onReorder: (List<PromptItem>) -> Unit,
     onAdd: () -> Unit,
 ) {
@@ -292,14 +269,14 @@ private fun PromptsTab(
         verticalArrangement = Arrangement.spacedBy(Space8),
     ) {
         item { Spacer(Modifier.height(Space4)) }
-        itemsIndexed(prompts, key = { _, p -> p.identifier }) { idx, item ->
+        itemsIndexed(prompts, key = { _, p -> p.identifier }) { _, item ->
             ReorderableItem(reorderState, key = item.identifier) { dragging ->
                 PromptRow(
                     item = item,
                     dragging = dragging,
                     onEdit = { onEdit(item) },
-                    onToggle = { onToggle(idx) },
-                    onDelete = { onDeleteRequest(idx) },
+                    onToggle = { onToggle(item.identifier) },
+                    onDelete = { onDeleteRequest(item.identifier) },
                     handleModifier = Modifier.longPressDraggableHandle(),
                 )
             }
@@ -373,9 +350,9 @@ private fun PromptRow(
 @Composable
 private fun RegexTab(
     scripts: List<RegexScript>,
-    onEdit: (Int) -> Unit,
-    onToggle: (Int) -> Unit,
-    onDeleteRequest: (Int) -> Unit,
+    onEdit: (RegexScript) -> Unit,
+    onToggle: (RegexScript) -> Unit,
+    onDeleteRequest: (RegexScript) -> Unit,
     onImport: (RegexScript) -> Unit,
 ) {
     val context = LocalContext.current
@@ -392,14 +369,14 @@ private fun RegexTab(
         verticalArrangement = Arrangement.spacedBy(Space8),
     ) {
         item { Spacer(Modifier.height(Space4)) }
-        itemsIndexed(scripts, key = { i, s -> "${s.id}#$i" }) { idx, s ->
+        itemsIndexed(scripts, key = { i, s -> "${s.id}#$i" }) { _, s ->
             RegexRow(
                 title = s.scriptName.ifBlank { stringResource(R.string.unnamed_prompt) },
                 preview = "${s.findRegex.take(24)} → ${s.replaceString.take(24)}",
                 enabled = !s.disabled,
-                onEdit = { onEdit(idx) },
-                onToggle = { onToggle(idx) },
-                onDelete = { onDeleteRequest(idx) },
+                onEdit = { onEdit(s) },
+                onToggle = { onToggle(s) },
+                onDelete = { onDeleteRequest(s) },
             )
         }
         item {

@@ -121,6 +121,7 @@ fun ChatDrawerContent(
     onDeleteSession: (String) -> Unit = {},
     showChatListDate: Boolean = false,
     longPressHaptic: Boolean = true,
+    onUserProfileChanged: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -253,6 +254,7 @@ fun ChatDrawerContent(
                     }
                     personaDescription = editDesc.text.toString().trim()
                     UserProfileStore.setDescription(context, personaDescription)
+                    onUserProfileChanged()
                     showNameDialog = false
                 }) { Text(stringResource(R.string.confirm)) }
             },

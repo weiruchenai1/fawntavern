@@ -129,4 +129,6 @@ dependencies {
     implementation(libs.androidx.paging.compose)
     implementation(libs.kotlinx.serialization.json)
     ksp(libs.androidx.room.compiler)
+
+    testImplementation("junit:junit:4.13.2")
 }

@@ -112,19 +112,18 @@ import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.Lucide
 import coil3.compose.rememberAsyncImagePainter
 import org.intellij.markdown.IElementType
-import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.ast.findChildOfType
 import org.intellij.markdown.flavours.gfm.GFMElementTypes
+import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
 import ru.noties.jlatexmath.JLatexMathDrawable
 import ru.noties.jlatexmath.JLatexMathSplitter
 import java.io.File
 import java.io.FileOutputStream
-import java.util.Base64
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -250,7 +249,7 @@ fun MessageContent(
     // 流式输出经常在结束围栏抵达前停留数帧。临时补齐结束围栏，代码从第一行起就按代码块
     // 测量和显示；真实结束围栏到达后补丁自然消失，不会改变最终存储内容。
     val streamSafe = remember(processed, isStreaming) {
-        if (isStreaming) closeOpenCodeFence(processed) else processed
+        if (isStreaming) MessageContentParser.closeOpenCodeFence(processed) else processed
     }
 
     val segments = remember(streamSafe) { splitBareHtmlSegments(streamSafe) }
@@ -547,7 +546,7 @@ private fun ComposeMarkdownBlock(
     // 流式增长与跳转/切分支/重试后的重新定位会因此肉眼可见地抖动。此处同步解析一次成型，
     // remember(processed) 保证每段内容只解析一次（流式期间即每帧节流刷新时解析一次）。
     val markdownState = remember(prepared) {
-        val md = prepareMarkdown(prepared)
+        val md = MessageContentParser.prepareMarkdown(prepared)
         val handler = ReferenceLinkHandlerImpl()
         try {
             // linksLookedUp = false：链接定义节点由渲染器在组合期自行登记到 handler
@@ -1085,70 +1084,6 @@ private fun LatexFormulaBlock(
                 drawable.draw(drawContext.canvas.nativeCanvas)
             }
         }
-    }
-}
-
-/**
- * 预处理 Markdown 文本：
- * - 有连续空行段落 → 保留为 GFM 段落（空行分隔），让 mikepenz 渲染段落间距
- * - 无连续空行 → ST-style simpleLineBreaks（单换行 → 硬断行）
- */
-private fun prepareMarkdown(text: String): String {
-    val normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    return if (normalized.contains("\n\n")) normalized
-           else markdownWithHardBreaks(text)
-}
-
-/**
- * 模拟 ST Showdown 的 simpleLineBreaks：在 Markdown 段里把单个换行升级为硬断行
- * （行尾补两个空格），围栏代码块内保持原样。
- */
-private fun markdownWithHardBreaks(text: String): String {
-    if (!text.contains('\n')) return text
-    val normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    val lines = normalized.split("\n")
-    val sb = StringBuilder(text.length + lines.size * 2)
-    var inFence = false
-    var fenceMarker = ""
-    lines.forEachIndexed { i, line ->
-        val trimmed = line.trimStart()
-        if (!inFence && (trimmed.startsWith("```") || trimmed.startsWith("~~~"))) {
-            inFence = true
-            fenceMarker = trimmed.take(3)
-        } else if (inFence && trimmed.startsWith(fenceMarker)) {
-            inFence = false
-        }
-        sb.append(line)
-        if (i != lines.lastIndex) {
-            if (!inFence && line.isNotBlank()) sb.append("  ")
-            sb.append('\n')
-        }
-    }
-    return sb.toString()
-}
-
-/** 为流式阶段尚未闭合的 GFM 围栏补一个仅用于渲染的结束标记。 */
-internal fun closeOpenCodeFence(text: String): String {
-    val normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    var openMarker: String? = null
-    normalized.lineSequence().forEach { line ->
-        val trimmed = line.dropWhile { it == ' ' || it == '\t' }
-        if (line.length - trimmed.length > 3) return@forEach
-        val marker = trimmed.takeWhile { it == '`' || it == '~' }
-        if (marker.length < 3 || marker.any { it != marker.first() }) return@forEach
-        val open = openMarker
-        if (open == null) {
-            openMarker = marker
-        } else if (marker.first() == open.first() && marker.length >= open.length &&
-            trimmed.drop(marker.length).isBlank()) {
-            openMarker = null
-        }
-    }
-    val marker = openMarker ?: return normalized
-    return buildString(normalized.length + marker.length + 1) {
-        append(normalized)
-        if (!normalized.endsWith('\n')) append('\n')
-        append(marker)
     }
 }
 
