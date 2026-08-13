@@ -1,5 +1,6 @@
 package me.rerere.fawntavern.domain
 
+import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.chat.MsgAlt
@@ -8,6 +9,18 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ConversationOpsTest {
+    @Test
+    fun newSessionKeepsUserMacroForLiveRendering() {
+        val card = CharacterCard(
+            name = "Fawn",
+            firstMes = "Hello {{user}}, I am {{char}}.",
+        )
+
+        val session = ConversationOps.newSession(card, "fawn", "fallback")
+
+        assertEquals("Hello {{user}}, I am Fawn.", session.messages.single().content)
+    }
+
     @Test
     fun switchingAltPersistsCurrentMirrorBeforeMoving() {
         val message = ChatMessage(

@@ -17,12 +17,14 @@ internal object ConversationOps {
         maxOf(System.currentTimeMillis(), (s.messages.maxOfOrNull { it.ts } ?: 0L) + 1)
 
     /** 新会话：有角色卡时以开场白（first_mes + 备选开场白，可左右切换）作为首条消息 */
-    fun newSession(card: CharacterCard?, charFile: String, charNameFallback: String, userName: String): ChatSession {
+    fun newSession(card: CharacterCard?, charFile: String, charNameFallback: String): ChatSession {
         val name = (card?.name ?: "").ifBlank { charNameFallback }
         val greetings = buildList {
-            card?.firstMes?.takeIf { it.isNotBlank() }?.let { add(PromptBuilder.applyMacros(it, name, userName)) }
+            card?.firstMes?.takeIf { it.isNotBlank() }?.let {
+                add(Macros.apply(it, name, userName = "", replaceUser = false))
+            }
             card?.alternateGreetings?.forEach { g ->
-                if (g.isNotBlank()) add(PromptBuilder.applyMacros(g, name, userName))
+                if (g.isNotBlank()) add(Macros.apply(g, name, userName = "", replaceUser = false))
             }
         }
         return ChatSession(

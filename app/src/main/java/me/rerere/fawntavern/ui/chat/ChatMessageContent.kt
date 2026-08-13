@@ -124,6 +124,7 @@ import ru.noties.jlatexmath.JLatexMathDrawable
 import ru.noties.jlatexmath.JLatexMathSplitter
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Base64
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

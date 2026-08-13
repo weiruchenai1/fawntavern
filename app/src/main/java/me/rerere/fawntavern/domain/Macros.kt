@@ -14,12 +14,16 @@ import kotlin.random.Random
  */
 internal object Macros {
 
-    fun apply(text: String, charName: String, userName: String): String {
+    fun apply(
+        text: String,
+        charName: String,
+        userName: String,
+        replaceUser: Boolean = true,
+    ): String {
         if (text.isEmpty() || '{' !in text) return text
-        var t = text
-            .replace("{{char}}", charName, ignoreCase = true)
-            .replace("{{user}}", userName, ignoreCase = true)
-            .replace("{{newline}}", "\n", ignoreCase = true)
+        var t = text.replace("{{char}}", charName, ignoreCase = true)
+        if (replaceUser) t = t.replace("{{user}}", userName, ignoreCase = true)
+        t = t.replace("{{newline}}", "\n", ignoreCase = true)
         if ("{{" !in t) return t
         t = applyDateTime(t)
         t = applyRandom(t)
