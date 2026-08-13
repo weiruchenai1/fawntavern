@@ -50,12 +50,14 @@ import me.rerere.fawntavern.data.settings.PromptLogStore
 import me.rerere.fawntavern.data.settings.PreferencesStore
 import me.rerere.fawntavern.data.settings.CharacterModelStore
 import me.rerere.fawntavern.data.settings.DefaultModelStore
+import me.rerere.fawntavern.data.settings.GlobalVariableStore
 import me.rerere.fawntavern.data.settings.ThinkingStore
 import me.rerere.fawntavern.data.settings.WorldInfoSettingsStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import me.rerere.fawntavern.domain.ConversationOps
 import me.rerere.fawntavern.domain.GenerationController
+import me.rerere.fawntavern.domain.MacroVariableState
 import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.domain.PromptLog
 import org.json.JSONObject
@@ -768,6 +770,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // 仅开启 URL 上下文不影响 App 网络搜索（与搜索面板的显隐逻辑保持一致）。
         val builtInSearchOn = prov.model(modelId)?.tools?.contains(BuiltInTool.SEARCH) == true
         val webSearchOn = SearchStore.isEnabled(ctx) && !builtInSearchOn
+        val variableState = MacroVariableState(
+            localVariables = base.localVariables,
+            globalVariables = GlobalVariableStore.get(ctx),
+        )
+        val commitVariables = mode == GenMode.SEND
         val built = PromptBuilder.build(
             card = currentCard,
             userName = userName,
@@ -791,14 +798,48 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             }.getOrDefault(""),
             enabledExtensions = enabledExtensions.flatMap { listOf(it.info.id, it.info.name) }.toSet(),
             pickSalt = genMessage.alts.size,
+            variableState = variableState,
+            allowVariableMutations = commitVariables,
         )
+        val apiMessages = PromptBuilder.assemble(
+            built = built,
+            history = slicedPromptHistory,
+            baseDir = ctx.filesDir,
+            mutateLastUserMessage = commitVariables,
+        )
+        if (commitVariables) {
+            val localChanged = variableState.localChanged()
+            val globalChanged = variableState.globalChanged()
+            if (localChanged || globalChanged) {
+                try {
+                    if (localChanged) {
+                        ChatRepository.saveLocalVariables(ctx, sessionId, variableState.localVariables())
+                    }
+                    if (globalChanged) {
+                        withContext(Dispatchers.IO) {
+                            GlobalVariableStore.set(ctx, variableState.globalVariables())
+                        }
+                    }
+                } catch (error: Exception) {
+                    if (localChanged) runCatching {
+                        ChatRepository.saveLocalVariables(ctx, sessionId, base.localVariables)
+                    }
+                    if (globalChanged) withContext(Dispatchers.IO) {
+                        runCatching { GlobalVariableStore.set(ctx, variableState.initialGlobalVariables()) }
+                    }
+                    throw error
+                }
+            }
+            if (localChanged && session?.id == sessionId) {
+                session = session?.copy(localVariables = variableState.localVariables())
+            }
+        }
         val finalMsg = generation.run(
-            promptHistory = slicedPromptHistory,
+            apiMessages = apiMessages,
             genMessage = msgForGen,
             provider = prov,
             modelId = modelId,
             built = built,
-            filesDir = ctx.filesDir,
             streaming = currentCard?.streaming ?: true,
             tools = if (webSearchOn) listOf(searchTool.spec()) else emptyList(),
             toolExecutor = if (webSearchOn) searchTool.executor() else null,

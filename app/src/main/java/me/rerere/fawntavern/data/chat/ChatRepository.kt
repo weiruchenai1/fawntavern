@@ -161,6 +161,14 @@ object ChatRepository {
         dao(context).updatePinned(sessionId, pinned)
     }
 
+    suspend fun saveLocalVariables(context: Context, sessionId: String, variables: Map<String, String>) {
+        dao(context).updateLocalVariables(
+            sessionId,
+            if (variables.isEmpty()) "" else json.encodeToString(variables),
+            System.currentTimeMillis(),
+        )
+    }
+
     /** 删除已不被任何消息引用的附件；导入、删消息和删会话后均可安全调用。 */
     suspend fun collectUnusedAttachments(context: Context) {
         val referenced = list(context).asSequence()
@@ -187,6 +195,7 @@ object ChatRepository {
     )
 
     private fun ChatSession.toEntity() = SessionEntity(
+        localVariablesJson = if (localVariables.isEmpty()) "" else json.encodeToString(localVariables),
         id = id,
         charFile = charFile,
         charName = charName,
@@ -199,6 +208,8 @@ object ChatRepository {
     )
 
     private fun SessionWithMessages.toModel() = ChatSession(
+        localVariables = if (session.localVariablesJson.isBlank()) emptyMap()
+                         else try { json.decodeFromString<Map<String, String>>(session.localVariablesJson) } catch (_: Exception) { emptyMap() },
         id = session.id,
         charFile = session.charFile,
         charName = session.charName,

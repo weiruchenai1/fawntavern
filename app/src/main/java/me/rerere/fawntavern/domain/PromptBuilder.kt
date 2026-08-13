@@ -94,6 +94,8 @@ internal object PromptBuilder {
         summary: String = "",
         enabledExtensions: Set<String> = emptySet(),
         pickSalt: Int = 0,
+        variableState: MacroVariableState = MacroVariableState(),
+        allowVariableMutations: Boolean = false,
     ): Built {
         val charName = card?.name ?: ""
         val maxContext = preset?.maxContext?.takeIf { it > 0 } ?: 0
@@ -111,7 +113,9 @@ internal object PromptBuilder {
             enabledExtensions = enabledExtensions,
             sessionId = sessionId,
             pickSalt = pickSalt,
+            variables = variableState,
         )
+        val macroPolicy = if (allowVariableMutations) MacroRenderPolicy.COMMIT_VARIABLES else MacroRenderPolicy.ALL
         val (wi, newTimed) = activateWorldInfo(
             card, worldBooks, history, userName, timedWi, updateTimed, wiSettings, maxContext,
             baseMacroContext,
@@ -131,7 +135,7 @@ internal object PromptBuilder {
             .map { DepthPiece("system", it.content, AN_DEPTH, PromptSource.WORLD_INFO, it.comment) }
         // outlet：不自动注入，只填充 {{outlet::名字}} 宏取用的映射（正文先过宏）
         val outletMap = wi.filter { it.position == WorldBookPos.OUTLET && it.outletName.isNotBlank() }
-            .associate { it.outletName.trim() to MacroEngine.render(it.content, baseMacroContext).trim() }
+            .associate { it.outletName.trim() to MacroEngine.render(it.content, baseMacroContext, macroPolicy).trim() }
         val macroContext = baseMacroContext.copy(outlets = outletMap)
 
         val orderToggles = preset?.promptOrder
@@ -160,7 +164,7 @@ internal object PromptBuilder {
         }
 
         fun finalize(text: String, salt: Int = 0) =
-            MacroEngine.render(text, macroContext.copy(pickSalt = pickSalt * 31 + salt)).trim()
+            MacroEngine.render(text, macroContext.copy(pickSalt = pickSalt * 31 + salt), macroPolicy).trim()
         fun macro(pieces: List<Piece>) = pieces
             .mapIndexed { index, piece -> piece.copy(content = finalize(piece.content, index)) }
             .filter { it.content.isNotBlank() }
@@ -200,9 +204,15 @@ internal object PromptBuilder {
     private const val AN_DEPTH = 4
 
     /** 请求前合成完整消息数组。baseDir 为 filesDir（附件相对路径的根），null 时跳过附件 */
-    fun assemble(built: Built, history: List<ChatMessage>, baseDir: File?): List<ApiMessage> {
+    fun assemble(
+        built: Built,
+        history: List<ChatMessage>,
+        baseDir: File?,
+        mutateLastUserMessage: Boolean = false,
+    ): List<ApiMessage> {
         val hist = history.filter { it.content.isNotBlank() || it.images.isNotEmpty() || it.files.isNotEmpty() }
         val n0 = hist.size
+        val mutableMessageIndex = if (mutateLastUserMessage) hist.indexOfLast { it.role == "user" } else -1
         val histMsgsAll = hist.mapIndexed { i, m ->
             var content = RegexEngine.applyForPrompt(
                 m.content, built.promptRegex, depth = n0 - 1 - i, role = m.role,
@@ -211,6 +221,7 @@ internal object PromptBuilder {
             content = MacroEngine.render(
                 content,
                 built.macroContext.copy(history = hist, pickSalt = built.macroContext.pickSalt * 31 + i),
+                if (i == mutableMessageIndex) MacroRenderPolicy.COMMIT_VARIABLES else MacroRenderPolicy.ALL,
             )
             if (m.files.isNotEmpty() && baseDir != null) {
                 val blocks = m.files.mapNotNull { f ->

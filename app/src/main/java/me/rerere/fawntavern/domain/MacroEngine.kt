@@ -2,6 +2,7 @@ package me.rerere.fawntavern.domain
 
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.math.BigDecimal
 import java.util.Locale
 import kotlin.math.max
 import kotlin.random.Random
@@ -27,7 +28,39 @@ internal data class MacroContext(
     val pickSalt: Int = 0,
     val now: ZonedDateTime = ZonedDateTime.now(),
     val random: Random = Random.Default,
+    val variables: MacroVariableState = MacroVariableState(),
 )
+
+/** Mutable state shared by every macro expansion in one generation transaction. */
+internal class MacroVariableState(
+    localVariables: Map<String, String> = emptyMap(),
+    globalVariables: Map<String, String> = emptyMap(),
+) {
+    private val initialLocal = localVariables.toMap()
+    private val initialGlobal = globalVariables.toMap()
+    private val local = localVariables.toMutableMap()
+    private val global = globalVariables.toMutableMap()
+
+    fun localVariables(): Map<String, String> = local.toMap()
+    fun globalVariables(): Map<String, String> = global.toMap()
+    fun initialGlobalVariables(): Map<String, String> = initialGlobal
+    fun localChanged(): Boolean = local != initialLocal
+    fun globalChanged(): Boolean = global != initialGlobal
+
+    internal fun contains(globalScope: Boolean, name: String): Boolean =
+        if (globalScope) global.containsKey(name) else local.containsKey(name)
+
+    internal fun get(globalScope: Boolean, name: String): String? =
+        if (globalScope) global[name] else local[name]
+
+    internal fun set(globalScope: Boolean, name: String, value: String) {
+        if (globalScope) global[name] = value else local[name] = value
+    }
+
+    internal fun remove(globalScope: Boolean, name: String) {
+        if (globalScope) global.remove(name) else local.remove(name)
+    }
+}
 
 internal data class MacroParameter(
     val name: String,
@@ -68,12 +101,16 @@ internal class MacroRegistry(definitions: List<MacroDefinition>) {
 internal data class MacroRenderPolicy(
     val allowedMacros: Set<String>? = null,
     val preserveUnknown: Boolean = true,
+    val allowVariableMutations: Boolean = false,
 ) {
     fun allows(definition: MacroDefinition): Boolean =
         allowedMacros == null || definition.name.lowercase() in allowedMacros
 
+    fun allows(name: String): Boolean = allowedMacros == null || name.lowercase() in allowedMacros
+
     companion object {
         val ALL = MacroRenderPolicy()
+        val COMMIT_VARIABLES = MacroRenderPolicy(allowVariableMutations = true)
         val MESSAGE_DISPLAY = MacroRenderPolicy(setOf("char", "user", "newline"))
     }
 }
@@ -125,6 +162,14 @@ internal object MacroEngine {
                             if (close == null) out.append(token.source) else index = close
                         } else if (header.kind != TagKind.OPEN) {
                             out.append(token.source)
+                        } else if (header.variable != null) {
+                            val macroName = if (header.variable.global) "getglobalvar" else "getvar"
+                            if (!policy.allows(macroName)) out.append(token.source)
+                            else {
+                                expansions++
+                                check(expansions <= MAX_EXPANSIONS) { "Macro expansion count exceeds $MAX_EXPANSIONS" }
+                                out.append(renderVariable(header.variable, token.offset, depth))
+                            }
                         } else {
                             val definition = registry[header.name]
                             if (definition == null || !policy.allows(definition)) {
@@ -160,7 +205,8 @@ internal object MacroEngine {
                                 )
                                 expansions++
                                 check(expansions <= MAX_EXPANSIONS) { "Macro expansion count exceeds $MAX_EXPANSIONS" }
-                                out.append(MacroRuntime(context, token.offset).definitionEvaluate(definition, invocation))
+                                out.append(MacroRuntime(context, token.offset, policy.allowVariableMutations)
+                                    .definitionEvaluate(definition, invocation))
                                 if (closeIndex != null) index = closeIndex
                             }
                         }
@@ -170,6 +216,11 @@ internal object MacroEngine {
                 index++
             }
             return out.toString()
+        }
+
+        private fun renderVariable(expression: VariableExpression, sourceOffset: Int, depth: Int): String {
+            val runtime = MacroRuntime(context, sourceOffset, policy.allowVariableMutations)
+            return runtime.evaluateVariable(expression) { raw -> renderText(raw, depth + 1) }
         }
 
         private fun String.limitOutput(): String {
@@ -190,6 +241,14 @@ internal object MacroEngine {
         val name: String = "",
         val args: List<String> = emptyList(),
         val preserveWhitespace: Boolean = false,
+        val variable: VariableExpression? = null,
+    )
+
+    internal data class VariableExpression(
+        val global: Boolean,
+        val name: String,
+        val operator: String,
+        val operand: String = "",
     )
 
     private fun lex(text: String): List<Token> {
@@ -280,6 +339,9 @@ internal object MacroEngine {
             preserve = true
             value = value.drop(1).trimStart()
         }
+        if (kind == TagKind.OPEN) parseVariableExpression(value)?.let {
+            return Header(kind = kind, variable = it, preserveWhitespace = preserve)
+        }
         val nameMatch = Regex("^[A-Za-z][A-Za-z0-9_-]*").find(value) ?: return null
         val name = nameMatch.value
         val rest = value.substring(nameMatch.range.last + 1)
@@ -291,6 +353,18 @@ internal object MacroEngine {
             else -> listOf(rest.trim())
         }
         return Header(kind, name, args, preserve)
+    }
+
+    private fun parseVariableExpression(value: String): VariableExpression? {
+        val match = Regex("^([.$])([A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)").find(value) ?: return null
+        val rest = value.substring(match.range.last + 1).trim()
+        if (rest.isEmpty()) return VariableExpression(match.groupValues[1] == "\$", match.groupValues[2], "")
+        val operator = listOf("||=", "??=", "++", "--", "+=", "-=", "==", "!=", ">=", "<=", "||", "??", "=", ">", "<")
+            .firstOrNull { rest.startsWith(it) } ?: return null
+        val operand = rest.drop(operator.length).trim()
+        if (operator !in setOf("++", "--") && operand.isEmpty()) return null
+        if (operator in setOf("++", "--") && operand.isNotEmpty()) return null
+        return VariableExpression(match.groupValues[1] == "\$", match.groupValues[2], operator, operand)
     }
 
     private fun splitDoubleColon(value: String): List<String> {
@@ -413,6 +487,20 @@ internal object MacroEngine {
         MacroDefinition("hasExtension", "Whether an extension is enabled", listOf(MacroParameter("name"))) { call ->
             enabledExtensions.any { it.equals(call.args.firstOrNull(), true) }.toString()
         },
+        variableGet("getvar", false),
+        variableSet("setvar", false),
+        variableAdd("addvar", false),
+        variableIncrement("incvar", false, 1),
+        variableIncrement("decvar", false, -1),
+        variableHas("hasvar", false),
+        variableDelete("deletevar", false),
+        variableGet("getglobalvar", true),
+        variableSet("setglobalvar", true),
+        variableAdd("addglobalvar", true),
+        variableIncrement("incglobalvar", true, 1),
+        variableIncrement("decglobalvar", true, -1),
+        variableHas("hasglobalvar", true),
+        variableDelete("deleteglobalvar", true),
         MacroDefinition("newline", "Insert line breaks", listOf(MacroParameter("count", true))) { call ->
             "\n".repeat(call.args.firstOrNull()?.toIntOrNull()?.coerceIn(0, 1_000) ?: 1)
         },
@@ -465,11 +553,47 @@ internal object MacroEngine {
         description: String,
         get: MacroContext.() -> String,
     ) = MacroDefinition(name, description) { context.get() }
+
+    private fun variableGet(name: String, global: Boolean) = MacroDefinition(
+        name, "Get a ${if (global) "global" else "local"} variable", listOf(MacroParameter("name")),
+    ) { call -> variable(global, call.args.firstOrNull().orEmpty()).orEmpty() }
+
+    private fun variableSet(name: String, global: Boolean) = MacroDefinition(
+        name, "Set a ${if (global) "global" else "local"} variable",
+        listOf(MacroParameter("name"), MacroParameter("value")), supportsScope = true,
+    ) { call ->
+        if (mutationsAllowed) setVariable(global, call.args.firstOrNull().orEmpty(), call.body?.invoke() ?: call.args.getOrNull(1).orEmpty())
+        ""
+    }
+
+    private fun variableAdd(name: String, global: Boolean) = MacroDefinition(
+        name, "Add to a ${if (global) "global" else "local"} variable",
+        listOf(MacroParameter("name"), MacroParameter("value")), supportsScope = true,
+    ) { call ->
+        if (mutationsAllowed) addVariable(global, call.args.firstOrNull().orEmpty(), call.body?.invoke() ?: call.args.getOrNull(1).orEmpty())
+        ""
+    }
+
+    private fun variableIncrement(name: String, global: Boolean, delta: Int) = MacroDefinition(
+        name, "Change a ${if (global) "global" else "local"} variable by $delta", listOf(MacroParameter("name")),
+    ) { call -> incrementVariable(global, call.args.firstOrNull().orEmpty(), delta, mutationsAllowed) }
+
+    private fun variableHas(name: String, global: Boolean) = MacroDefinition(
+        name, "Check whether a ${if (global) "global" else "local"} variable exists", listOf(MacroParameter("name")),
+    ) { call -> hasVariable(global, call.args.firstOrNull().orEmpty()).toString() }
+
+    private fun variableDelete(name: String, global: Boolean) = MacroDefinition(
+        name, "Delete a ${if (global) "global" else "local"} variable", listOf(MacroParameter("name")),
+    ) { call ->
+        if (mutationsAllowed) deleteVariable(global, call.args.firstOrNull().orEmpty())
+        ""
+    }
 }
 
 internal class MacroRuntime(
     val context: MacroContext,
     private val sourceOffset: Int,
+    internal val mutationsAllowed: Boolean = false,
 ) {
     val charName get() = context.charName
     val userName get() = context.userName
@@ -487,6 +611,63 @@ internal class MacroRuntime(
     val now get() = context.now
     val random get() = context.random
 
+    fun variable(global: Boolean, name: String): String? = context.variables.get(global, name)
+    fun hasVariable(global: Boolean, name: String): Boolean = context.variables.contains(global, name)
+    fun setVariable(global: Boolean, name: String, value: String) = context.variables.set(global, name, value)
+    fun deleteVariable(global: Boolean, name: String) = context.variables.remove(global, name)
+
+    fun addVariable(global: Boolean, name: String, operand: String): String {
+        val current = variable(global, name).orEmpty()
+        val left = current.toBigDecimalOrNull()
+        val right = operand.toBigDecimalOrNull()
+        val value = if (left != null && right != null) formatNumber(left + right) else current + operand
+        setVariable(global, name, value)
+        return value
+    }
+
+    fun incrementVariable(global: Boolean, name: String, delta: Int, mutate: Boolean): String {
+        val current = variable(global, name)
+        val number = current?.toBigDecimalOrNull() ?: if (current == null) BigDecimal.ZERO else return current
+        if (!mutate) return current.orEmpty()
+        val value = formatNumber(number + delta.toBigDecimal())
+        setVariable(global, name, value)
+        return value
+    }
+
+    internal fun evaluateVariable(expression: MacroEngine.VariableExpression, renderOperand: (String) -> String): String {
+        val global = expression.global
+        val name = expression.name
+        val current = variable(global, name)
+        fun operand() = renderOperand(expression.operand)
+        return when (expression.operator) {
+            "" -> current.orEmpty()
+            "=" -> { if (mutationsAllowed) setVariable(global, name, operand()); "" }
+            "++" -> incrementVariable(global, name, 1, mutationsAllowed)
+            "--" -> incrementVariable(global, name, -1, mutationsAllowed)
+            "+=" -> { if (mutationsAllowed) addVariable(global, name, operand()); "" }
+            "-=" -> {
+                if (mutationsAllowed) {
+                    val left = current?.toBigDecimalOrNull()
+                    val right = operand().toBigDecimalOrNull()
+                    if (left != null && right != null) setVariable(global, name, formatNumber(left - right))
+                }
+                ""
+            }
+            "||" -> if (isTruthy(current.orEmpty())) current.orEmpty() else operand()
+            "??" -> if (current != null) current else operand()
+            "||=" -> if (isTruthy(current.orEmpty())) current.orEmpty() else operand().also {
+                if (mutationsAllowed) setVariable(global, name, it)
+            }
+            "??=" -> if (current != null) current else operand().also {
+                if (mutationsAllowed) setVariable(global, name, it)
+            }
+            "==" -> ((current ?: "") == operand()).toString()
+            "!=" -> ((current ?: "") != operand()).toString()
+            ">", ">=", "<", "<=" -> compareNumbers(current, operand(), expression.operator)
+            else -> ""
+        }
+    }
+
     internal fun definitionEvaluate(definition: MacroDefinition, invocation: MacroInvocation): String =
         definition.evaluate(this, invocation)
 
@@ -494,11 +675,16 @@ internal class MacroRuntime(
         var value = raw.trim()
         val inverted = value.startsWith('!')
         if (inverted) value = value.drop(1).trim()
-        val named = MacroEngine.registry[value]
-        if (named != null && named.parameters.isEmpty()) {
-            value = named.evaluate(this, MacroInvocation(named.name, emptyList(), sourceOffset))
+        val variableRef = Regex("^([.$])([A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)$").matchEntire(value)
+        if (variableRef != null) {
+            value = variable(variableRef.groupValues[1] == "\$", variableRef.groupValues[2]).orEmpty()
+        } else {
+            val named = MacroEngine.registry[value]
+            if (named != null && named.parameters.isEmpty()) {
+                value = named.evaluate(this, MacroInvocation(named.name, emptyList(), sourceOffset))
+            }
         }
-        val truthy = value.trim().lowercase() !in setOf("", "false", "0", "off", "no")
+        val truthy = isTruthy(value)
         return if (inverted) !truthy else truthy
     }
 
@@ -530,4 +716,21 @@ internal class MacroRuntime(
         if (count !in 1..100 || sides !in 1..1_000_000) return ""
         return ((1..count).sumOf { context.random.nextInt(sides) + 1 } + modifier).toString()
     }
+
+    private fun compareNumbers(left: String?, right: String, operator: String): String {
+        val l = left?.toBigDecimalOrNull() ?: return "false"
+        val r = right.toBigDecimalOrNull() ?: return "false"
+        val comparison = l.compareTo(r)
+        return when (operator) {
+            ">" -> comparison > 0
+            ">=" -> comparison >= 0
+            "<" -> comparison < 0
+            else -> comparison <= 0
+        }.toString()
+    }
+
+    private fun formatNumber(value: BigDecimal): String = value.stripTrailingZeros().toPlainString()
+
+    private fun isTruthy(value: String): Boolean =
+        value.trim().lowercase() !in setOf("", "false", "0", "off", "no")
 }

@@ -18,13 +18,14 @@ import me.rerere.fawntavern.data.chat.AttachmentStore
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.preset.PresetRepository
+import me.rerere.fawntavern.data.settings.GlobalVariableStore
 import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.data.settings.TtsStore
 import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 
 object AppBackup {
-    private const val FORMAT_VERSION = 3
+    private const val FORMAT_VERSION = 4
     private const val CHAT_ENTRY = "data/chats.json"
     private const val API_ENTRY = "data/api-config.json"
     private const val SEARCH_ENTRY = "data/search-config.json"
@@ -60,6 +61,7 @@ object AppBackup {
     private data class ChatArchive(
         val formatVersion: Int = FORMAT_VERSION,
         val sessions: List<ChatSession> = emptyList(),
+        val globalVariables: Map<String, String>? = null,
     )
 
     data class ImportResult(val files: Int, val sessions: Int)
@@ -84,7 +86,10 @@ object AppBackup {
                     addTextEntry(
                         zip,
                         CHAT_ENTRY,
-                        json.encodeToString(ChatArchive(sessions = ChatRepository.list(context))),
+                        json.encodeToString(ChatArchive(
+                            sessions = ChatRepository.list(context),
+                            globalVariables = GlobalVariableStore.get(context),
+                        )),
                     )
                 }
                 if (Section.API_CONFIG in sections) {
@@ -144,6 +149,7 @@ object AppBackup {
             val previousTts = ttsConfig?.let {
                 TtsStore.parsePortable(TtsStore.exportPortable(context))
             }
+            val previousGlobalVariables = chatArchive?.globalVariables?.let { GlobalVariableStore.get(context) }
             val previousAvatarPath = if (Section.AVATAR in sections) {
                 UserProfileStore.getAvatarPath(context)
             } else null
@@ -186,6 +192,7 @@ object AppBackup {
                 apiConfig?.let { ApiConfigStore.saveConfig(context, it) }
                 searchConfig?.let { SearchStore.importPortable(context, it) }
                 ttsConfig?.let { TtsStore.importPortable(context, it) }
+                chatArchive?.globalVariables?.let { GlobalVariableStore.set(context, it) }
                 chatArchive?.let { ChatRepository.restore(context, it.sessions) }
             } catch (e: Exception) {
                 restored.asReversed().forEach { record ->
@@ -195,6 +202,7 @@ object AppBackup {
                 previousApi?.let { runCatching { ApiConfigStore.saveConfig(context, it) } }
                 previousSearch?.let { runCatching { SearchStore.importPortable(context, it) } }
                 previousTts?.let { runCatching { TtsStore.importPortable(context, it) } }
+                previousGlobalVariables?.let { runCatching { GlobalVariableStore.set(context, it) } }
                 if (Section.AVATAR in sections) {
                     UserProfileStore.setAvatarPath(context, previousAvatarPath)
                 }

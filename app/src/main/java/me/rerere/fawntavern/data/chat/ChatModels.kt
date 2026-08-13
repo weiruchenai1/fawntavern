@@ -77,6 +77,7 @@ data class ChatSession(
     val messages: List<ChatMessage> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
+    val localVariables: Map<String, String> = emptyMap(),
     val timedWi: Map<String, Int> = emptyMap(),  // 世界书定时效果状态（sticky/cooldown 跨轮持久化）
     val extState: Map<String, String> = emptyMap(),  // 每扩展的会话级状态 blob（extId → JSON 串，如摘要）
     val title: String = "",  // 会话标题：标题模型自动生成，空时 UI 回退到首条消息预览

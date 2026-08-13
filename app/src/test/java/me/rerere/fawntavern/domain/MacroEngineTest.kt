@@ -132,4 +132,106 @@ class MacroEngineTest {
         )
         assertEquals("Alice/{{time}}/{{random::a::b}}", result)
     }
+
+    @Test
+    fun supportsFullLocalAndGlobalVariableMacros() {
+        val state = MacroVariableState()
+        val mutableContext = context.copy(variables = state)
+        val source = "{{setvar::score::2}}{{addvar::score::3}}{{incvar::score}}|" +
+            "{{getvar::score}}|{{hasvar::score}}|" +
+            "{{setglobalvar::name::Fawn}}{{getglobalvar::name}}|{{hasglobalvar::name}}"
+
+        assertEquals("6|6|true|Fawn|true", MacroEngine.render(source, mutableContext, MacroRenderPolicy.COMMIT_VARIABLES))
+        assertEquals(mapOf("score" to "6"), state.localVariables())
+        assertEquals(mapOf("name" to "Fawn"), state.globalVariables())
+
+        MacroEngine.render("{{deletevar::score}}{{deleteglobalvar::name}}", mutableContext, MacroRenderPolicy.COMMIT_VARIABLES)
+        assertTrue(state.localVariables().isEmpty())
+        assertTrue(state.globalVariables().isEmpty())
+    }
+
+    @Test
+    fun supportsVariableShorthandMutationAndComparisonOperators() {
+        val state = MacroVariableState()
+        val mutableContext = context.copy(variables = state)
+        val source = "{{.score = 10}}{{.score += 2.5}}{{.score++}}|" +
+            "{{\$label = A}}{{\$label += B}}" +
+            "{{.score}}|{{\$label}}|{{.score > 12}}|{{.score <= 13.5}}|{{\$label == AB}}"
+
+        assertEquals(
+            "13.5|13.5|AB|true|true|true",
+            MacroEngine.render(source, mutableContext, MacroRenderPolicy.COMMIT_VARIABLES),
+        )
+        MacroEngine.render("{{.score -= 3.5}}{{.score -= invalid}}", mutableContext, MacroRenderPolicy.COMMIT_VARIABLES)
+        assertEquals("10", state.localVariables()["score"])
+    }
+
+    @Test
+    fun distinguishesFalsyAndUndefinedFallbacksAndEvaluatesThemLazily() {
+        val state = MacroVariableState(mapOf("empty" to "", "name" to "Alice"))
+        val mutableContext = context.copy(variables = state)
+        val source = "{{.empty || fallback}}|{{.empty ?? fallback}}|{{.missing ?? fallback}}|" +
+            "{{.name || {{.bad = yes}}}}|{{.name ?? {{.alsoBad = yes}}}}"
+
+        assertEquals(
+            "fallback||fallback|Alice|Alice",
+            MacroEngine.render(source, mutableContext, MacroRenderPolicy.COMMIT_VARIABLES),
+        )
+        assertTrue("bad" !in state.localVariables())
+        assertTrue("alsoBad" !in state.localVariables())
+    }
+
+    @Test
+    fun readOnlyRenderingNeverChangesVariableState() {
+        val state = MacroVariableState(mapOf("counter" to "4"))
+        val readOnlyContext = context.copy(variables = state)
+
+        assertEquals("4||4|fallback", MacroEngine.render(
+            "{{.counter++}}|{{.new = value}}|{{getvar::counter}}|{{.missing ||= fallback}}",
+            readOnlyContext,
+        ))
+        assertEquals(mapOf("counter" to "4"), state.localVariables())
+        assertTrue(!state.localChanged())
+    }
+
+    @Test
+    fun nestedValuesShareOneTransactionAcrossRenderCalls() {
+        val state = MacroVariableState()
+        val mutableContext = context.copy(variables = state)
+
+        assertEquals("", MacroEngine.render(
+            "{{.greeting = Hello, {{user}}!}}",
+            mutableContext,
+            MacroRenderPolicy.COMMIT_VARIABLES,
+        ))
+        assertEquals("Hello, Alice!", MacroEngine.render("{{.greeting}}", mutableContext))
+        assertTrue(state.localChanged())
+        assertTrue(!state.globalChanged())
+    }
+
+    @Test
+    fun conditionsResolveVariableShorthand() {
+        val state = MacroVariableState(mapOf("shown" to "yes", "hidden" to "0"))
+        val variableContext = context.copy(variables = state)
+
+        assertEquals("visible/also visible", MacroEngine.render(
+            "{{if .shown}}visible{{/if}}/{{if !.hidden}}also visible{{/if}}",
+            variableContext,
+        ))
+    }
+
+    @Test
+    fun onlyTheExplicitCommitPhaseMutatesSharedState() {
+        val state = MacroVariableState(mapOf("counter" to "0"))
+        val sharedContext = context.copy(variables = state)
+
+        assertEquals("0", MacroEngine.render("{{.counter++}}", sharedContext))
+        assertEquals("1", MacroEngine.render(
+            "{{.counter++}}",
+            sharedContext,
+            MacroRenderPolicy.COMMIT_VARIABLES,
+        ))
+        assertEquals("1", MacroEngine.render("{{.counter++}}", sharedContext))
+        assertEquals(mapOf("counter" to "1"), state.localVariables())
+    }
 }

@@ -45,12 +45,11 @@ internal class GenerationController {
     }
 
     suspend fun run(
-        promptHistory: List<ChatMessage>,
+        apiMessages: List<ApiMessage>,
         genMessage: ChatMessage,
         provider: ApiProvider,
         modelId: String,
         built: PromptBuilder.Built,
-        filesDir: java.io.File?,
         streaming: Boolean,
         tools: List<ToolSpec> = emptyList(),
         toolExecutor: ToolExecutor? = null,
@@ -96,7 +95,7 @@ internal class GenerationController {
             }
         } else null
         try {
-            val apiMessages = PromptBuilder.assemble(built, promptHistory, filesDir).toMutableList()
+            val apiMessages = apiMessages.toMutableList()
             fun estimatePromptTokens(): Int = apiMessages.sumOf { message ->
                 PromptBuilder.estTokens(message.role) + PromptBuilder.estTokens(message.content) +
                     message.toolCalls.sumOf { call ->
