@@ -21,6 +21,8 @@ object TtsStore {
     private const val KEY_SERVICES = "services"
     private const val KEY_SELECTED = "selected"
     private const val KEY_CORRUPTED = "services_corrupted"
+    private const val KEY_SCHEMA_VERSION = "schema_version"
+    private const val SCHEMA_VERSION = 1
 
     /** 已配置的提供商列表（有序）。 */
     fun getServices(context: Context): List<TTSProviderSetting> {
@@ -47,8 +49,11 @@ object TtsStore {
         val p = prefs(context)
         SecurePreferences.putString(context, p, KEY_SERVICES, arr.toString())
         val selectedId = p.getString(KEY_SELECTED, null)
-        if (selectedId == null || services.none { it.id == selectedId }) {
-            prefs(context).edit { putString(KEY_SELECTED, services.firstOrNull()?.id ?: "") }
+        p.edit {
+            putInt(KEY_SCHEMA_VERSION, SCHEMA_VERSION)
+            if (selectedId == null || services.none { it.id == selectedId }) {
+                putString(KEY_SELECTED, services.firstOrNull()?.id ?: "")
+            }
         }
     }
 
@@ -90,12 +95,16 @@ object TtsStore {
     }
 
     internal fun exportPortable(context: Context): String = JSONObject()
+        .put("formatVersion", SCHEMA_VERSION)
         .put("selectedId", getSelectedId(context))
         .put("services", JSONArray().apply { getServices(context).forEach { put(toJson(it)) } })
         .toString()
 
     internal fun parsePortable(raw: String): PortableTtsConfig {
         val root = JSONObject(raw)
+        require(root.optInt("formatVersion", 1) in 1..SCHEMA_VERSION) {
+            "Unsupported TTS configuration version"
+        }
         val servicesArray = root.getJSONArray("services")
         val services = (0 until servicesArray.length()).map { readService(servicesArray.getJSONObject(it)) }
         require(services.isNotEmpty()) { "TTS configuration contains no services" }
@@ -108,7 +117,10 @@ object TtsStore {
         val services = JSONArray().apply { config.services.forEach { put(toJson(it)) } }
         val p = prefs(context)
         SecurePreferences.putStringSync(context, p, KEY_SERVICES, services.toString())
-        check(p.commitChanges { putString(KEY_SELECTED, config.selectedId) }) {
+        check(p.commitChanges {
+            putString(KEY_SELECTED, config.selectedId)
+            putInt(KEY_SCHEMA_VERSION, SCHEMA_VERSION)
+        }) {
             "Unable to persist TTS configuration"
         }
     }

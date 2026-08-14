@@ -13,6 +13,8 @@ object ApiConfigStore {
     private const val KEY_PROVIDERS = "providers"
     private const val KEY_CURRENT = "current_model"
     private const val KEY_CORRUPTED = "providers_corrupted"
+    private const val KEY_SCHEMA_VERSION = "schema_version"
+    private const val SCHEMA_VERSION = 1
     /** 预置的常见模型提供商（默认全部禁用、不带模型） */
     private fun defaultProviders(): List<ApiProvider> = listOf(
         ApiProvider(
@@ -148,6 +150,7 @@ object ApiConfigStore {
         prefs.edit {
             putString(KEY_CURRENT, config.currentModel)
             .putBoolean(KEY_CORRUPTED, false)
+            .putInt(KEY_SCHEMA_VERSION, SCHEMA_VERSION)
         }
     }
 
@@ -158,6 +161,7 @@ object ApiConfigStore {
             prefs.commitChanges {
                 putString(KEY_CURRENT, config.currentModel)
                 .putBoolean(KEY_CORRUPTED, false)
+                .putInt(KEY_SCHEMA_VERSION, SCHEMA_VERSION)
             }
         ) { "Unable to persist API configuration" }
     }
@@ -165,6 +169,7 @@ object ApiConfigStore {
     internal fun exportPortable(context: Context): String {
         val config = loadConfig(context)
         return JSONObject()
+            .put("formatVersion", SCHEMA_VERSION)
             .put("providers", providersToJson(config.providers))
             .put("currentModel", config.currentModel)
             .toString()
@@ -172,6 +177,9 @@ object ApiConfigStore {
 
     internal fun parsePortable(raw: String): ApiConfig {
         val root = JSONObject(raw)
+        require(root.optInt("formatVersion", 1) in 1..SCHEMA_VERSION) {
+            "Unsupported API configuration version"
+        }
         val providers = providersFromJson(root.getJSONArray("providers"))
         require(providers.isNotEmpty()) { "API configuration contains no providers" }
         return ApiConfig(

@@ -17,6 +17,8 @@ import androidx.room.Relation
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "sessions")
@@ -244,7 +246,7 @@ internal interface ChatDao {
     suspend fun updatePinned(id: String, pinned: Boolean)
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 9, exportSchema = true)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 10, exportSchema = true)
 internal abstract class ChatDatabase : RoomDatabase() {
 
     abstract fun dao(): ChatDao
@@ -252,10 +254,18 @@ internal abstract class ChatDatabase : RoomDatabase() {
     companion object {
         const val NAME = "chats.db"
 
+        /** v9 是首个作为公开发布基线维护的数据库结构。 */
+        internal val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) = Unit
+        }
+
+        private val ALL_MIGRATIONS = arrayOf(MIGRATION_9_10)
+
         @Volatile private var instance: ChatDatabase? = null
 
         fun get(context: Context): ChatDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, ChatDatabase::class.java, NAME)
+                .addMigrations(*ALL_MIGRATIONS)
                 .build().also { instance = it }
         }
     }

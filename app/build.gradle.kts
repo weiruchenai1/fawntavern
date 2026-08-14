@@ -15,6 +15,15 @@ fun readKeystoreProperties(): Map<String, String> {
         .associate { it[0].trim() to it[1].trim() }
 }
 val keystoreProps = readKeystoreProperties()
+val appVersionCode = providers.gradleProperty("versionCode")
+    .orElse(providers.environmentVariable("VERSION_CODE"))
+    .orElse("1")
+    .get()
+    .toInt()
+val appVersionName = providers.gradleProperty("versionName")
+    .orElse(providers.environmentVariable("VERSION_NAME"))
+    .orElse("0.1.0")
+    .get()
 
 android {
     namespace = "me.rerere.fawntavern"
@@ -24,8 +33,9 @@ android {
         applicationId = "me.rerere.fawntavern"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     bundle {
@@ -101,6 +111,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     debugImplementation(libs.androidx.ui.tooling)
+    debugImplementation(libs.androidx.ui.test.manifest)
 
     // AppCompat (locale switching)
     implementation(libs.androidx.appcompat)
@@ -143,6 +154,11 @@ dependencies {
     testImplementation(libs.androidx.room.testing)
     testImplementation(libs.robolectric)
     testImplementation(libs.okhttp.mockwebserver)
+
+    androidTestImplementation(composeBom)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.ui.test.junit4)
 }
 
 ksp {

@@ -23,6 +23,8 @@ object SearchStore {
     private const val KEY_SELECTED = "selected"
     private const val KEY_RESULT_SIZE = "result_size"
     private const val KEY_CORRUPTED = "services_corrupted"
+    private const val KEY_SCHEMA_VERSION = "schema_version"
+    private const val SCHEMA_VERSION = 1
 
     /** 联网搜索总开关：开启后发送消息时用最近一条用户消息联网搜索并注入结果 */
     fun isEnabled(context: Context): Boolean =
@@ -64,7 +66,10 @@ object SearchStore {
         val p = prefs(context)
         SecurePreferences.putString(context, p, KEY_SERVICES, arr.toString())
         val sel = p.getInt(KEY_SELECTED, 0)
-        if (sel >= services.size) p.edit { putInt(KEY_SELECTED, 0) }
+        p.edit {
+            putInt(KEY_SCHEMA_VERSION, SCHEMA_VERSION)
+            if (sel >= services.size) putInt(KEY_SELECTED, 0)
+        }
     }
 
     fun addService(context: Context, options: SearchServiceOptions) {
@@ -103,6 +108,7 @@ object SearchStore {
     }
 
     internal fun exportPortable(context: Context): String = JSONObject()
+        .put("formatVersion", SCHEMA_VERSION)
         .put("enabled", isEnabled(context))
         .put("resultSize", getResultSize(context))
         .put("selected", getSelectedIndex(context))
@@ -111,6 +117,9 @@ object SearchStore {
 
     internal fun parsePortable(raw: String): PortableSearchConfig {
         val root = JSONObject(raw)
+        require(root.optInt("formatVersion", 1) in 1..SCHEMA_VERSION) {
+            "Unsupported search configuration version"
+        }
         val servicesArray = root.getJSONArray("services")
         val services = (0 until servicesArray.length()).map { readService(servicesArray.getJSONObject(it)) }
         require(services.isNotEmpty()) { "Search configuration contains no services" }
@@ -131,6 +140,7 @@ object SearchStore {
                 putInt(KEY_SELECTED, config.selected)
                 .putInt(KEY_RESULT_SIZE, config.resultSize)
                 .putBoolean(KEY_ENABLED, config.enabled)
+                .putInt(KEY_SCHEMA_VERSION, SCHEMA_VERSION)
             }
         ) { "Unable to persist search configuration" }
     }

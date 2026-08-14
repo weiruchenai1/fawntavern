@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ChevronRight
@@ -42,6 +43,7 @@ import me.rerere.fawntavern.data.speech.TtsUiState
 
 /** 展开的控制区固定宽度（用固定目标宽度插值，不测量自然宽度） */
 private val ControlsWidth = 112.dp
+internal const val TtsFloatingBarTag = "tts_floating_bar"
 
 /**
  * TTS 朗读悬浮工具栏：朗读时悬浮于屏幕上的圆形悬浮窗。
@@ -72,7 +74,7 @@ internal fun TtsFloatingBar(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 4.dp,
         shadowElevation = 4.dp,
-        modifier = modifier,
+        modifier = modifier.testTag(TtsFloatingBarTag),
     ) {
         Row(
             modifier = Modifier.padding(4.dp),

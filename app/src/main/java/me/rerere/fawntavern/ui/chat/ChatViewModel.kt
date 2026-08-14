@@ -42,8 +42,6 @@ import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
 import me.rerere.fawntavern.data.speech.TtsUiState
-import me.rerere.fawntavern.data.settings.UserProfileStore
-import me.rerere.fawntavern.data.settings.UserAvatarStore
 import me.rerere.fawntavern.data.settings.PromptLogStore
 import me.rerere.fawntavern.data.settings.GlobalVariableStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
@@ -101,7 +99,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     var modelRevision by mutableIntStateOf(0); private set
     /** 当前/最近一次生成的目标消息 ts（重答时指向被重答的消息），null = 尚未生成过 */
     var genTargetTs by mutableStateOf<Long?>(null); private set
-    var userName by mutableStateOf(UserProfileStore.getName(app)); private set
+    private val userProfileController = ChatUserProfileController(AndroidChatUserProfileDataSource(app))
+    var userName by mutableStateOf(userProfileController.loadName()); private set
     var userAvatarBitmap by mutableStateOf<Bitmap?>(null); private set
     // 当前角色关联的世界书/预设（随角色卡切换加载，生成时进入 Prompt 拼装）
     var activeWorldBooks by mutableStateOf<List<WorldBook>>(emptyList()); private set
@@ -295,9 +294,10 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
     fun reloadUserProfile() {
-        userName = UserProfileStore.getName(ctx)
         viewModelScope.launch {
-            userAvatarBitmap = withContext(Dispatchers.IO) { UserAvatarStore.load(ctx) }
+            val profile = withContext(Dispatchers.IO) { userProfileController.load() }
+            userName = profile.name
+            userAvatarBitmap = profile.avatar
         }
     }
 
@@ -967,9 +967,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun updateUserProfile(name: String, description: String) {
-        val trimmedName = name.trim().ifBlank { "user" }
-        UserProfileStore.setName(ctx, trimmedName)
-        UserProfileStore.setDescription(ctx, description)
+        userProfileController.save(name, description)
         reloadUserProfile()
     }
 
