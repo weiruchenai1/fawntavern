@@ -36,7 +36,6 @@ import android.app.Activity
 import android.os.Build
 import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.compose.material3.TextButton
 import androidx.core.os.LocaleListCompat
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Info
@@ -191,21 +190,9 @@ fun SettingsScreen(
     }
 
     if (showUpdateDialog) {
-        AlertDialog(
-            onDismissRequest = { showUpdateDialog = false },
-            title = { Text(stringResource(R.string.update_latest_title)) },
-            text = {
-                Text(
-                    stringResource(R.string.update_latest_msg, versionName),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showUpdateDialog = false }) {
-                    Text(stringResource(R.string.confirm))
-                }
-            },
-            dismissButton = {},
+        UpdateCheckDialog(
+            currentVersion = versionName,
+            onDismiss = { showUpdateDialog = false },
         )
     }
 

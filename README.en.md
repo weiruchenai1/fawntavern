@@ -41,7 +41,7 @@ Remote HTTP endpoints are blocked. HTTPS is required for custom providers; unenc
 
 ## Release builds
 
-Pushing a tag such as `v0.2.0` starts `.github/workflows/release.yml`, which builds a signed APK and AAB and retains them as private GitHub Actions artifacts.
+Pushing a tag such as `v0.2.0` starts `.github/workflows/release.yml`, builds signed APK/AAB artifacts and checksums, and creates a public GitHub Release. The app checks GitHub Releases for stable updates.
 
 Pushing a tag such as `v0.2.0-beta.1` starts `.github/workflows/beta.yml`, runs the same signed build, and creates a GitHub prerelease with the APK, AAB, and SHA-256 checksums.
 
