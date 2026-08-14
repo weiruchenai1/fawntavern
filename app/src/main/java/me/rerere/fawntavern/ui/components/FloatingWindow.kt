@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
@@ -30,6 +31,7 @@ fun FloatingWindow(
 ) {
     val context = LocalContext.current
     var window: IFxAppControl? by remember { mutableStateOf(null) }
+    val currentThemeMode = rememberUpdatedState(themeMode)
 
     LaunchedEffect(visibility) {
         if (visibility) window?.show() else window?.hide()
@@ -45,7 +47,7 @@ fun FloatingWindow(
             setEnableAnimation(true)
             setLayoutView(ComposeView(context).apply {
                 setContent {
-                    FawnTavernTheme(themeMode = themeMode) {
+                    FawnTavernTheme(themeMode = currentThemeMode.value) {
                         content()
                     }
                 }
