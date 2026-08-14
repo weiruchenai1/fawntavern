@@ -1,7 +1,7 @@
 package me.rerere.fawntavern.data.backup
 
 import android.content.Context
-import android.util.Log
+import me.rerere.fawntavern.core.diagnostics.SafeLog
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -309,8 +309,8 @@ object AppBackup {
                     }
                 }
                 withContext(NonCancellable) {
-                    rollbackAfterFailure(e, rollbackSteps) { description, rollbackError ->
-                        Log.e(TAG, "Backup rollback failed: $description", rollbackError)
+                    rollbackAfterFailure(e, rollbackSteps) { _, rollbackError ->
+                        SafeLog.error(TAG, "backup_rollback_failed", rollbackError)
                     }
                 }
                 if (e.suppressed.isNotEmpty()) {

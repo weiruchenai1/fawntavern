@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.data.backup.AppBackup
+import me.rerere.fawntavern.core.diagnostics.CrashReportStore
+import me.rerere.fawntavern.data.diagnostics.RemoteDiagnostics
 
 class FawnTavernApplication : Application() {
     sealed interface RecoveryState {
@@ -25,6 +27,11 @@ class FawnTavernApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        val versionName = runCatching {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        }.getOrNull().orEmpty().ifBlank { "unknown" }
+        CrashReportStore.install(this, versionName)
+        RemoteDiagnostics.applySavedPreference(this)
         retryRecovery()
     }
 

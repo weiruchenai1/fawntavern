@@ -17,6 +17,7 @@ internal enum class ChatDestination {
     FontSize,
     Preferences,
     PromptLog,
+    CrashReport,
     Search,
     Extensions,
     About,

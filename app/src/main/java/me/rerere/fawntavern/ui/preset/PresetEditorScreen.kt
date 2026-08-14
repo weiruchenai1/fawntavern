@@ -1,6 +1,6 @@
 package me.rerere.fawntavern.ui.preset
 
-import android.util.Log
+import me.rerere.fawntavern.core.diagnostics.SafeLog
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -118,7 +118,7 @@ fun PresetEditorScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                Log.e(PRESET_EDITOR_TAG, "Failed to save preset: ${state.draft.name}", error)
+                SafeLog.error(PRESET_EDITOR_TAG, "preset_save_failed", error)
                 Toast.makeText(
                     context,
                     resources.getString(R.string.preset_save_failed_fmt, error.message.orEmpty()),

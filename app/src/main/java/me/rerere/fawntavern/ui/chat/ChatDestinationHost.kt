@@ -14,6 +14,7 @@ import me.rerere.fawntavern.ui.settings.DefaultModelPage
 import me.rerere.fawntavern.ui.settings.FontSizeScreen
 import me.rerere.fawntavern.ui.settings.PreferencesScreen
 import me.rerere.fawntavern.ui.settings.PromptLogScreen
+import me.rerere.fawntavern.ui.settings.CrashReportScreen
 import me.rerere.fawntavern.ui.settings.SettingsScreen
 import me.rerere.fawntavern.ui.settings.TtsConfigScreen
 import me.rerere.fawntavern.ui.settings.WebSearchConfigScreen
@@ -62,6 +63,7 @@ internal fun ChatDestinationHost(
             )
         }
         ChatDestination.PromptLog -> { PromptLogScreen(onBack = onBack) }
+        ChatDestination.CrashReport -> { CrashReportScreen(onBack = onBack) }
         ChatDestination.DataMgmt -> {
             DataManagementScreen(
                 onBack = {
@@ -108,6 +110,7 @@ internal fun ChatDestinationHost(
                 onNavigateToFontSize = { onNavigate(ChatDestination.FontSize) },
                 onNavigateToPreferences = { onNavigate(ChatDestination.Preferences) },
                 onNavigateToPromptLog = { onNavigate(ChatDestination.PromptLog) },
+                onNavigateToCrashReport = { onNavigate(ChatDestination.CrashReport) },
                 onNavigateToExtensions = { onNavigate(ChatDestination.Extensions) },
                 onNavigateToDefaultModel = { onNavigate(ChatDestination.DefaultModel) },
                 onNavigateToWebSearch = { onNavigate(ChatDestination.WebSearch) },

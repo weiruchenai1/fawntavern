@@ -19,6 +19,8 @@ jobs:
     name: Test, lint, and build
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
 
     steps:
       - name: Check out source
@@ -36,7 +38,15 @@ jobs:
       - name: Run unit tests, lint, and debug build
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
 
+      - name: Prepare Firebase configuration
+        if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
+        run: |
+          umask 077
+          mkdir -p app/src/release
+          printf '%s' "$GOOGLE_SERVICES_JSON" > app/src/release/google-services.json
+
       - name: Build unsigned release APK
+        if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
         run: ./gradlew --no-daemon assembleRelease
 
       - name: Verify committed Room schemas
@@ -62,6 +72,10 @@ jobs:
             app/build/test-results/**
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Remove Firebase configuration
+        if: always()
+        run: rm -f app/src/release/google-services.json
 
   ui-tests:
     name: Instrumented UI tests

@@ -4,7 +4,7 @@ import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Base64
-import android.util.Log
+import me.rerere.fawntavern.core.diagnostics.SafeLog
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.Locale
@@ -104,7 +104,7 @@ object SystemTTSProvider : TTSProvider<TTSProviderSetting.SystemTTS> {
                 val locale = Locale.getDefault()
                 val langResult = ttsInstance.setLanguage(locale)
                 if (langResult == TextToSpeech.LANG_MISSING_DATA || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Log.w(TAG, "generateSpeech: Language $locale not supported")
+                    SafeLog.warn(TAG, "system_tts_language_unsupported")
                 }
                 ttsInstance.setSpeechRate(setting.speechRate)
                 ttsInstance.setPitch(setting.pitch)

@@ -1,7 +1,7 @@
 package me.rerere.fawntavern.data
 
 import android.content.Context
-import android.util.Log
+import me.rerere.fawntavern.core.diagnostics.SafeLog
 import kotlinx.coroutines.CancellationException
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
@@ -39,7 +39,7 @@ object PromptContextLoader {
             throw cancelled
         } catch (error: Exception) {
             failures += LoadFailure(ContentType.CHARACTER, charFile, error)
-            Log.e(TAG, "Failed to load character card: $charFile", error)
+            SafeLog.error(TAG, "character_card_load_failed", error)
             null
         }
             ?: return Loaded(charFile, null, emptyList(), null, failures)
@@ -53,7 +53,7 @@ object PromptContextLoader {
                     throw cancelled
                 } catch (error: Exception) {
                     failures += LoadFailure(ContentType.WORLD_BOOK, name, error)
-                    Log.e(TAG, "Failed to load world book: $name", error)
+                    SafeLog.error(TAG, "world_book_load_failed", error)
                     null
                 }
             }
@@ -63,7 +63,7 @@ object PromptContextLoader {
             throw cancelled
         } catch (error: Exception) {
             failures += LoadFailure(ContentType.PRESET, card.linkedPreset, error)
-            Log.e(TAG, "Failed to load preset: ${card.linkedPreset}", error)
+            SafeLog.error(TAG, "preset_load_failed", error)
             null
         }
         return Loaded(charFile, card, books, preset, failures)

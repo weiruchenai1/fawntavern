@@ -44,6 +44,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Monitor
 import com.composables.icons.lucide.Moon
 import com.composables.icons.lucide.Bot
+import com.composables.icons.lucide.Bug
 import com.composables.icons.lucide.Package
 import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.ScrollText
@@ -72,6 +73,7 @@ fun SettingsScreen(
     onNavigateToFontSize: () -> Unit = {},
     onNavigateToPreferences: () -> Unit = {},
     onNavigateToPromptLog: () -> Unit = {},
+    onNavigateToCrashReport: () -> Unit = {},
     onNavigateToExtensions: () -> Unit = {},
     onNavigateToDefaultModel: () -> Unit = {},
     onNavigateToWebSearch: () -> Unit = {},
@@ -282,6 +284,11 @@ fun SettingsScreen(
                 stringResource(R.string.tts), onClick = onNavigateToTts)
         }
         SettingsSection(stringResource(R.string.about)) {
+            SettingsRow(
+                { Icon(Lucide.Bug, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.crash_feedback),
+                onClick = onNavigateToCrashReport)
             SettingsRow(
                 { Icon(Lucide.Info, null, Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },

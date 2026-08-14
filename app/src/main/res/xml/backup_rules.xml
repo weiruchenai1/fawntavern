@@ -3,6 +3,7 @@
     <exclude domain="sharedpref" path="api_config.xml" />
     <exclude domain="sharedpref" path="web_search.xml" />
     <exclude domain="sharedpref" path="tts.xml" />
+    <exclude domain="sharedpref" path="remote_diagnostics.xml" />
     <exclude domain="database" path="chats.db" />
     <exclude domain="database" path="chats.db-wal" />
     <exclude domain="database" path="chats.db-shm" />

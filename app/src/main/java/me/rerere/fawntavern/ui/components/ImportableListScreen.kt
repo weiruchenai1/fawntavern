@@ -1,7 +1,7 @@
 package me.rerere.fawntavern.ui.components
 
 import android.net.Uri
-import android.util.Log
+import me.rerere.fawntavern.core.diagnostics.SafeLog
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -127,12 +127,12 @@ fun <T : Any> ImportableListScreen(
                 items = result.items
                 failedItems = result.failures
                 result.failures.forEach { (name, error) ->
-                    Log.e(IMPORTABLE_LIST_TAG, "Failed to load item: $name", error)
+                    SafeLog.error(IMPORTABLE_LIST_TAG, "item_load_failed", error)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                Log.e(IMPORTABLE_LIST_TAG, "Failed to load item list", error)
+                SafeLog.error(IMPORTABLE_LIST_TAG, "item_list_load_failed", error)
                 loadError = error
             } finally {
                 loading = false
@@ -149,7 +149,7 @@ fun <T : Any> ImportableListScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                Log.e(IMPORTABLE_LIST_TAG, "Failed to reload item: $name", error)
+                SafeLog.error(IMPORTABLE_LIST_TAG, "item_reload_failed", error)
                 failedItems = failedItems + (name to error)
             }
         }

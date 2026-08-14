@@ -3,7 +3,7 @@ package me.rerere.fawntavern.ui.components
 import android.content.Context
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.util.Log
+import me.rerere.fawntavern.core.diagnostics.SafeLog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -21,7 +21,7 @@ fun vibrate(context: Context, durationMs: Long = 25) {
     try {
         vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
     } catch (error: Exception) {
-        Log.w(HAPTICS_TAG, "触觉反馈执行失败", error)
+        SafeLog.warn(HAPTICS_TAG, "haptic_feedback_failed", error)
     }
 }
 

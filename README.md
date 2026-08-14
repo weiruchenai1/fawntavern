@@ -43,12 +43,15 @@ API 提供商、搜索和 TTS 凭据使用 Android Keystore 中的 AES-GCM 密�
 
 推送 `v0.2.0` 形式的标签会触发 `.github/workflows/release.yml`，生成签名 APK 和 AAB，并将它们保存为私有 GitHub Actions 构建产物。
 
+推送 `v0.2.0-beta.1` 形式的标签会触发 `.github/workflows/beta.yml`，运行相同的签名构建并创建带 APK、AAB 和 SHA-256 校验文件的 GitHub Pre-release。
+
 首次发布前，需要配置以下仓库 Secrets：
 
 - `ANDROID_KEYSTORE_BASE64`
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
+- `GOOGLE_SERVICES_JSON`（Firebase 控制台下载文件的完整内容）
 
 每次发布前，将仓库变量 `ANDROID_VERSION_CODE` 更新为严格递增的整数。`versionName` 取自 Git 标签。
 
@@ -59,3 +62,4 @@ API 提供商、搜索和 TTS 凭据使用 Android Keystore 中的 AES-GCM 密�
 - 用户可见的状态变化具备 UI 回归测试。
 - `ANDROID_VERSION_CODE` 已递增。
 - 发布说明已经记录用户可见变化及兼容性影响。
+- beta 安装包已经通过设置中的“崩溃报告”页面验证本地报告，以及用户授权后的 Firebase 上报流程。

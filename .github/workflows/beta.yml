@@ -1,16 +1,15 @@
-name: Release build
+name: Beta release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v*-beta*']
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build-release:
-    if: ${{ !contains(github.ref_name, '-') }}
-    name: Signed release artifacts
+  build-beta:
+    name: Signed beta artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -34,7 +33,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Verify release configuration
+      - name: Verify beta configuration
         run: |
           test -n "$ANDROID_KEYSTORE_BASE64"
           test -n "$ANDROID_KEYSTORE_PASSWORD"
@@ -42,6 +41,12 @@ jobs:
           test -n "$ANDROID_KEY_PASSWORD"
           test -n "$GOOGLE_SERVICES_JSON"
           test -n "$VERSION_CODE"
+
+      - name: Run beta verification
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug
+
+      - name: Verify committed Room schemas
+        run: git diff --exit-code -- app/schemas
 
       - name: Prepare signing key
         run: |
@@ -60,23 +65,42 @@ jobs:
           mkdir -p app/src/release
           printf '%s' "$GOOGLE_SERVICES_JSON" > app/src/release/google-services.json
 
-      - name: Build signed APK and App Bundle
+      - name: Build signed beta APK and App Bundle
         run: |
           VERSION_NAME="${GITHUB_REF_NAME#v}"
           ./gradlew --no-daemon clean assembleRelease bundleRelease \
             -PversionCode="$VERSION_CODE" \
             -PversionName="$VERSION_NAME"
 
-      - name: Upload release artifacts
+      - name: Generate checksums
+        run: |
+          cd app/build/outputs
+          find apk/release bundle/release -type f \( -name '*.apk' -o -name '*.aab' \) \
+            -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
+      - name: Upload beta build records
         uses: actions/upload-artifact@v7
         with:
-          name: fawntavern-${{ github.ref_name }}
+          name: fawntavern-${{ github.ref_name }}-build-records
           path: |
             app/build/outputs/apk/release/*.apk
             app/build/outputs/bundle/release/*.aab
+            app/build/outputs/SHA256SUMS.txt
             app/build/outputs/mapping/release/mapping.txt
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 30
+
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            app/build/outputs/apk/release/*.apk \
+            app/build/outputs/bundle/release/*.aab \
+            app/build/outputs/SHA256SUMS.txt \
+            --prerelease \
+            --generate-notes \
+            --title "FawnTavern $GITHUB_REF_NAME"
 
       - name: Remove signing material
         if: always()

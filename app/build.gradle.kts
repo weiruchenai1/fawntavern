@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 fun readKeystoreProperties(): Map<String, String> {
@@ -63,11 +65,13 @@ android {
             // manifest 的 FileProvider authority 用 ${applicationId}.fileprovider、代码里用
             // ctx.packageName，都会跟着后缀走，无需改动。
             applicationIdSuffix = ".debug"
+            buildConfigField("boolean", "FIREBASE_ENABLED", "false")
         }
         release {
             // findByName 而非 getByName：没有 keystore.properties 时 release 保持未签名，
             // 不至于在配置阶段抛 "SigningConfig not found" 把所有任务（含 assembleDebug）带崩
             signingConfig = signingConfigs.findByName("release")
+            buildConfigField("boolean", "FIREBASE_ENABLED", "true")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -84,6 +88,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     kotlin {
@@ -94,6 +99,13 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:diagnostics"))
+
+    val firebaseBom = platform(libs.firebase.bom)
+    implementation(firebaseBom)
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.crashlytics)
+
     // Compose BOM
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
@@ -157,6 +169,11 @@ dependencies {
 
     androidTestImplementation(composeBom)
     androidTestImplementation(libs.androidx.ui.test.junit4)
+}
+
+googleServices {
+    missingGoogleServicesStrategy =
+        com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy.IGNORE
 }
 
 ksp {

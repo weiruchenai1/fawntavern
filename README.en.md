@@ -43,12 +43,15 @@ Remote HTTP endpoints are blocked. HTTPS is required for custom providers; unenc
 
 Pushing a tag such as `v0.2.0` starts `.github/workflows/release.yml`, which builds a signed APK and AAB and retains them as private GitHub Actions artifacts.
 
+Pushing a tag such as `v0.2.0-beta.1` starts `.github/workflows/beta.yml`, runs the same signed build, and creates a GitHub prerelease with the APK, AAB, and SHA-256 checksums.
+
 Before the first tagged release, configure these repository secrets:
 
 - `ANDROID_KEYSTORE_BASE64`
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
+- `GOOGLE_SERVICES_JSON` (the full contents of the file downloaded from Firebase Console)
 
 Set repository variable `ANDROID_VERSION_CODE` to a monotonically increasing integer before each release. The tag supplies `versionName`.
 
@@ -59,3 +62,4 @@ Set repository variable `ANDROID_VERSION_CODE` to a monotonically increasing int
 - UI tests cover changed user-visible state transitions.
 - `ANDROID_VERSION_CODE` has been incremented.
 - The release notes describe user-facing changes and compatibility impact.
+- The beta build has verified local crash reports and the opt-in Firebase reporting flow under Settings > Crash reports.

@@ -2,7 +2,7 @@ package me.rerere.fawntavern.ui.character
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
+import me.rerere.fawntavern.core.diagnostics.SafeLog
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -46,7 +46,7 @@ internal class AndroidCharacterLibraryDataSource(
 internal class CharacterLibraryController(
     private val dataSource: CharacterLibraryDataSource,
     private val onLoadError: (String, Throwable) -> Unit = { name, error ->
-        Log.w("CharacterLibrary", "无法加载角色卡: $name", error)
+        SafeLog.warn("CharacterLibrary", "character_card_load_failed", error)
     },
 ) {
     fun defaultCardName(): String? = dataSource.defaultCardName()

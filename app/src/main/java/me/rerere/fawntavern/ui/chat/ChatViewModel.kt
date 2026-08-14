@@ -3,7 +3,7 @@ package me.rerere.fawntavern.ui.chat
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.util.Log
+import me.rerere.fawntavern.core.diagnostics.SafeLog
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
@@ -17,13 +17,8 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
@@ -43,7 +38,6 @@ import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
 import me.rerere.fawntavern.data.speech.TtsUiState
 import me.rerere.fawntavern.data.settings.PromptLogStore
-import me.rerere.fawntavern.data.settings.GlobalVariableStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.domain.ConversationOps
 import me.rerere.fawntavern.domain.GenerationController
@@ -52,9 +46,6 @@ import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.domain.PromptLog
 import me.rerere.fawntavern.extension.BuiltinExtensions
 import me.rerere.fawntavern.extension.ExtensionStore
-import me.rerere.fawntavern.extension.GenerationContext
-import me.rerere.fawntavern.extension.GenerationLifecycle
-import me.rerere.fawntavern.extension.HostServices
 import me.rerere.fawntavern.extension.QuickReply
 import me.rerere.fawntavern.extension.QuickReplyProvider
 
@@ -175,7 +166,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             stopCurrent = generation::stop,
             onRunningChanged = { generating = it },
             onFailure = { error ->
-                Log.e(CHAT_VIEW_MODEL_TAG, "生成任务失败", error)
+                SafeLog.error(CHAT_VIEW_MODEL_TAG, "generation_failed", error)
                 sendError = ctx.getString(R.string.chat_generation_failed_fmt, error.message.orEmpty())
             },
         )
@@ -187,31 +178,20 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val sessionCoordinator by lazy {
         ChatSessionCoordinator(AndroidChatSessionDataSource(ctx))
     }
-    private val searchTool by lazy { ChatSearchTool(ctx) }
-    private val titleGenerator by lazy { ChatTitleGenerator(ctx) }
-    private val promptAssembler by lazy { ChatPromptAssembler(ctx) }
+    private val generationRunner by lazy { ChatGenerationRunner(ctx, generation) }
+    private val postGenerationCoordinator by lazy {
+        ChatPostGenerationCoordinator(ctx, viewModelScope)
+    }
 
     /**
      * 当前会话消息的分页流（Paging 3）。随 [session] 的 id 切换：初始加载偏移定位到最后一页，
      * 天然停在底部；后续任何 DB 写入由 Room 使数据源失效自动重刷。未落盘的新会话（仅开场白）
      * 分页为空，UI 回退到 [session] 内存消息显示开场白。
      */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val pagedMessages: Flow<PagingData<ChatMessage>> =
-        snapshotFlow { session?.id }
-            .flatMapLatest { id ->
-                if (id == null) flowOf(PagingData.empty())
-                else flow {
-                    // 切会话瞬间先发一个空页：清掉 collectAsLazyPagingItems 里残留的上个会话快照，
-                    // 让 UI 立刻回退到新会话的内存消息（避免旧会话消息在新标题下闪现），随后加载真实分页
-                    emit(PagingData.empty())
-                    val count = ChatRepository.messageCount(ctx, id)
-                    // 让最新一页先加载：初始偏移取 count-pageSize（pageSize=60），不足一页则从头
-                    val initialKey = (count - 60).takeIf { it > 0 }
-                    emitAll(ChatRepository.messagesPaged(ctx, id, initialKey))
-                }
-            }
-            .cachedIn(viewModelScope)
+    val pagedMessages: Flow<PagingData<ChatMessage>> = chatPagingSource(
+        context = ctx,
+        sessionIds = snapshotFlow { session?.id },
+    ).cachedIn(viewModelScope)
 
     init {
         // 登记内置官方扩展（幂等）
@@ -520,7 +500,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // 已落盘会话只插新用户消息；未落盘的新会话整存一次（含开场白）
             if (existing != null) ChatRepository.putMessage(ctx, base.id, userMsg)
             else ChatRepository.save(ctx, base)
-            runGeneration(base.id, prov, modelId, GenMode.SEND, null)
+            runGeneration(base.id, prov, modelId, ChatGenerationMode.SEND, null)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -531,7 +511,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         else ChatRepository.save(ctx, before)
                     }.onFailure { rollbackError ->
                         error.addSuppressed(rollbackError)
-                        Log.e(CHAT_VIEW_MODEL_TAG, "发送失败后的会话回滚失败", rollbackError)
+                        SafeLog.error(CHAT_VIEW_MODEL_TAG, "send_rollback_failed", rollbackError)
                     }.isSuccess
                     if (rollbackSucceeded) {
                         if (session?.id == before.id) session = before
@@ -550,7 +530,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             }
                             .onFailure { refreshError ->
                                 error.addSuppressed(refreshError)
-                                Log.e(CHAT_VIEW_MODEL_TAG, "回滚失败后刷新会话也失败", refreshError)
+                                SafeLog.error(CHAT_VIEW_MODEL_TAG, "send_rollback_refresh_failed", refreshError)
                             }
                         sendError = ctx.getString(
                             R.string.chat_send_rollback_failed_fmt,
@@ -562,7 +542,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     restoreDraftAfterFailedSend(text, atts)
                     sendError = ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty())
                 }
-                Log.e(CHAT_VIEW_MODEL_TAG, "发送消息失败", error)
+                SafeLog.error(CHAT_VIEW_MODEL_TAG, "send_message_failed", error)
             }
         }
         return SendOutcome.STARTED
@@ -683,7 +663,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (idx < 0 || s.messages[idx].role != "assistant") return SendOutcome.SKIPPED
         if (s.messages.take(idx).none { it.role == "user" }) return SendOutcome.SKIPPED  // 开场白不可重答
         val (prov, modelId) = currentProviderAndModel() ?: return SendOutcome.NO_MODEL
-        startGenerate(s.id, prov, modelId, GenMode.REGEN, ts)
+        startGenerate(s.id, prov, modelId, ChatGenerationMode.REGENERATE, ts)
         return SendOutcome.STARTED
     }
 
@@ -701,14 +681,18 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // 没有分支点可挂下文，直接截断到该用户消息后再生成（截断需先于生成完成，故同一协程内顺序执行）
         generationCoordinator.launch {
             ChatRepository.truncateAfter(ctx, s.id, ts)
-            runGeneration(s.id, prov, modelId, GenMode.SEND, null)
+            runGeneration(s.id, prov, modelId, ChatGenerationMode.SEND, null)
         }
         return SendOutcome.STARTED
     }
 
-    private enum class GenMode { SEND, REGEN }
-
-    private fun startGenerate(sessionId: String, prov: ApiProvider, modelId: String, mode: GenMode, targetTs: Long?) {
+    private fun startGenerate(
+        sessionId: String,
+        prov: ApiProvider,
+        modelId: String,
+        mode: ChatGenerationMode,
+        targetTs: Long?,
+    ) {
         generationCoordinator.launch {
             runGeneration(sessionId, prov, modelId, mode, targetTs)
         }
@@ -719,153 +703,60 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * REGEN 在 [targetTs] 上开新版本），流式内容走 overlay（不落盘空行），收尾只写一次最终消息。
      */
     private suspend fun runGeneration(
-        sessionId: String, prov: ApiProvider, modelId: String, mode: GenMode, targetTs: Long?,
+        sessionId: String,
+        prov: ApiProvider,
+        modelId: String,
+        mode: ChatGenerationMode,
+        targetTs: Long?,
     ) {
-        // 以 DB 最新态为准，避免异步变更后的陈旧内存态导致复活已删消息 / 覆盖已切分支
-        val base = ChatRepository.get(ctx, sessionId) ?: return
-        val genMessage: ChatMessage
-        val buildHistory: List<ChatMessage>
-        val promptHistory: List<ChatMessage>
-        val updateTimed: Boolean
-        if (mode == GenMode.REGEN) {
-            val idx = base.messages.indexOfFirst { it.ts == targetTs }
-            if (idx < 0 || base.messages[idx].role != "assistant") return
-            if (base.messages.take(idx).none { it.role == "user" }) return
-            genMessage = ConversationOps.startVariantOne(base.messages[idx], modelId)
-            // 重答中间消息时世界书扫描只看该消息及之前的历史，与旧行为（截断后扫描）一致
-            buildHistory = base.messages.subList(0, idx + 1)
-            promptHistory = base.messages.subList(0, idx)
-            updateTimed = false  // 重答历史消息不回写定时状态，避免污染 sticky/cooldown 窗口
-        } else {
-            genMessage = ChatMessage(role = "assistant", model = modelId, ts = ConversationOps.nextTs(base))
-            buildHistory = base.messages
-            promptHistory = base.messages
-            updateTimed = true
-        }
-        session = base
-        genTargetTs = genMessage.ts
-        // 目标消息只进 overlay、不落盘空行：进程被杀不会残留空 assistant 行，也不需起始那次写库
-        // （generating 已由调用方在挂起点之前同步置位，此处不再重复设置）
-        overlays = overlays + (genMessage.ts to genMessage)
-        // 联网搜索：开关开启时注册 search_web 函数工具，由模型思考后自行决定是否搜索、
-        // 用什么关键词、搜几次（不再拿用户原话直搜）；模型内置搜索开启时不下发
-        //（结果重复，且 Gemini 不允许内置搜索与函数工具并存）。搜索过程以时间线步骤
-        // 展示（searching 状态只进 overlay），结果引用随消息落盘；失败回传错误给模型自行处理
-        var msgForGen = if (mode == GenMode.REGEN) genMessage.copy(searches = emptyList()) else genMessage
-        // 重答清掉旧引用后立即刷 overlay，避免生成期间残留上一版的引用胶囊
-        if (mode == GenMode.REGEN) overlays = overlays + (genMessage.ts to msgForGen)
-        // 内置搜索开启时只走模型侧搜索，App 不再注入外部搜索结果，避免两种搜索同时执行；
-        // 仅开启 URL 上下文不影响 App 网络搜索（与搜索面板的显隐逻辑保持一致）。
-        val builtInSearchOn = prov.model(modelId)?.tools?.contains(BuiltInTool.SEARCH) == true
-        val webSearchOn = searchEnabled && !builtInSearchOn
-        val commitVariables = mode == GenMode.SEND
-        val assembledPrompt = promptAssembler.assemble(ChatPromptAssembler.Request(
-            session = base,
-            card = currentCard,
-            userName = userName,
-            worldBooks = activeWorldBooks,
-            preset = activePreset,
-            promptRegex = (currentCard?.regexScripts ?: emptyList()) + presetRegex,
-            buildHistory = buildHistory,
-            promptHistory = promptHistory,
-            trimSummarizedHistory = mode == GenMode.SEND,
-            updateTimed = updateTimed,
-            reasoning = reasoning,
-            modelId = modelId,
-            generationMessage = genMessage,
-            commitVariables = commitVariables,
-        ))
-        val built = assembledPrompt.built
-        val apiMessages = assembledPrompt.apiMessages
-        val variableState = assembledPrompt.variableState
-        val localChanged = commitVariables && variableState.localChanged()
-        val globalChanged = commitVariables && variableState.globalChanged()
-        var localVariablesCommitted = false
-        var globalVariablesCommitted = false
-        try {
-            if (localChanged) {
-                ChatRepository.saveLocalVariables(ctx, sessionId, variableState.localVariables())
-                localVariablesCommitted = true
-            }
-            if (globalChanged) {
-                withContext(Dispatchers.IO) {
-                    GlobalVariableStore.set(ctx, variableState.globalVariables())
-                }
-                globalVariablesCommitted = true
-            }
-            if (localChanged && session?.id == sessionId) {
-                session = session?.copy(localVariables = variableState.localVariables())
-            }
-            val finalMsg = generation.run(
-                apiMessages = apiMessages,
-                genMessage = msgForGen,
+        val result = generationRunner.run(
+            request = ChatGenerationRunner.Request(
+                sessionId = sessionId,
                 provider = prov,
                 modelId = modelId,
-                built = built,
-                streaming = currentCard?.streaming ?: true,
-                tools = if (webSearchOn) listOf(searchTool.spec()) else emptyList(),
-                toolExecutor = if (webSearchOn) searchTool.executor() else null,
-                errorText = { e -> ctx.getString(R.string.chat_error_fmt, e.message ?: "") },
-                onUpdate = { overlays = overlays + (it.ts to it) },
-            )
-            // 最终消息与世界书定时状态在一个 Room 事务内提交。
-            ChatRepository.commitGeneration(ctx, sessionId, finalMsg, built.timedWi)
-            overlays = overlays + (finalMsg.ts to finalMsg)
-            ChatRepository.get(ctx, sessionId)?.let { done ->
-                if (session?.id == sessionId) session = done
-                runExtensionLifecycle(done)
-                maybeGenerateTitle(done)
-            }
-        } catch (error: Exception) {
-            if (localVariablesCommitted) runCatching {
-                ChatRepository.saveLocalVariables(ctx, sessionId, base.localVariables)
-            }.onFailure { rollbackError ->
-                error.addSuppressed(rollbackError)
-                Log.w(CHAT_VIEW_MODEL_TAG, "会话变量回滚失败: $sessionId", rollbackError)
-            }
-            if (globalVariablesCommitted) withContext(Dispatchers.IO) {
-                runCatching {
-                    GlobalVariableStore.set(ctx, variableState.initialGlobalVariables())
-                }.onFailure { rollbackError ->
-                    error.addSuppressed(rollbackError)
-                    Log.w(CHAT_VIEW_MODEL_TAG, "全局变量回滚失败", rollbackError)
+                mode = mode,
+                targetTimestamp = targetTs,
+                card = currentCard,
+                userName = userName,
+                worldBooks = activeWorldBooks,
+                preset = activePreset,
+                promptRegex = (currentCard?.regexScripts ?: emptyList()) + presetRegex,
+                reasoning = reasoning,
+                searchEnabled = searchEnabled,
+            ),
+            onStarted = { base, message ->
+                session = base
+                genTargetTs = message.ts
+                overlays = overlays + (message.ts to message)
+            },
+            onLocalVariablesCommitted = { variables ->
+                if (session?.id == sessionId) {
+                    session = session?.copy(localVariables = variables)
                 }
-            }
-            throw error
+            },
+            onUpdate = { message ->
+                overlays = overlays + (message.ts to message)
+            },
+        ) ?: return
+        result.completedSession?.let { done ->
+            if (session?.id == sessionId) session = done
+            runExtensionLifecycle(done)
+            maybeGenerateTitle(done)
         }
     }
 
     /** 生成完成后跑扩展生命周期钩子（如摘要）：后台执行、失败隔离，完成后同步内存会话的扩展状态。 */
     private fun runExtensionLifecycle(done: ChatSession) {
-        viewModelScope.launch {
-            val services = HostServices(ctx, apiConfig)
-            val cName = currentCard?.name ?: done.charName
-            var ran = false
-            for (ext in ExtensionStore.enabledExtensions(ctx)) {
-                if (ext !is GenerationLifecycle) continue
-                ran = true
-                try {
-                    ext.onGenerationComplete(
-                        GenerationContext(
-                            session = done,
-                            charName = cName,
-                            userName = userName,
-                            extState = done.extState[ext.info.id] ?: "",
-                            config = ExtensionStore.getConfig(ctx, ext.info.id),
-                        ),
-                        services,
-                    )
-                } catch (error: Exception) {
-                    Log.w(CHAT_VIEW_MODEL_TAG, "扩展生成完成钩子失败: ${ext.info.id}", error)
-                }
-            }
-            // 钩子可能写入了会话级状态（如摘要）：若仍停留在同一会话，刷新内存 extState 供下次拼装取用
-            if (ran && session?.id == done.id) {
-                ChatRepository.get(ctx, done.id)?.let { fresh ->
-                    if (session?.id == done.id) session = session?.copy(extState = fresh.extState)
-                }
-            }
-        }
+        postGenerationCoordinator.runExtensions(
+            session = done,
+            apiConfig = apiConfig,
+            userName = userName,
+            characterName = currentCard?.name ?: done.charName,
+            isCurrent = { session?.id == done.id },
+            onSessionRefreshed = { fresh ->
+                if (session?.id == done.id) session = session?.copy(extState = fresh.extState)
+            },
+        )
     }
 
     /**
@@ -878,24 +769,20 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun generateTitle(session: ChatSession, force: Boolean) {
-        viewModelScope.launch {
-            try {
-                val chatModel = displayModelSpec() ?: return@launch
-                val title = titleGenerator.generate(
-                    session = session,
-                    force = force,
-                    chatModel = chatModel,
-                    apiConfig = apiConfig,
-                    userName = userName,
-                    charName = currentCard?.name ?: session.charName,
-                ) ?: return@launch
+        val chatModel = displayModelSpec() ?: return
+        postGenerationCoordinator.generateTitle(
+            session = session,
+            force = force,
+            chatModel = chatModel,
+            apiConfig = apiConfig,
+            userName = userName,
+            characterName = currentCard?.name ?: session.charName,
+            onTitle = { title ->
                 if (session.id == this@ChatViewModel.session?.id) {
                     this@ChatViewModel.session = this@ChatViewModel.session?.copy(title = title)
                 }
-            } catch (error: Exception) {
-                Log.w(CHAT_VIEW_MODEL_TAG, "会话标题生成失败: ${session.id}", error)
-            }
-        }
+            },
+        )
     }
 
     // ── 消息操作（统一走 DB：按 ts 定位单条消息落盘，分页由 Room 自动刷新） ──
@@ -977,7 +864,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         try {
             CharacterRepository.load(ctx, file)
         } catch (error: Exception) {
-            Log.w(CHAT_VIEW_MODEL_TAG, "角色卡加载失败: $file", error)
+            SafeLog.warn(CHAT_VIEW_MODEL_TAG, "character_card_load_failed", error)
             null
         }
     }
@@ -988,7 +875,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         try {
             BitmapFactory.decodeFile(f.absolutePath)
         } catch (error: Exception) {
-            Log.w(CHAT_VIEW_MODEL_TAG, "角色图片加载失败: $file", error)
+            SafeLog.warn(CHAT_VIEW_MODEL_TAG, "character_image_load_failed", error)
             null
         }
     }
