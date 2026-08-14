@@ -38,13 +38,10 @@ import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
-import me.rerere.fawntavern.data.search.SearchServiceOptions
-import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.data.speech.TtsUiState
 import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.data.settings.UserAvatarStore
 import me.rerere.fawntavern.data.settings.PromptLogStore
-import me.rerere.fawntavern.data.settings.PreferencesStore
 import me.rerere.fawntavern.data.settings.CharacterModelStore
 import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.data.settings.GlobalVariableStore
@@ -85,6 +82,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── 状态（写入只经由本类方法） ──
     var apiConfig by mutableStateOf(ApiConfigStore.loadConfig(app)); private set
+    private val uiSettingsController = ChatUiSettingsController(AndroidChatUiSettingsDataSource(app))
+    var uiSettings by mutableStateOf(uiSettingsController.load()); private set
     /** 当前模型的思考预算档位（按模型记忆，随选模型切换）；AUTO = 不下发任何思考字段 */
     var reasoning by mutableStateOf(ThinkingStore.get(app, apiConfig.currentModel)); private set
     var sessions by mutableStateOf<List<ChatSession>>(emptyList()); private set
@@ -125,12 +124,17 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 启用的快捷回复（UI 插槽扩展提供），随扩展配置刷新 */
     var quickReplies by mutableStateOf<List<QuickReply>>(emptyList()); private set
 
-    /** 联网搜索开关（开启后发送时注入搜索结果） */
-    var searchEnabled by mutableStateOf(SearchStore.isEnabled(app)); private set
-    var searchProviderIndex by mutableStateOf(SearchStore.getSelectedIndex(app)); private set
-    var searchServices by mutableStateOf<List<SearchServiceOptions>>(SearchStore.getServices(app)); private set
+    private val webSearchSettingsController =
+        ChatWebSearchSettingsController(AndroidChatWebSearchSettingsDataSource(app))
+    private var webSearchSettings by mutableStateOf(webSearchSettingsController.load())
+    val searchEnabled: Boolean
+        get() = webSearchSettings.enabled
+    val searchProviderIndex: Int
+        get() = webSearchSettings.selectedIndex
+    val searchServices
+        get() = webSearchSettings.services
     val searchProviderName: String
-        get() = searchServices.getOrNull(searchProviderIndex)?.displayName.orEmpty()
+        get() = webSearchSettings.providerName
     val builtInSearchAvailable: Boolean
         get() {
             modelRevision
@@ -221,7 +225,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 sessions = it
                 if (session == null) {
                     // 应用启动时新建对话：每次启动都从空白对话开始（内存态，发首条消息才落盘）
-                    session = if (PreferencesStore.get(ctx).newChatOnLaunch) {
+                    session = if (uiSettings.newChatOnLaunch) {
                         val card = loadCard(defaultName)
                         ConversationOps.newSession(card, defaultName, defaultName)
                     } else it.firstOrNull()?.let { summary -> ChatRepository.get(ctx, summary.id) }
@@ -274,6 +278,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         apiConfig = ApiConfigStore.loadConfig(ctx)
         // displayModelSpec 负责角色记忆 > ROLE_CHAT > apiConfig.currentModel 的完整回退
         reasoning = ThinkingStore.get(ctx, displayModelSpec() ?: apiConfig.currentModel)
+    }
+
+    /** 从偏好或字号页面返回时刷新聊天页使用的设置快照。 */
+    fun reloadUiSettings() {
+        uiSettings = uiSettingsController.load()
     }
 
     fun selectModel(providerId: String, modelId: String) {
@@ -393,7 +402,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun openCharacter(fileName: String, displayName: String) {
         if (generating) return
         viewModelScope.launch {
-            if (!PreferencesStore.get(ctx).newChatOnCharSwitch) {
+            if (!uiSettings.newChatOnCharSwitch) {
                 val existing = sessions.firstOrNull { it.charFile == fileName }
                 if (existing != null) {
                     session = sessionCoordinator.open(existing.id) ?: existing
@@ -413,7 +422,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 id = id,
                 currentSession = session,
                 currentCard = currentCard,
-                newChatOnDeleteTopic = PreferencesStore.get(ctx).newChatOnDeleteTopic,
+                newChatOnDeleteTopic = uiSettings.newChatOnDeleteTopic,
             )
             if (session?.id == id) session = replacement
         }
@@ -553,8 +562,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 切换联网搜索开关（持久化，面板开关据此点亮/熄灭） */
     fun toggleSearch() {
-        searchEnabled = !searchEnabled
-        SearchStore.setEnabled(ctx, searchEnabled)
+        webSearchSettings = webSearchSettingsController.toggle(webSearchSettings)
     }
 
     fun toggleBuiltInSearch() {
@@ -578,14 +586,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 选择搜索服务商（面板卡片点击，按下标） */
     fun selectSearchProvider(index: Int) {
-        SearchStore.setSelectedIndex(ctx, index)
-        searchProviderIndex = index.coerceIn(0, searchServices.lastIndex.coerceAtLeast(0))
+        webSearchSettings = webSearchSettingsController.select(webSearchSettings, index)
     }
 
     fun reloadSearchConfig() {
-        searchServices = SearchStore.getServices(ctx)
-        searchProviderIndex = SearchStore.getSelectedIndex(ctx)
-        searchEnabled = SearchStore.isEnabled(ctx)
+        webSearchSettings = webSearchSettingsController.load()
     }
 
     /** 朗读/停止朗读指定 AI 消息：同一消息再次点击即停止，换消息则打断旧朗读 */
@@ -743,7 +748,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // 内置搜索开启时只走模型侧搜索，App 不再注入外部搜索结果，避免两种搜索同时执行；
         // 仅开启 URL 上下文不影响 App 网络搜索（与搜索面板的显隐逻辑保持一致）。
         val builtInSearchOn = prov.model(modelId)?.tools?.contains(BuiltInTool.SEARCH) == true
-        val webSearchOn = SearchStore.isEnabled(ctx) && !builtInSearchOn
+        val webSearchOn = searchEnabled && !builtInSearchOn
         val variableState = MacroVariableState(
             localVariables = base.localVariables,
             globalVariables = GlobalVariableStore.get(ctx),

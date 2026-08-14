@@ -34,7 +34,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,9 +60,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.chat.ChatMessage
-import me.rerere.fawntavern.data.settings.FontSizeStore
 import me.rerere.fawntavern.data.settings.NavButtonsMode
-import me.rerere.fawntavern.data.settings.PreferencesStore
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.ui.api.ApiConfigScreen
@@ -216,7 +213,6 @@ fun ChatScreen(
     // SaveableStateProvider 包裹每个分支：从 Settings 进入 Characters 再返回时，
     // Settings 的 ScrollState 被暂存→恢复；否则 Settings 离开组合后重建，滚动回到顶部。
     val screenStateHolder = rememberSaveableStateHolder()
-    var fontScale by remember { mutableFloatStateOf(FontSizeStore.getScale(ctx)) }
     when (nav.lastOrNull()) {
         Screen.Search -> {
             screenStateHolder.SaveableStateProvider("Search") {
@@ -237,9 +233,9 @@ fun ChatScreen(
                 FontSizeScreen(
                     onBack = {
                         navBack()
-                        fontScale = FontSizeStore.getScale(ctx)
+                        vm.reloadUiSettings()
                     },
-                    currentScale = fontScale,
+                    currentScale = vm.uiSettings.fontScale,
                 )
             }
             return
@@ -247,7 +243,10 @@ fun ChatScreen(
         Screen.Preferences -> {
             screenStateHolder.SaveableStateProvider("Preferences") {
                 PreferencesScreen(
-                    onBack = ::navBack,
+                    onBack = {
+                        navBack()
+                        vm.reloadUiSettings()
+                    },
                     solidBackground = solidBackground,
                     onSolidBackgroundChange = onSolidBackgroundChange,
                 )
@@ -376,9 +375,9 @@ fun ChatScreen(
     val displayModelId = displaySpec?.substringAfter("::", "") ?: ""
     val displayProv = if (displaySpec != null) vm.apiConfig.providers.find { it.id == displayProvId && it.enabled } else null
 
-    // 偏好设置（聊天项显示 / 渲染 / 行为 / 触觉）：每次重组读取，从设置页返回即生效。
-    // 不加 remember —— 否则返回聊天时读到的是旧值
-    val prefs = PreferencesStore.get(ctx)
+    // 偏好和字号由 ViewModel 提供；设置页返回时统一刷新快照。
+    val prefs = vm.uiSettings
+    val fontScale = prefs.fontScale
     val renderPrefs = RenderPrefs(
         markdown = prefs.characterMarkdown,
         math = prefs.mathRendering,
