@@ -54,11 +54,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
-import java.io.File
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
@@ -66,7 +64,6 @@ import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.settings.FontSizeStore
 import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.PreferencesStore
-import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.ui.api.ApiConfigScreen
@@ -110,7 +107,7 @@ fun ChatScreen(
     var showReasoningPicker by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var showCharPicker by rememberSaveable { mutableStateOf(false) }
-    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
+    var cameraImageUri by rememberSaveable { mutableStateOf<String?>(null) }
     // ── 消息操作弹窗状态（按消息 ts 定位，与分页/内存窗口无关） ──
     var menuTargetIdx by rememberSaveable { mutableStateOf<Long?>(null) }
     /** 全屏底部面板内容（消息全文/输入框全文共用），非 null 时显示 */
@@ -125,6 +122,7 @@ fun ChatScreen(
     var pendingDeleteAllVersions by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val ctx = LocalContext.current
+    val mediaInput = remember(ctx) { ChatMediaInput(ctx) }
     val resources = LocalResources.current
     val clipboard = LocalClipboard.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -163,10 +161,14 @@ fun ChatScreen(
         uris.forEach { uri -> vm.attachments = vm.attachments + Attachment(uri, isImage = true) }
     }
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        uris.forEach { uri -> vm.attachments = vm.attachments + Attachment(uri, isImage = isImageUri(ctx, uri)) }
+        uris.forEach { uri -> vm.attachments = vm.attachments + Attachment(uri, isImage = mediaInput.isImage(uri)) }
     }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        if (ok) cameraImageUri?.let { vm.attachments = vm.attachments + Attachment(it, isImage = true) }
+        cameraImageUri?.let(Uri::parse)?.let { uri ->
+            if (ok) vm.attachments = vm.attachments + Attachment(uri, isImage = true)
+            else mediaInput.discardCameraFile(uri)
+        }
+        cameraImageUri = null
     }
 
     // 抽屉里可能改了用户名/头像，关抽屉时刷新
@@ -352,7 +354,10 @@ fun ChatScreen(
         }
         Screen.WebSearch -> {
             screenStateHolder.SaveableStateProvider("WebSearch") {
-                WebSearchConfigScreen(onBack = ::navBack)
+                WebSearchConfigScreen(onBack = {
+                    navBack()
+                    vm.reloadSearchConfig()
+                })
             }
             return
         }
@@ -461,7 +466,7 @@ fun ChatScreen(
                         reasoning = vm.reasoning,
                         generating = vm.generating,
                         searchEnabled = vm.searchEnabled,
-                        searchProvider = SearchStore.getSelected(ctx).displayName,
+                        searchProvider = vm.searchProviderName,
                         builtInSearchEnabled = vm.builtInSearchEnabled,
                         onStop = { vm.stopGenerate() },
                         onSend = {
@@ -475,10 +480,8 @@ fun ChatScreen(
                         onSelectReasoning = { showReasoningPicker = true },
                         onOpenSearch = { showSearch = true },
                         onCamera = {
-                            val photoFile = File(ctx.cacheDir, "photos/photo_${System.currentTimeMillis()}.jpg")
-                            photoFile.parentFile?.mkdirs()
-                            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", photoFile)
-                            cameraImageUri = uri
+                            val uri = mediaInput.createCameraUri()
+                            cameraImageUri = uri.toString()
                             cameraLauncher.launch(uri)
                         },
                         onGallery = { galleryLauncher.launch("image/*") },
@@ -502,29 +505,22 @@ fun ChatScreen(
                 val usePaging = lazyMessages.itemCount > 0
                 val pagedBase: List<ChatMessage> = lazyMessages.itemSnapshotList.items
                     .ifEmpty { vm.session?.messages ?: emptyList() }
-                val msgs: List<ChatMessage> = if (overlays.isEmpty()) pagedBase else {
-                    val substituted = pagedBase.map { overlays[it.ts] ?: it }
-                    // overlay 里分页尚未纳入的行（刚开始生成、还没落盘的新 assistant，其 ts 最大）按序追加到末尾。
-                    // 仅当已加载窗口"确实稳定地"未抵达底部时才不追加（长会话滚上去、refresh 收窗到上方锚点）——
-                    // 此时该消息在视口下方之外，不该错插进当前窗口尾部。
-                    // 但 refresh/append 加载中属过渡态：append.endOfPaginationReached 会被临时重置为 false，
-                    // 若此时也判定"非底部"，生成完成那次写库触发的 refresh 会让刚完成的消息瞬间闪掉再回来。
-                    // 故加载中一律按抵达底部处理，保持追加。
-                    val append = lazyMessages.loadState.append
-                    val windowAtBottom = !usePaging || append.endOfPaginationReached ||
-                        append is LoadState.Loading || lazyMessages.loadState.refresh is LoadState.Loading
-                    val extra = if (!windowAtBottom) emptyList()
-                        else overlays.values.filter { ov -> pagedBase.none { it.ts == ov.ts } }.sortedBy { it.ts }
-                    substituted + extra
-                }
+                // 加载中视为已抵达底部：append 的 endOfPaginationReached 会在 refresh 时暂时重置，
+                // 此时若隐藏新 overlay，刚完成的消息会闪掉一帧再回来。
+                val append = lazyMessages.loadState.append
+                val allowOverlayAppend = !usePaging || append.endOfPaginationReached ||
+                    append is LoadState.Loading || lazyMessages.loadState.refresh is LoadState.Loading
+                val msgs = mergeMessageWindow(pagedBase, overlays, allowOverlayAppend)
                 // rememberUpdatedState：快照 Flow 的 collect lambda 里引用 msgs，需要始终读到最新值
                 val msgsNow by rememberUpdatedState(msgs)
                 // overlay 收敛：分页已把该 ts 的最终内容补齐、且该行不在生成中时撤下 overlay
                 //（避免"异步写库→分页刷新"时间差造成的空帧/陈旧内容闪烁）
-                val settledOverlayTs = overlays.values.filter { ov ->
-                    !(vm.generating && ov.ts == genTs) &&
-                        pagedBase.any { it.ts == ov.ts && it.content == ov.content && it.reasoning == ov.reasoning }
-                }.map { it.ts }
+                val settledOverlayTs = settledOverlayTimestamps(
+                    base = pagedBase,
+                    overlays = overlays,
+                    generating = vm.generating,
+                    generationTargetTs = genTs,
+                )
                 LaunchedEffect(settledOverlayTs) { settledOverlayTs.forEach { vm.clearOverlay(it) } }
 
                 // ── 滚动状态机的外部输入 ──
@@ -874,7 +870,7 @@ fun ChatScreen(
 
     // ── 联网搜索面板 ──
     if (showSearch) {
-        val searchServices = SearchStore.getServices(ctx)
+        val searchServices = vm.searchServices
         SearchPickerSheet(
             searchEnabled = vm.searchEnabled,
             builtInSearchAvailable = vm.builtInSearchAvailable,
@@ -896,15 +892,5 @@ fun ChatScreen(
 
 /** 全屏底部面板的内容（消息全文 / 输入框全文共用同一面板）；editable = 输入框展开，正文可直接编辑 */
 private data class CopyPanel(val title: String, val text: String, val editable: Boolean = false)
-
-/** "文件"入口选到图片时按图片展示：优先看 MIME，部分提供方不给 MIME 时按扩展名兜底 */
-private val IMAGE_FILE_EXTENSIONS = listOf(".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic", ".heif", ".avif")
-
-private fun isImageUri(context: android.content.Context, uri: Uri): Boolean {
-    val mime = context.contentResolver.getType(uri)
-    if (mime != null) return mime.startsWith("image/")
-    val name = uri.lastPathSegment?.substringAfterLast('/') ?: return false
-    return IMAGE_FILE_EXTENSIONS.any { name.endsWith(it, ignoreCase = true) }
-}
 
 /** 状态栏高度（px），用于把悬浮窗初始位置放到顶栏之下 */

@@ -38,6 +38,7 @@ import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
+import me.rerere.fawntavern.data.search.SearchServiceOptions
 import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.data.speech.TtsUiState
 import me.rerere.fawntavern.data.settings.UserProfileStore
@@ -127,6 +128,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 联网搜索开关（开启后发送时注入搜索结果） */
     var searchEnabled by mutableStateOf(SearchStore.isEnabled(app)); private set
     var searchProviderIndex by mutableStateOf(SearchStore.getSelectedIndex(app)); private set
+    var searchServices by mutableStateOf<List<SearchServiceOptions>>(SearchStore.getServices(app)); private set
+    val searchProviderName: String
+        get() = searchServices.getOrNull(searchProviderIndex)?.displayName.orEmpty()
     val builtInSearchAvailable: Boolean
         get() {
             modelRevision
@@ -575,7 +579,13 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 选择搜索服务商（面板卡片点击，按下标） */
     fun selectSearchProvider(index: Int) {
         SearchStore.setSelectedIndex(ctx, index)
-        searchProviderIndex = index
+        searchProviderIndex = index.coerceIn(0, searchServices.lastIndex.coerceAtLeast(0))
+    }
+
+    fun reloadSearchConfig() {
+        searchServices = SearchStore.getServices(ctx)
+        searchProviderIndex = SearchStore.getSelectedIndex(ctx)
+        searchEnabled = SearchStore.isEnabled(ctx)
     }
 
     /** 朗读/停止朗读指定 AI 消息：同一消息再次点击即停止，换消息则打断旧朗读 */
