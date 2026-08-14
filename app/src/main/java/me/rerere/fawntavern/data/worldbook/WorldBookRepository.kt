@@ -3,6 +3,8 @@ package me.rerere.fawntavern.data.worldbook
 import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.JsonFileDir
 import org.json.JSONArray
@@ -12,6 +14,7 @@ import java.io.File
 object WorldBookRepository {
 
     private const val WORLD_DIR = "worldbooks"
+    private val writeMutex = Mutex()
 
     fun worldDir(context: Context): File = JsonFileDir.dir(context, WORLD_DIR)
 
@@ -28,11 +31,16 @@ object WorldBookRepository {
         val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
             ?: throw IllegalStateException("无法读取文件")
         val json = JSONObject(text)
-        val name = JsonFileDir.queryDisplayName(context, uri)
+        val fallback = "worldbook_${System.currentTimeMillis()}"
+        val requestedName = JsonFileDir.queryDisplayName(context, uri)
             ?.removeSuffix(".json")?.takeIf { it.isNotBlank() }
             ?: json.optString("name", "").takeIf { it.isNotBlank() }
-            ?: "worldbook_${System.currentTimeMillis()}"
-        JsonFileDir.file(context, WORLD_DIR, name).writeText(text)
+            ?: fallback
+        val name = writeMutex.withLock {
+            JsonFileDir.uniqueName(context, WORLD_DIR, requestedName, fallback).also {
+                JsonFileDir.atomicWriteText(JsonFileDir.file(context, WORLD_DIR, it), text)
+            }
+        }
         WorldBookParser.parse(json, name)
     }
 
@@ -45,8 +53,9 @@ object WorldBookRepository {
 
     /** 保存条目（就地 patch 原文件条目，只覆盖编辑过的键，保留 ST 私有/扩展字段）。 */
     suspend fun saveEntries(context: Context, name: String, entries: List<WorldBookEntry>) = withContext(Dispatchers.IO) {
+        writeMutex.withLock {
         val file = JsonFileDir.file(context, WORLD_DIR, name)
-        if (!file.exists()) return@withContext
+        require(file.isFile) { "世界书不存在: $name" }
         val json = JSONObject(file.readText())
         val entriesObj = json.optJSONObject("entries") ?: JSONObject()
         entries.forEach { entry ->
@@ -99,7 +108,8 @@ object WorldBookRepository {
             if (k !in keepIds && uid !in keepIds) entriesObj.remove(k)
         }
         json.put("entries", entriesObj)
-        file.writeText(json.toString(2))
+        JsonFileDir.atomicWriteText(file, json.toString(2))
+        }
     }
 
     /** 清空所有世界书 */

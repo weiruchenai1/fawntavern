@@ -106,9 +106,21 @@ object ChatRepository {
 
     /** 写入/覆盖单条消息（生成起止、重答开新版本等），并回填会话 updatedAt */
     suspend fun putMessage(context: Context, sessionId: String, msg: ChatMessage) {
-        val d = dao(context)
-        d.upsertMessage(msg.toEntity(sessionId))
-        d.touchSession(sessionId, System.currentTimeMillis())
+        dao(context).upsertMessageAndTouch(msg.toEntity(sessionId), System.currentTimeMillis())
+    }
+
+    /** Commit the final assistant message and its world-info timer state in one Room transaction. */
+    suspend fun commitGeneration(
+        context: Context,
+        sessionId: String,
+        msg: ChatMessage,
+        timedWi: Map<String, Int>,
+    ) {
+        dao(context).commitGeneration(
+            message = msg.toEntity(sessionId),
+            timedWiJson = if (timedWi.isEmpty()) "" else json.encodeToString(timedWi),
+            updatedAt = System.currentTimeMillis(),
+        )
     }
 
     /** 左右切换单条消息版本（DB 落盘）：实际发生切换返回 true */

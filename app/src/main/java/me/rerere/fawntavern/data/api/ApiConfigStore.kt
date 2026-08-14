@@ -148,6 +148,17 @@ object ApiConfigStore {
             .apply()
     }
 
+    internal fun saveConfigSync(context: Context, config: ApiConfig) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        SecurePreferences.putStringSync(context, prefs, KEY_PROVIDERS, providersToJson(config.providers).toString())
+        check(
+            prefs.edit()
+                .putString(KEY_CURRENT, config.currentModel)
+                .putBoolean(KEY_CORRUPTED, false)
+                .commit()
+        ) { "Unable to persist API configuration" }
+    }
+
     internal fun exportPortable(context: Context): String {
         val config = loadConfig(context)
         return JSONObject()

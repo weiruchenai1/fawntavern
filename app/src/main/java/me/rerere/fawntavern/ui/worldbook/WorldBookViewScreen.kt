@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.ui.worldbook
 
 import androidx.activity.compose.BackHandler
+import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -48,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -104,16 +106,51 @@ private enum class WiStatus { CONSTANT, KEYWORD, VECTORIZED }
 @Composable
 fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val controller = remember(context) { WorldBookDataController(context) }
+    val saveCoordinator = remember(book.name, controller) {
+        WorldBookSaveCoordinator { entries -> controller.saveEntries(book.name, entries) }
+    }
     var expandedId by remember { mutableStateOf<Int?>(null) }
     var editingEntry by remember { mutableStateOf<WorldBookEntry?>(null) }
     var deletingEntry by remember { mutableStateOf<WorldBookEntry?>(null) }
     // 按文件/解析顺序展示（= ST 的 display_index 顺序）；insertion_order 是注入顺序，不用于列表排序
     var entries by remember { mutableStateOf(book.entries.values.toList()) }
+    var leaving by remember { mutableStateOf(false) }
 
     fun saveBook() {
-        scope.launch { controller.saveEntries(book.name, entries) }
+        val request = saveCoordinator.request(entries)
+        scope.launch {
+            try {
+                saveCoordinator.saveLatest(request)
+            } catch (error: Exception) {
+                Toast.makeText(
+                    context,
+                    resources.getString(R.string.worldbook_save_failed_fmt, error.message.orEmpty()),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+
+    fun leaveAfterSave() {
+        if (leaving) return
+        leaving = true
+        val request = saveCoordinator.request(entries)
+        scope.launch {
+            try {
+                saveCoordinator.saveLatest(request)
+                onBack()
+            } catch (error: Exception) {
+                leaving = false
+                Toast.makeText(
+                    context,
+                    resources.getString(R.string.worldbook_save_failed_fmt, error.message.orEmpty()),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
     }
 
     editingEntry?.let { entry ->
@@ -144,12 +181,12 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
         )
     }
 
-    BackHandler(onBack = onBack)
+    BackHandler(onBack = { leaveAfterSave() })
 
     Scaffold(
         modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(book.name, onBack) }
+        topBar = { AppTopBar(title = book.name, onBack = { leaveAfterSave() }) }
     ) { padding ->
         if (entries.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {

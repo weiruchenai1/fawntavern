@@ -20,8 +20,10 @@
     <string name="clear">清除</string>
     <string name="retry">重试</string>
     <string name="preset_save_failed_fmt">预设保存失败，编辑内容仍保留：%1$s</string>
+    <string name="worldbook_save_failed_fmt">世界书保存失败，编辑内容仍保留：%1$s</string>
     <string name="prompt_context_load_failed_fmt">部分 Prompt 上下文加载失败：%1$s</string>
     <string name="list_load_failed_fmt">列表加载失败：%1$s</string>
+    <string name="delete_failed_fmt">删除失败：%1$s</string>
     <string name="item_load_failed">条目加载失败</string>
 
     <!-- Settings -->
@@ -191,6 +193,8 @@
     <string name="toast_import_failed_count_fmt">有 %d 个文件导入失败</string>
     <string name="file_too_large_to_send">文件过大（超过 20MB），无法发送</string>
     <string name="attachment_send_failed">附件处理失败，请重试</string>
+    <string name="chat_send_failed_fmt">发送失败，输入内容已恢复：%1$s</string>
+    <string name="chat_generation_failed_fmt">生成失败：%1$s</string>
     <string name="toast_no_export_data_fmt">没有可导出的%s</string>
     <string name="toast_rename_title">重命名</string>
     <string name="toast_rename_name_label">名称</string>

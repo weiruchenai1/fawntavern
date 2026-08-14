@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.ui.chat
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** 统一持有单个生成任务的互斥状态与生命周期。 */
@@ -8,6 +9,7 @@ internal class ChatGenerationCoordinator(
     private val scope: CoroutineScope,
     private val stopCurrent: () -> Unit,
     private val onRunningChanged: (Boolean) -> Unit,
+    private val onFailure: (Throwable) -> Unit = {},
 ) {
     var isRunning: Boolean = false
         private set
@@ -18,6 +20,10 @@ internal class ChatGenerationCoordinator(
         scope.launch {
             try {
                 block()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                onFailure(error)
             } finally {
                 setRunning(false)
             }

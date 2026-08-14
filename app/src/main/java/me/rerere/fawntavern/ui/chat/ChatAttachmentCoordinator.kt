@@ -49,4 +49,6 @@ internal class ChatAttachmentCoordinator(
         }
         return PersistedAttachments(images, files)
     }
+
+    suspend fun collectUnused() = dataSource.collectUnused()
 }

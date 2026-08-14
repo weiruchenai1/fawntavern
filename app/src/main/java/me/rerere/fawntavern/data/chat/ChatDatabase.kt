@@ -174,9 +174,21 @@ internal interface ChatDao {
     @Query("UPDATE sessions SET updatedAt = :t WHERE id = :id")
     suspend fun touchSession(id: String, t: Long)
 
+    @Transaction
+    suspend fun upsertMessageAndTouch(message: MessageEntity, updatedAt: Long) {
+        upsertMessage(message)
+        touchSession(message.sessionId, updatedAt)
+    }
+
     /** 生成收尾单独回写会话的世界书定时状态（不整会话覆盖，避免踩到分页在改的消息行） */
     @Query("UPDATE sessions SET timedWiJson = :json, updatedAt = :t WHERE id = :id")
     suspend fun updateTimedWi(id: String, json: String, t: Long)
+
+    @Transaction
+    suspend fun commitGeneration(message: MessageEntity, timedWiJson: String, updatedAt: Long) {
+        upsertMessage(message)
+        updateTimedWi(message.sessionId, timedWiJson, updatedAt)
+    }
 
     @Query("UPDATE sessions SET localVariablesJson = :json, updatedAt = :t WHERE id = :id")
     suspend fun updateLocalVariables(id: String, json: String, t: Long)
@@ -232,7 +244,7 @@ internal interface ChatDao {
     suspend fun updatePinned(id: String, pinned: Boolean)
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 9, exportSchema = false)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 9, exportSchema = true)
 internal abstract class ChatDatabase : RoomDatabase() {
 
     abstract fun dao(): ChatDao

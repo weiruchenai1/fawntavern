@@ -2,7 +2,6 @@ package me.rerere.fawntavern.ui.chat
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
@@ -34,10 +33,9 @@ class ChatGenerationCoordinatorTest {
     @Test
     fun releasesAfterFailureAndForwardsStop() = runBlocking {
         val failure = CompletableDeferred<Throwable>()
-        val handler = CoroutineExceptionHandler { _, error -> failure.complete(error) }
-        val scope = CoroutineScope(coroutineContext + Job() + handler)
+        val scope = CoroutineScope(coroutineContext + Job())
         var stopped = false
-        val coordinator = ChatGenerationCoordinator(scope, { stopped = true }, {})
+        val coordinator = ChatGenerationCoordinator(scope, { stopped = true }, {}, failure::complete)
 
         coordinator.stop()
         assertTrue(stopped)

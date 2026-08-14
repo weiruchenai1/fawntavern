@@ -38,6 +38,13 @@ object SecurePreferences {
         editor.apply()
     }
 
+    fun putStringSync(context: Context, prefs: SharedPreferences, key: String, value: String?) {
+        val editor = prefs.edit()
+        if (value == null) editor.remove(key)
+        else editor.putString(key, encrypt(context, value))
+        check(editor.commit()) { "Unable to persist secure preferences" }
+    }
+
     private fun encrypt(context: Context, value: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey(context))

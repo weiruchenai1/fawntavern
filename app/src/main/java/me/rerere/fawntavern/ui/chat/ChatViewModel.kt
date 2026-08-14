@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
@@ -173,6 +174,10 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             scope = viewModelScope,
             stopCurrent = generation::stop,
             onRunningChanged = { generating = it },
+            onFailure = { error ->
+                Log.e(CHAT_VIEW_MODEL_TAG, "生成任务失败", error)
+                sendError = ctx.getString(R.string.chat_generation_failed_fmt, error.message.orEmpty())
+            },
         )
     }
     private val messageCoordinator by lazy { ChatMessageCoordinator(ctx) }
@@ -482,18 +487,22 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         inputText = ""
         attachments = emptyList()
         generationCoordinator.launch generationTask@{
+            var originalSession: ChatSession? = null
+            var createdNewSession = false
+            try {
             // 附件先拷入自有目录（content URI 的读权限是临时的，落盘副本才能支撑历史展示与重答）。
             // 任一落盘失败（提供方不报大小、读取中途出错等）都中止发送并恢复输入与附件
             val persisted = attachmentCoordinator.persist(atts)
             if (persisted == null) {
-                inputText = text
-                attachments = atts
+                restoreDraftAfterFailedSend(text, atts)
                 sendError = ctx.getString(R.string.attachment_send_failed)
                 return@generationTask
             }
             // 以 DB 为准取当前会话（内存态可能落后于分支切换等 DB 变更）；未落盘的新会话回退内存态
             val existing = session?.id?.let { ChatRepository.get(ctx, it) }
             val src = existing ?: session ?: ChatSession()
+            originalSession = src
+            createdNewSession = existing == null
             val base = ConversationOps.appendUserMessage(
                 src,
                 text,
@@ -511,6 +520,28 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (existing != null) ChatRepository.putMessage(ctx, base.id, userMsg)
             else ChatRepository.save(ctx, base)
             runGeneration(base.id, prov, modelId, GenMode.SEND, null)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                val before = originalSession
+                if (before != null) {
+                    runCatching {
+                        if (createdNewSession) ChatRepository.delete(ctx, before.id)
+                        else ChatRepository.save(ctx, before)
+                    }.onFailure { rollbackError ->
+                        error.addSuppressed(rollbackError)
+                        Log.e(CHAT_VIEW_MODEL_TAG, "发送失败后的会话回滚失败", rollbackError)
+                    }
+                    if (session?.id == before.id) session = before
+                    val originalTimestamps = before.messages.mapTo(HashSet()) { it.ts }
+                    overlays = overlays.filterKeys { it in originalTimestamps }
+                } else {
+                    runCatching { attachmentCoordinator.collectUnused() }
+                }
+                restoreDraftAfterFailedSend(text, atts)
+                sendError = ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty())
+                Log.e(CHAT_VIEW_MODEL_TAG, "发送消息失败", error)
+            }
         }
         return SendOutcome.STARTED
     }
@@ -518,6 +549,14 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 消费附件发送失败提示：UI 弹完 Toast 后清空，避免下次重组重复弹出 */
     fun consumeSendError() {
         sendError = null
+    }
+
+    private fun restoreDraftAfterFailedSend(text: String, sentAttachments: List<Attachment>) {
+        if (text.isNotBlank()) {
+            inputText = if (inputText.isBlank()) text else "$text\n$inputText"
+        }
+        val currentUris = attachments.mapTo(HashSet()) { it.uri }
+        attachments = sentAttachments.filter { it.uri !in currentUris } + attachments
     }
 
     /** 进入编辑态：把该消息内容填入输入框，发送即更新该消息 */
@@ -717,63 +756,60 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val built = assembledPrompt.built
         val apiMessages = assembledPrompt.apiMessages
         val variableState = assembledPrompt.variableState
-        if (commitVariables) {
-            val localChanged = variableState.localChanged()
-            val globalChanged = variableState.globalChanged()
-            if (localChanged || globalChanged) {
-                try {
-                    if (localChanged) {
-                        ChatRepository.saveLocalVariables(ctx, sessionId, variableState.localVariables())
-                    }
-                    if (globalChanged) {
-                        withContext(Dispatchers.IO) {
-                            GlobalVariableStore.set(ctx, variableState.globalVariables())
-                        }
-                    }
-                } catch (error: Exception) {
-                    if (localChanged) runCatching {
-                        ChatRepository.saveLocalVariables(ctx, sessionId, base.localVariables)
-                    }.onFailure { rollbackError ->
-                        Log.w(CHAT_VIEW_MODEL_TAG, "会话变量回滚失败: $sessionId", rollbackError)
-                    }
-                    if (globalChanged) withContext(Dispatchers.IO) {
-                        runCatching {
-                            GlobalVariableStore.set(ctx, variableState.initialGlobalVariables())
-                        }.onFailure { rollbackError ->
-                            Log.w(CHAT_VIEW_MODEL_TAG, "全局变量回滚失败", rollbackError)
-                        }
-                    }
-                    throw error
+        val localChanged = commitVariables && variableState.localChanged()
+        val globalChanged = commitVariables && variableState.globalChanged()
+        var localVariablesCommitted = false
+        var globalVariablesCommitted = false
+        try {
+            if (localChanged) {
+                ChatRepository.saveLocalVariables(ctx, sessionId, variableState.localVariables())
+                localVariablesCommitted = true
+            }
+            if (globalChanged) {
+                withContext(Dispatchers.IO) {
+                    GlobalVariableStore.set(ctx, variableState.globalVariables())
                 }
+                globalVariablesCommitted = true
             }
             if (localChanged && session?.id == sessionId) {
                 session = session?.copy(localVariables = variableState.localVariables())
             }
-        }
-        val finalMsg = generation.run(
-            apiMessages = apiMessages,
-            genMessage = msgForGen,
-            provider = prov,
-            modelId = modelId,
-            built = built,
-            streaming = currentCard?.streaming ?: true,
-            tools = if (webSearchOn) listOf(searchTool.spec()) else emptyList(),
-            toolExecutor = if (webSearchOn) searchTool.executor() else null,
-            errorText = { e -> ctx.getString(R.string.chat_error_fmt, e.message ?: "") },
-            onUpdate = { overlays = overlays + (it.ts to it) },
-        )
-        // 收尾：最终消息与会话定时状态落盘。overlay 不在此清除——留着顶替显示，等分页把最终内容
-        // 补齐后由 UI（clearOverlay）撤下，避免"撤 overlay 时分页还没刷新出最终内容"的空帧
-        ChatRepository.putMessage(ctx, sessionId, finalMsg)
-        ChatRepository.saveTimedWi(ctx, sessionId, built.timedWi)
-        overlays = overlays + (finalMsg.ts to finalMsg)  // 定格最终内容（供 UI 比对分页是否补齐）
-        // generating 由调用方 finally 复位（覆盖异常/提前 return 各路径）
-        // 同步内存会话（供下次生成拼装历史 + 菜单/编辑按 ts 取消息）；仍停留在本会话才覆盖。
-        // 生命周期钩子（如摘要）无论是否切走都对已完成会话执行
-        ChatRepository.get(ctx, sessionId)?.let { done ->
-            if (session?.id == sessionId) session = done
-            runExtensionLifecycle(done)
-            maybeGenerateTitle(done)
+            val finalMsg = generation.run(
+                apiMessages = apiMessages,
+                genMessage = msgForGen,
+                provider = prov,
+                modelId = modelId,
+                built = built,
+                streaming = currentCard?.streaming ?: true,
+                tools = if (webSearchOn) listOf(searchTool.spec()) else emptyList(),
+                toolExecutor = if (webSearchOn) searchTool.executor() else null,
+                errorText = { e -> ctx.getString(R.string.chat_error_fmt, e.message ?: "") },
+                onUpdate = { overlays = overlays + (it.ts to it) },
+            )
+            // 最终消息与世界书定时状态在一个 Room 事务内提交。
+            ChatRepository.commitGeneration(ctx, sessionId, finalMsg, built.timedWi)
+            overlays = overlays + (finalMsg.ts to finalMsg)
+            ChatRepository.get(ctx, sessionId)?.let { done ->
+                if (session?.id == sessionId) session = done
+                runExtensionLifecycle(done)
+                maybeGenerateTitle(done)
+            }
+        } catch (error: Exception) {
+            if (localVariablesCommitted) runCatching {
+                ChatRepository.saveLocalVariables(ctx, sessionId, base.localVariables)
+            }.onFailure { rollbackError ->
+                error.addSuppressed(rollbackError)
+                Log.w(CHAT_VIEW_MODEL_TAG, "会话变量回滚失败: $sessionId", rollbackError)
+            }
+            if (globalVariablesCommitted) withContext(Dispatchers.IO) {
+                runCatching {
+                    GlobalVariableStore.set(ctx, variableState.initialGlobalVariables())
+                }.onFailure { rollbackError ->
+                    error.addSuppressed(rollbackError)
+                    Log.w(CHAT_VIEW_MODEL_TAG, "全局变量回滚失败", rollbackError)
+                }
+            }
+            throw error
         }
     }
 

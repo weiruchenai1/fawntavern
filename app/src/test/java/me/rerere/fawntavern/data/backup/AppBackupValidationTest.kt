@@ -33,6 +33,16 @@ class AppBackupValidationTest {
         }
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsControlCharactersInFileName() {
+        val staging = Files.createTempDirectory("backup-test-").toFile()
+        try {
+            AppBackup.extractValidated(zipOf("characters/bad\nname.json" to "{}"), staging)
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
     private fun zipOf(vararg entries: Pair<String, String>): ByteArrayInputStream {
         val bytes = ByteArrayOutputStream()
         ZipOutputStream(bytes).use { zip ->

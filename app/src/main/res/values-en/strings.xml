@@ -20,8 +20,10 @@
     <string name="clear">Clear</string>
     <string name="retry">Retry</string>
     <string name="preset_save_failed_fmt">Could not save the preset. Your edits are still open: %1$s</string>
+    <string name="worldbook_save_failed_fmt">Could not save the world book. Your edits are still open: %1$s</string>
     <string name="prompt_context_load_failed_fmt">Some prompt context could not be loaded: %1$s</string>
     <string name="list_load_failed_fmt">Could not load the list: %1$s</string>
+    <string name="delete_failed_fmt">Delete failed: %1$s</string>
     <string name="item_load_failed">Could not load this item</string>
 
     <!-- Settings -->
@@ -193,6 +195,8 @@
     <string name="toast_import_failed_count_fmt">Failed to import %d file(s)</string>
     <string name="file_too_large_to_send">File too large (over 20 MB), cannot send</string>
     <string name="attachment_send_failed">Failed to process attachment, please retry</string>
+    <string name="chat_send_failed_fmt">Send failed. Your draft was restored: %1$s</string>
+    <string name="chat_generation_failed_fmt">Generation failed: %1$s</string>
     <string name="toast_no_export_data_fmt">No %s to export</string>
     <string name="toast_rename_title">Rename</string>
     <string name="toast_rename_name_label">Name</string>

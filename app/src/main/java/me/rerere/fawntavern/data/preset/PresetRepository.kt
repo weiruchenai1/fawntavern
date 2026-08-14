@@ -3,6 +3,8 @@ package me.rerere.fawntavern.data.preset
 import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.JsonFileDir
 import org.json.JSONArray
@@ -12,6 +14,7 @@ import java.io.File
 object PresetRepository {
 
     private const val PRESETS_DIR = "presets"
+    private val writeMutex = Mutex()
 
     fun presetsDir(context: Context): File = JsonFileDir.dir(context, PRESETS_DIR)
 
@@ -30,15 +33,21 @@ object PresetRepository {
         val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
             ?: throw IllegalStateException("无法读取文件")
         val json = JSONObject(text)
-        val name = JsonFileDir.queryDisplayName(context, uri)
+        val fallback = "preset_${System.currentTimeMillis()}"
+        val requestedName = JsonFileDir.queryDisplayName(context, uri)
             ?.removeSuffix(".json")?.takeIf { it.isNotBlank() }
-            ?: "preset_${System.currentTimeMillis()}"
-        JsonFileDir.file(context, PRESETS_DIR, name).writeText(text)
+            ?: fallback
+        val name = writeMutex.withLock {
+            JsonFileDir.uniqueName(context, PRESETS_DIR, requestedName, fallback).also {
+                JsonFileDir.atomicWriteText(JsonFileDir.file(context, PRESETS_DIR, it), text)
+            }
+        }
         PresetParser.parse(json, name)
     }
 
     /** 保存（覆盖）预设：全量回写采样参数、prompts 内容池与 prompt_order（保留其它字段）。 */
     suspend fun save(context: Context, preset: StPreset) = withContext(Dispatchers.IO) {
+        writeMutex.withLock {
         val file = JsonFileDir.file(context, PRESETS_DIR, preset.name)
         val root = if (file.exists()) JSONObject(file.readText()) else JSONObject()
 
@@ -141,7 +150,8 @@ object PresetRepository {
         preset.regexScripts.forEach { regexArr.put(PresetParser.serializeRegexScript(it)) }
         root.put("regex_scripts", regexArr)
 
-        file.writeText(root.toString(2))
+        JsonFileDir.atomicWriteText(file, root.toString(2))
+        }
     }
 
     suspend fun delete(context: Context, name: String) =

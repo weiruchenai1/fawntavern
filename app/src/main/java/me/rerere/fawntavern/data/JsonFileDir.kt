@@ -6,6 +6,12 @@ import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStreamWriter
+import java.nio.charset.StandardCharsets
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * filesDir 子目录 JSON 文件仓库的共用文件操作，
@@ -13,11 +19,83 @@ import java.io.File
  */
 object JsonFileDir {
 
-    fun dir(context: Context, dirName: String): File =
-        File(context.filesDir, dirName).also { it.mkdirs() }
+    private val invalidNameChars = Regex("[\\\\/:*?\"<>|\\u0000-\\u001F]")
 
-    fun file(context: Context, dirName: String, name: String): File =
-        File(dir(context, dirName), "$name.json")
+    fun dir(context: Context, dirName: String): File {
+        require(
+            dirName.isNotBlank() && dirName != "." && dirName != ".." &&
+                !invalidNameChars.containsMatchIn(dirName)
+        ) { "Invalid JSON storage directory" }
+        val root = context.filesDir.canonicalFile
+        val result = File(root, dirName).canonicalFile
+        require(result.parentFile == root) { "JSON storage directory escapes filesDir" }
+        return result.also { it.mkdirs() }
+    }
+
+    fun file(context: Context, dirName: String, name: String): File {
+        require(isValidName(name)) { "Invalid JSON file name" }
+        val parent = dir(context, dirName).canonicalFile
+        val target = File(parent, "$name.json").canonicalFile
+        require(target.parentFile == parent) { "JSON file escapes its storage directory" }
+        return target
+    }
+
+    fun isValidName(name: String): Boolean =
+        name.isNotBlank() &&
+            name == name.trim() &&
+            name != "." && name != ".." &&
+            !name.endsWith('.') &&
+            !invalidNameChars.containsMatchIn(name)
+
+    /** Turn an untrusted provider/model display name into one local path segment. */
+    fun sanitizeName(name: String, fallback: String): String =
+        name.replace(invalidNameChars, "_")
+            .trim()
+            .trim('.')
+            .take(180)
+            .trim()
+            .trim('.')
+            .ifBlank { fallback }
+
+    /** Return a non-existing name so imports never overwrite data without confirmation. */
+    fun uniqueName(context: Context, dirName: String, requestedName: String, fallback: String): String {
+        val base = sanitizeName(requestedName, fallback)
+        var candidate = base
+        var suffix = 2
+        while (file(context, dirName, candidate).exists()) {
+            candidate = "$base ($suffix)"
+            suffix++
+        }
+        return candidate
+    }
+
+    /** Write in the target directory, flush it, then replace the destination with one move. */
+    fun atomicWriteText(target: File, content: String) {
+        val parent = requireNotNull(target.parentFile).canonicalFile
+        require(target.canonicalFile.parentFile == parent) { "JSON file escapes its storage directory" }
+        parent.mkdirs()
+        val temp = File.createTempFile(".${target.nameWithoutExtension}_", ".tmp", parent)
+        try {
+            FileOutputStream(temp).use { output ->
+                OutputStreamWriter(output, StandardCharsets.UTF_8).buffered().use { writer ->
+                    writer.write(content)
+                    writer.flush()
+                    output.fd.sync()
+                }
+            }
+            try {
+                Files.move(
+                    temp.toPath(), target.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        } finally {
+            temp.delete()
+        }
+    }
 
     /** 列出目录下全部 JSON 文件名（不含扩展名），按字母序 */
     suspend fun listNames(context: Context, dirName: String): List<String> = withContext(Dispatchers.IO) {
@@ -36,7 +114,7 @@ object JsonFileDir {
     /** 重命名条目，成功返回 true（目标名已存在或源不存在则失败） */
     suspend fun rename(context: Context, dirName: String, oldName: String, newName: String): Boolean =
         withContext(Dispatchers.IO) {
-            if (newName.isBlank() || newName == oldName) return@withContext false
+            if (!isValidName(oldName) || !isValidName(newName) || newName == oldName) return@withContext false
             val src = file(context, dirName, oldName)
             val dst = file(context, dirName, newName)
             if (!src.exists() || dst.exists()) return@withContext false

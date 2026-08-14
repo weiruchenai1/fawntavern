@@ -3,9 +3,13 @@ package me.rerere.fawntavern.data.backup
 import android.content.Context
 import android.util.Log
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -39,6 +43,10 @@ object AppBackup {
     private const val MAX_ENTRY_BYTES = 50L * 1024 * 1024
     private const val MAX_CHAT_BYTES = 200L * 1024 * 1024
     private const val MAX_TOTAL_BYTES = 500L * 1024 * 1024
+    private const val RESTORE_TXN_DIR = ".backup-restore"
+    private const val RESTORE_JOURNAL = "journal.json"
+    private const val RESTORE_PREPARED = "PREPARED"
+    private const val RESTORE_COMMITTED = "COMMITTED"
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -66,6 +74,25 @@ object AppBackup {
         val formatVersion: Int = FORMAT_VERSION,
         val sessions: List<ChatSession> = emptyList(),
         val globalVariables: Map<String, String>? = null,
+    )
+
+    @Serializable
+    private data class JournalFile(
+        val area: String,
+        val name: String,
+        val existed: Boolean,
+    )
+
+    @Serializable
+    private data class RestoreJournal(
+        val files: List<JournalFile>,
+        val previousApi: String? = null,
+        val previousSearch: String? = null,
+        val previousTts: String? = null,
+        val previousChats: ChatArchive? = null,
+        val restoreGlobalVariables: Boolean = false,
+        val restoreAvatarPath: Boolean = false,
+        val previousAvatarPath: String? = null,
     )
 
     data class ImportResult(val files: Int, val sessions: Int)
@@ -123,6 +150,7 @@ object AppBackup {
         input: InputStream,
         sections: Set<Section>,
     ): ImportResult = withContext(Dispatchers.IO) {
+        recoverInterruptedImportInternal(context)
         require(sections.isNotEmpty()) { "No backup content selected" }
         withStaging(context, input) { staging ->
             val available = availableSections(staging)
@@ -146,12 +174,15 @@ object AppBackup {
                 TtsStore.parsePortable(File(staging, TTS_ENTRY).readText())
             } else null
 
+            val previousApiPortable = apiConfig?.let { ApiConfigStore.exportPortable(context) }
             val previousApi = apiConfig?.let { ApiConfigStore.loadConfig(context) }
+            val previousSearchPortable = searchConfig?.let { SearchStore.exportPortable(context) }
             val previousSearch = searchConfig?.let {
-                SearchStore.parsePortable(SearchStore.exportPortable(context))
+                SearchStore.parsePortable(requireNotNull(previousSearchPortable))
             }
+            val previousTtsPortable = ttsConfig?.let { TtsStore.exportPortable(context) }
             val previousTts = ttsConfig?.let {
-                TtsStore.parsePortable(TtsStore.exportPortable(context))
+                TtsStore.parsePortable(requireNotNull(previousTtsPortable))
             }
             val previousGlobalVariables = chatArchive?.globalVariables?.let { GlobalVariableStore.get(context) }
             val previousSessions = if (Section.CHATS in sections) ChatRepository.list(context) else null
@@ -159,7 +190,20 @@ object AppBackup {
                 UserProfileStore.getAvatarPath(context)
             } else null
 
-            val rollbackDir = File(staging, "_rollback").also { it.mkdirs() }
+            val transactionDir = prepareRestoreJournal(
+                context = context,
+                staging = staging,
+                sections = sections,
+                previousApi = previousApiPortable,
+                previousSearch = previousSearchPortable,
+                previousTts = previousTtsPortable,
+                previousChats = previousSessions?.let {
+                    ChatArchive(sessions = it, globalVariables = previousGlobalVariables)
+                },
+                restoreGlobalVariables = chatArchive?.globalVariables != null,
+                previousAvatarPath = previousAvatarPath,
+            )
+            val rollbackDir = File(transactionDir, "originals")
             val restored = mutableListOf<RestoredFile>()
             var restoredFiles = 0
             var avatarPathTouched = false
@@ -195,15 +239,20 @@ object AppBackup {
                 }
                 if (Section.AVATAR in sections) {
                     val avatarTarget = File(context.filesDir, "avatars/user_avatar")
-                    restoreFile(File(staging, AVATAR_ENTRY), avatarTarget, File(rollbackDir, "avatar"), restored)
+                    restoreFile(
+                        File(staging, AVATAR_ENTRY),
+                        avatarTarget,
+                        File(rollbackDir, "avatar/user_avatar"),
+                        restored,
+                    )
                     avatarPathTouched = true
-                    UserProfileStore.setAvatarPath(context, avatarTarget.absolutePath)
+                    UserProfileStore.setAvatarPathSync(context, avatarTarget.absolutePath)
                     restoredFiles++
                 }
 
                 apiConfig?.let {
                     apiConfigTouched = true
-                    ApiConfigStore.saveConfig(context, it)
+                    ApiConfigStore.saveConfigSync(context, it)
                 }
                 searchConfig?.let {
                     searchConfigTouched = true
@@ -245,12 +294,12 @@ object AppBackup {
                     }
                     previousApi?.takeIf { apiConfigTouched }?.let { config ->
                         add(BackupRollbackStep("API configuration") {
-                            ApiConfigStore.saveConfig(context, config)
+                            ApiConfigStore.saveConfigSync(context, config)
                         })
                     }
                     if (avatarPathTouched) {
                         add(BackupRollbackStep("avatar path") {
-                            UserProfileStore.setAvatarPath(context, previousAvatarPath)
+                            UserProfileStore.setAvatarPathSync(context, previousAvatarPath)
                         })
                     }
                     restored.asReversed().forEach { record ->
@@ -272,12 +321,166 @@ object AppBackup {
                         e.suppressed.forEach(incompleteRollback::addSuppressed)
                     }
                 }
+                transactionDir.deleteRecursively()
                 throw e
             }
-            if (Section.CHATS in sections) {
-                runCatching { ChatRepository.collectUnusedAttachments(context) }
-            }
+            me.rerere.fawntavern.data.JsonFileDir.atomicWriteText(
+                File(transactionDir, RESTORE_COMMITTED),
+                "committed",
+            )
+            if (Section.CHATS in sections) runCatching { ChatRepository.collectUnusedAttachments(context) }
+            transactionDir.deleteRecursively()
             ImportResult(restoredFiles, chatArchive?.sessions?.size ?: 0)
+        }
+    }
+
+    /** Complete rollback from a restore that was interrupted after its durable prepare point. */
+    suspend fun recoverInterruptedImport(context: Context) = withContext(Dispatchers.IO) {
+        recoverInterruptedImportInternal(context)
+    }
+
+    private suspend fun recoverInterruptedImportInternal(context: Context) {
+        val root = File(context.filesDir, RESTORE_TXN_DIR)
+        root.listFiles()?.filter { it.isDirectory }?.forEach { transactionDir ->
+            val prepared = File(transactionDir, RESTORE_PREPARED)
+            if (!prepared.isFile) {
+                transactionDir.deleteRecursively()
+                return@forEach
+            }
+            if (File(transactionDir, RESTORE_COMMITTED).isFile) {
+                transactionDir.deleteRecursively()
+                return@forEach
+            }
+            val journal = json.decodeFromString<RestoreJournal>(
+                File(transactionDir, RESTORE_JOURNAL).readText(),
+            )
+
+            journal.previousChats?.let { ChatRepository.replaceAll(context, it.sessions) }
+            if (journal.restoreGlobalVariables) {
+                GlobalVariableStore.set(context, journal.previousChats?.globalVariables.orEmpty())
+            }
+            journal.previousTts?.let { TtsStore.importPortable(context, TtsStore.parsePortable(it)) }
+            journal.previousSearch?.let { SearchStore.importPortable(context, SearchStore.parsePortable(it)) }
+            journal.previousApi?.let { ApiConfigStore.saveConfigSync(context, ApiConfigStore.parsePortable(it)) }
+            if (journal.restoreAvatarPath) {
+                UserProfileStore.setAvatarPathSync(context, journal.previousAvatarPath)
+            }
+
+            journal.files.asReversed().forEach { snapshot ->
+                val target = journalTarget(context, snapshot.area, snapshot.name)
+                if (snapshot.existed) {
+                    val original = File(File(transactionDir, "originals/${snapshot.area}"), snapshot.name)
+                    atomicReplaceFile(original, target)
+                } else if (target.exists() && !target.delete()) {
+                    throw IOException("Unable to remove partially restored file: ${target.absolutePath}")
+                }
+            }
+            transactionDir.deleteRecursively()
+        }
+        root.delete()
+    }
+
+    private fun prepareRestoreJournal(
+        context: Context,
+        staging: File,
+        sections: Set<Section>,
+        previousApi: String?,
+        previousSearch: String?,
+        previousTts: String?,
+        previousChats: ChatArchive?,
+        restoreGlobalVariables: Boolean,
+        previousAvatarPath: String?,
+    ): File {
+        val transactionDir = File(
+            File(context.filesDir, RESTORE_TXN_DIR).also { it.mkdirs() },
+            UUID.randomUUID().toString(),
+        ).also { it.mkdirs() }
+        try {
+            val snapshots = buildList {
+                fun capture(area: String, source: File) {
+                    source.listFiles()?.filter { it.isFile }?.forEach { incoming ->
+                        val target = journalTarget(context, area, incoming.name)
+                        add(JournalFile(area, incoming.name, target.isFile))
+                        if (target.isFile) {
+                            val original = File(File(transactionDir, "originals/$area"), incoming.name)
+                            original.parentFile?.mkdirs()
+                            atomicReplaceFile(target, original)
+                        }
+                    }
+                }
+                if (Section.CHARACTERS in sections) capture("characters", File(staging, "characters"))
+                if (Section.PRESETS in sections) capture("presets", File(staging, "presets"))
+                if (Section.WORLDBOOKS in sections) capture("worldbooks", File(staging, "worldbooks"))
+                if (Section.CHATS in sections) capture("attachments", File(staging, "attachments"))
+                if (Section.AVATAR in sections) {
+                    val avatar = File(staging, AVATAR_ENTRY)
+                    if (avatar.isFile) {
+                        val target = journalTarget(context, "avatar", "user_avatar")
+                        add(JournalFile("avatar", "user_avatar", target.isFile))
+                        if (target.isFile) {
+                            val original = File(transactionDir, "originals/avatar/user_avatar")
+                            original.parentFile?.mkdirs()
+                            atomicReplaceFile(target, original)
+                        }
+                    }
+                }
+            }
+            val journal = RestoreJournal(
+                files = snapshots,
+                previousApi = previousApi,
+                previousSearch = previousSearch,
+                previousTts = previousTts,
+                previousChats = previousChats,
+                restoreGlobalVariables = restoreGlobalVariables,
+                restoreAvatarPath = Section.AVATAR in sections,
+                previousAvatarPath = previousAvatarPath,
+            )
+            me.rerere.fawntavern.data.JsonFileDir.atomicWriteText(
+                File(transactionDir, RESTORE_JOURNAL),
+                json.encodeToString(journal),
+            )
+            me.rerere.fawntavern.data.JsonFileDir.atomicWriteText(
+                File(transactionDir, RESTORE_PREPARED),
+                "prepared",
+            )
+            return transactionDir
+        } catch (error: Exception) {
+            transactionDir.deleteRecursively()
+            throw error
+        }
+    }
+
+    private fun journalTarget(context: Context, area: String, name: String): File = when (area) {
+        "characters" -> File(CharacterRepository.charsDir(context), name)
+        "presets" -> File(PresetRepository.presetsDir(context), name)
+        "worldbooks" -> File(WorldBookRepository.worldDir(context), name)
+        "attachments" -> File(AttachmentStore.dir(context), name)
+        "avatar" -> File(context.filesDir, "avatars/user_avatar")
+        else -> throw IllegalArgumentException("Unsupported restore area: $area")
+    }
+
+    private fun atomicReplaceFile(source: File, target: File) {
+        require(source.isFile) { "Missing restore snapshot: ${source.absolutePath}" }
+        target.parentFile?.mkdirs()
+        val temp = File.createTempFile(".${target.name}_", ".tmp", target.parentFile)
+        try {
+            source.inputStream().use { input ->
+                FileOutputStream(temp).use { output ->
+                    input.copyTo(output)
+                    output.fd.sync()
+                }
+            }
+            try {
+                Files.move(
+                    temp.toPath(), target.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        } finally {
+            temp.delete()
         }
     }
 
@@ -370,7 +573,10 @@ object AppBackup {
             "Unsupported backup path: $entryName"
         }
         val fileName = parts[1]
-        require(fileName != "." && fileName != ".." && !fileName.contains('\\')) { "Invalid backup path" }
+        require(
+            fileName != "." && fileName != ".." &&
+                !fileName.contains('\\') && fileName.none { it.isISOControl() }
+        ) { "Invalid backup path" }
         return File(File(staging, parts[0]), fileName)
     }
 
@@ -397,9 +603,12 @@ object AppBackup {
     ) {
         target.parentFile?.mkdirs()
         rollbackFile.parentFile?.mkdirs()
-        val original = if (target.exists()) target.copyTo(rollbackFile, overwrite = true) else null
+        val original = if (target.exists()) {
+            if (!rollbackFile.isFile) atomicReplaceFile(target, rollbackFile)
+            rollbackFile
+        } else null
         restoreLog += RestoredFile(target, original)
-        source.copyTo(target, overwrite = true)
+        atomicReplaceFile(source, target)
     }
 
     private fun rollbackFile(record: RestoredFile) {

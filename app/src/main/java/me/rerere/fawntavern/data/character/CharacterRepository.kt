@@ -180,11 +180,16 @@ object CharacterRepository {
             ?: json.optJSONObject("character_book")
         if (charaBook != null) {
             val bookName = charaBook.optString("name", "").ifBlank { "$name 世界书" }
-            val worldFile = File(context.filesDir, "worldbooks/$bookName.json")
-            if (!worldFile.exists()) {
-                worldFile.parentFile?.mkdirs()
-                worldFile.writeText(charaBook.toString(2))
-            }
+            val safeBookName = JsonFileDir.uniqueName(
+                context,
+                "worldbooks",
+                bookName,
+                "worldbook_${System.currentTimeMillis()}",
+            )
+            JsonFileDir.atomicWriteText(
+                JsonFileDir.file(context, "worldbooks", safeBookName),
+                charaBook.toString(2),
+            )
         }
 
         parsed

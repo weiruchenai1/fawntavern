@@ -62,6 +62,7 @@ import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.character.CharacterCard
 import sh.calvin.reorderable.ReorderableItem
@@ -102,10 +103,19 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     fun refresh() {
         scope.launch {
             loading = true
-            val loaded = controller.load()
-            names = loaded.names
-            chars = loaded.cards
-            loading = false
+            try {
+                val loaded = controller.load()
+                names = loaded.names
+                chars = loaded.cards
+            } catch (error: Exception) {
+                Toast.makeText(
+                    context,
+                    resources.getString(R.string.list_load_failed_fmt, error.message.orEmpty()),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } finally {
+                loading = false
+            }
         }
     }
 
@@ -144,7 +154,9 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
             try {
                 val data = bytes()
                 withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri)?.use { it.write(data) }
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: throw IOException("Unable to open the selected destination")
+                    output.use { it.write(data) }
                 }
                 Toast.makeText(context, resources.getString(R.string.toast_export_success), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
@@ -165,9 +177,17 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
             text = stringResource(R.string.delete_character_msg_fmt, name),
             onConfirm = {
                 scope.launch {
-                    controller.delete(name)
-                    Toast.makeText(context, resources.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
-                    refresh()
+                    try {
+                        controller.delete(name)
+                        Toast.makeText(context, resources.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
+                        refresh()
+                    } catch (error: Exception) {
+                        Toast.makeText(
+                            context,
+                            resources.getString(R.string.delete_failed_fmt, error.message.orEmpty()),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                 }
                 showDeleteDialog = null
             },

@@ -40,6 +40,13 @@ object UserProfileStore {
             .edit().putString(KEY_AVATAR_PATH, path).apply()
     }
 
+    internal fun setAvatarPathSync(context: Context, path: String?) {
+        check(
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putString(KEY_AVATAR_PATH, path).commit()
+        ) { "Unable to persist avatar path" }
+    }
+
     fun getDescription(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_DESCRIPTION, null) ?: ""

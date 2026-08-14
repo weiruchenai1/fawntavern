@@ -120,10 +120,16 @@ object SearchStore {
     }
 
     internal fun importPortable(context: Context, config: PortableSearchConfig) {
-        setServices(context, config.services)
-        setSelectedIndex(context, config.selected)
-        setResultSize(context, config.resultSize)
-        setEnabled(context, config.enabled)
+        val services = JSONArray().apply { config.services.forEach { put(toJson(it)) } }
+        val p = prefs(context)
+        SecurePreferences.putStringSync(context, p, KEY_SERVICES, services.toString())
+        check(
+            p.edit()
+                .putInt(KEY_SELECTED, config.selected)
+                .putInt(KEY_RESULT_SIZE, config.resultSize)
+                .putBoolean(KEY_ENABLED, config.enabled)
+                .commit()
+        ) { "Unable to persist search configuration" }
     }
 
     internal data class PortableSearchConfig(

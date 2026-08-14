@@ -143,3 +143,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.okhttp.mockwebserver)
 }
+
+ksp {
+    arg("room.schemaLocation", file("schemas").absolutePath)
+}

@@ -102,8 +102,12 @@ object TtsStore {
     }
 
     internal fun importPortable(context: Context, config: PortableTtsConfig) {
-        setServices(context, config.services)
-        setSelectedId(context, config.selectedId)
+        val services = JSONArray().apply { config.services.forEach { put(toJson(it)) } }
+        val p = prefs(context)
+        SecurePreferences.putStringSync(context, p, KEY_SERVICES, services.toString())
+        check(p.edit().putString(KEY_SELECTED, config.selectedId).commit()) {
+            "Unable to persist TTS configuration"
+        }
     }
 
     internal data class PortableTtsConfig(
