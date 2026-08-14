@@ -19,7 +19,6 @@ jobs:
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-      VERSION_CODE: ${{ vars.ANDROID_VERSION_CODE }}
 
     steps:
       - name: Check out source
@@ -34,6 +33,13 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Derive Android version from tag
+        run: |
+          VERSION_NAME="${GITHUB_REF_NAME#v}"
+          VERSION_CODE="$(bash scripts/android-version-code.sh "$VERSION_NAME")"
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+
       - name: Verify release configuration
         run: |
           test -n "$ANDROID_KEYSTORE_BASE64"
@@ -41,7 +47,6 @@ jobs:
           test -n "$ANDROID_KEY_ALIAS"
           test -n "$ANDROID_KEY_PASSWORD"
           test -n "$GOOGLE_SERVICES_JSON"
-          test -n "$VERSION_CODE"
 
       - name: Prepare signing key
         run: |
@@ -62,7 +67,6 @@ jobs:
 
       - name: Build signed APK and App Bundle
         run: |
-          VERSION_NAME="${GITHUB_REF_NAME#v}"
           ./gradlew --no-daemon clean assembleRelease bundleRelease \
             -PversionCode="$VERSION_CODE" \
             -PversionName="$VERSION_NAME"

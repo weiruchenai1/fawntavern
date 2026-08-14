@@ -35,6 +35,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Verify Android version calculation
+        run: bash scripts/android-version-code.sh --self-test
+
       - name: Run unit tests, lint, and debug build
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
 

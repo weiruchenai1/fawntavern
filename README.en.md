@@ -53,13 +53,13 @@ Before the first tagged release, configure these repository secrets:
 - `ANDROID_KEY_PASSWORD`
 - `GOOGLE_SERVICES_JSON` (the full contents of the file downloaded from Firebase Console)
 
-Set repository variable `ANDROID_VERSION_CODE` to a monotonically increasing integer before each release. The tag supplies `versionName`.
+The Git tag automatically supplies `versionName` and a monotonically increasing Android `versionCode`; no repository version variable is required.
 
 ## Release checklist
 
 - CI is green on the release commit.
 - Upgrade and backup/restore tests cover changed persistent data.
 - UI tests cover changed user-visible state transitions.
-- `ANDROID_VERSION_CODE` has been incremented.
+- The Git tag follows the `vX.Y.Z` or `vX.Y.Z-beta.N` format.
 - The release notes describe user-facing changes and compatibility impact.
 - The beta build has verified local crash reports and the opt-in Firebase reporting flow under Settings > Crash reports.
