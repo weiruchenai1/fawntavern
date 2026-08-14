@@ -3,6 +3,7 @@ package me.rerere.fawntavern.ui.chat
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
@@ -42,10 +43,7 @@ import me.rerere.fawntavern.data.speech.TtsUiState
 import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.data.settings.UserAvatarStore
 import me.rerere.fawntavern.data.settings.PromptLogStore
-import me.rerere.fawntavern.data.settings.CharacterModelStore
-import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.data.settings.GlobalVariableStore
-import me.rerere.fawntavern.data.settings.ThinkingStore
 import me.rerere.fawntavern.data.settings.WorldInfoSettingsStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.domain.ConversationOps
@@ -65,6 +63,8 @@ import me.rerere.fawntavern.extension.PromptContributor
 import me.rerere.fawntavern.extension.QuickReply
 import me.rerere.fawntavern.extension.QuickReplyProvider
 
+private const val CHAT_VIEW_MODEL_TAG = "ChatViewModel"
+
 /**
  * 聊天状态容器：只负责持有 UI 状态、调度协程和落盘。
  * 业务逻辑在 domain 层：Prompt 拼装 → [PromptBuilder]，
@@ -81,11 +81,12 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     var sendError by mutableStateOf<String?>(null); private set
 
     // ── 状态（写入只经由本类方法） ──
+    private val modelController = ChatModelController(AndroidChatModelDataSource(app))
     var apiConfig by mutableStateOf(ApiConfigStore.loadConfig(app)); private set
     private val uiSettingsController = ChatUiSettingsController(AndroidChatUiSettingsDataSource(app))
     var uiSettings by mutableStateOf(uiSettingsController.load()); private set
     /** 当前模型的思考预算档位（按模型记忆，随选模型切换）；AUTO = 不下发任何思考字段 */
-    var reasoning by mutableStateOf(ThinkingStore.get(app, apiConfig.currentModel)); private set
+    var reasoning by mutableStateOf(modelController.reasoning(apiConfig.currentModel)); private set
     var sessions by mutableStateOf<List<ChatSession>>(emptyList()); private set
     var session by mutableStateOf<ChatSession?>(null); private set
     var currentCard by mutableStateOf<CharacterCard?>(null); private set
@@ -242,11 +243,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 if (session?.charFile.orEmpty() != charFile) return@collectLatest
                 applyPromptContext(loaded, image, revision)
                 // 恢复该角色的模型：角色记忆 > 默认模型聊天卡片
-                val name = currentCard?.name
-                val charModel = if (!name.isNullOrBlank()) CharacterModelStore.get(ctx, name).takeIf { it.isNotBlank() } else null
-                val defaultChat = DefaultModelStore.get(ctx, DefaultModelStore.ROLE_CHAT).model.takeIf { it.isNotBlank() }
-                val spec = charModel ?: defaultChat ?: ""
-                reasoning = ThinkingStore.get(ctx, spec)
+                val spec = modelController.effectiveModelSpec(currentCard?.name, apiConfig).orEmpty()
+                reasoning = modelController.reasoning(spec)
             }
         }
         // 切换会话即清空 overlay：overlay 按 ts 索引，而 ts 仅在会话内唯一，跨会话残留会误覆盖
@@ -265,19 +263,13 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // ── 配置 / 用户资料 ──
 
     /** 当前页面的模型：角色记忆 > ROLE_CHAT > apiConfig.currentModel 回退，全空时返回 null */
-    fun displayModelSpec(): String? {
-        val charModel = currentCard?.name?.let { CharacterModelStore.get(ctx, it) }.takeIf { !it.isNullOrBlank() }
-        if (charModel != null) return charModel
-        val defaultChat = DefaultModelStore.get(ctx, DefaultModelStore.ROLE_CHAT).model.takeIf { it.isNotBlank() }
-        if (defaultChat != null) return defaultChat
-        return apiConfig.currentModel.takeIf { it.isNotBlank() }
-    }
+    fun displayModelSpec(): String? = modelController.effectiveModelSpec(currentCard?.name, apiConfig)
 
     /** 从 API 配置页返回时刷新：若模型仍在则保持，若模型被删除/禁用则切到全局配置的 currentModel 兜底 */
     fun reloadApiConfig() {
         apiConfig = ApiConfigStore.loadConfig(ctx)
         // displayModelSpec 负责角色记忆 > ROLE_CHAT > apiConfig.currentModel 的完整回退
-        reasoning = ThinkingStore.get(ctx, displayModelSpec() ?: apiConfig.currentModel)
+        reasoning = modelController.reasoning(displayModelSpec() ?: apiConfig.currentModel)
     }
 
     /** 从偏好或字号页面返回时刷新聊天页使用的设置快照。 */
@@ -287,21 +279,14 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectModel(providerId: String, modelId: String) {
         val spec = "$providerId::$modelId"
-        val name = currentCard?.name
-        if (!name.isNullOrBlank()) {
-            CharacterModelStore.set(ctx, name, spec)
-        } else {
-            // 无角色卡时记到全局聊天默认模型，避免选模型后无法持久化
-            DefaultModelStore.setModel(ctx, DefaultModelStore.ROLE_CHAT, spec)
-        }
-        reasoning = ThinkingStore.get(ctx, spec)
+        reasoning = modelController.select(currentCard?.name, spec)
         modelRevision++
     }
 
     fun updateReasoning(level: ReasoningLevel) {
         reasoning = level
         // 思考档位按当前实际生效的模型记忆，而非可能已过期的 apiConfig.currentModel
-        ThinkingStore.set(ctx, displayModelSpec() ?: apiConfig.currentModel, level)
+        modelController.saveReasoning(displayModelSpec() ?: apiConfig.currentModel, level)
     }
 
     /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
@@ -359,18 +344,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         loadedPromptCharFile = loaded.charFile
     }
 
-    fun currentProviderAndModel(): Pair<ApiProvider, String>? {
-        // 角色记忆 > ROLE_CHAT > apiConfig.currentModel 回退；全空则须显式选择模型
-        val charModel = currentCard?.name?.let { CharacterModelStore.get(ctx, it) }.takeIf { !it.isNullOrBlank() }
-        val defaultChat = DefaultModelStore.get(ctx, DefaultModelStore.ROLE_CHAT).model.takeIf { it.isNotBlank() }
-        val spec = charModel ?: defaultChat ?: apiConfig.currentModel.takeIf { it.isNotBlank() } ?: return null
-        val prov = apiConfig.providers.find {
-            it.id == spec.substringBefore("::") && it.enabled
-        }
-        val modelId = spec.substringAfter("::", "")
-        if (prov == null || modelId.isBlank()) return null
-        return prov to modelId
-    }
+    fun currentProviderAndModel(): Pair<ApiProvider, String>? =
+        modelController.resolveProvider(currentCard?.name, apiConfig)
 
     // ── 会话管理 ──
 
@@ -802,9 +777,15 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (error: Exception) {
                     if (localChanged) runCatching {
                         ChatRepository.saveLocalVariables(ctx, sessionId, base.localVariables)
+                    }.onFailure { rollbackError ->
+                        Log.w(CHAT_VIEW_MODEL_TAG, "会话变量回滚失败: $sessionId", rollbackError)
                     }
                     if (globalChanged) withContext(Dispatchers.IO) {
-                        runCatching { GlobalVariableStore.set(ctx, variableState.initialGlobalVariables()) }
+                        runCatching {
+                            GlobalVariableStore.set(ctx, variableState.initialGlobalVariables())
+                        }.onFailure { rollbackError ->
+                            Log.w(CHAT_VIEW_MODEL_TAG, "全局变量回滚失败", rollbackError)
+                        }
                     }
                     throw error
                 }
@@ -860,7 +841,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         ),
                         services,
                     )
-                } catch (_: Exception) { /* 单个扩展失败不影响其它 */ }
+                } catch (error: Exception) {
+                    Log.w(CHAT_VIEW_MODEL_TAG, "扩展生成完成钩子失败: ${ext.info.id}", error)
+                }
             }
             // 钩子可能写入了会话级状态（如摘要）：若仍停留在同一会话，刷新内存 extState 供下次拼装取用
             if (ran && session?.id == done.id) {
@@ -873,7 +856,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * 首轮对话完成后自动生成会话标题：只要会话尚无标题、且至少有一轮完整的用户+AI 对答，
-     * 就调用标题模型（DefaultModelStore.ROLE_TITLE，回退到当前聊天模型）生成简短标题。
+     * 就调用标题模型（标题角色配置，回退到当前聊天模型）生成简短标题。
      * 失败静默跳过（不清掉已有标题），空结果不写。
      */
     private fun maybeGenerateTitle(session: ChatSession) {
@@ -895,7 +878,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 if (session.id == this@ChatViewModel.session?.id) {
                     this@ChatViewModel.session = this@ChatViewModel.session?.copy(title = title)
                 }
-            } catch (_: Exception) { /* 标题生成失败静默跳过 */ }
+            } catch (error: Exception) {
+                Log.w(CHAT_VIEW_MODEL_TAG, "会话标题生成失败: ${session.id}", error)
+            }
         }
     }
 
@@ -977,13 +962,23 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // ── IO 辅助 ──
 
     private suspend fun loadCard(file: String): CharacterCard? = withContext(Dispatchers.IO) {
-        try { CharacterRepository.load(ctx, file) } catch (_: Exception) { null }
+        try {
+            CharacterRepository.load(ctx, file)
+        } catch (error: Exception) {
+            Log.w(CHAT_VIEW_MODEL_TAG, "角色卡加载失败: $file", error)
+            null
+        }
     }
 
     private suspend fun loadCharImage(file: String): Bitmap? = withContext(Dispatchers.IO) {
         val f = CharacterRepository.imageFile(ctx, file)
         if (!f.exists()) return@withContext null
-        try { BitmapFactory.decodeFile(f.absolutePath) } catch (_: Exception) { null }
+        try {
+            BitmapFactory.decodeFile(f.absolutePath)
+        } catch (error: Exception) {
+            Log.w(CHAT_VIEW_MODEL_TAG, "角色图片加载失败: $file", error)
+            null
+        }
     }
 
 }

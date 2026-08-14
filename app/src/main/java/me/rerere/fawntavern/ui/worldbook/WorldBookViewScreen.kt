@@ -67,7 +67,6 @@ import kotlinx.coroutines.launch
 import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.data.worldbook.WorldBookEntry
 import me.rerere.fawntavern.data.worldbook.WorldBookPos
-import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.AppTextArea
@@ -106,6 +105,7 @@ private enum class WiStatus { CONSTANT, KEYWORD, VECTORIZED }
 fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val controller = remember(context) { WorldBookDataController(context) }
     var expandedId by remember { mutableStateOf<Int?>(null) }
     var editingEntry by remember { mutableStateOf<WorldBookEntry?>(null) }
     var deletingEntry by remember { mutableStateOf<WorldBookEntry?>(null) }
@@ -113,7 +113,7 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
     var entries by remember { mutableStateOf(book.entries.values.toList()) }
 
     fun saveBook() {
-        scope.launch { WorldBookRepository.saveEntries(context, book.name, entries) }
+        scope.launch { controller.saveEntries(book.name, entries) }
     }
 
     editingEntry?.let { entry ->

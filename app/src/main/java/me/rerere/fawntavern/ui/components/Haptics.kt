@@ -3,6 +3,7 @@ package me.rerere.fawntavern.ui.components
 import android.content.Context
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -10,15 +11,18 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import me.rerere.fawntavern.data.settings.PreferencesStore
+
+private const val HAPTICS_TAG = "Haptics"
 
 /** 一次短震动（开关/侧边栏触觉用）。走系统 Vibrator，与 LocalHapticFeedback 的 LongPress 无关。 */
 fun vibrate(context: Context, durationMs: Long = 25) {
-    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+    val vibrator = context.getSystemService(Vibrator::class.java) ?: return
     if (!vibrator.hasVibrator()) return
     try {
         vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
-    } catch (_: Exception) { /* 权限/厂商差异静默 */ }
+    } catch (error: Exception) {
+        Log.w(HAPTICS_TAG, "触觉反馈执行失败", error)
+    }
 }
 
 /**
@@ -34,11 +38,14 @@ fun vibrate(context: Context, durationMs: Long = 25) {
 fun HapticGate(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val base = LocalHapticFeedback.current
-    val gate = remember(context, base) {
+    val settings = remember(context) {
+        HapticSettingsController(AndroidHapticSettingsDataSource(context))
+    }
+    val gate = remember(settings, base) {
         object : HapticFeedback {
             override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) {
                 if (hapticFeedbackType == HapticFeedbackType.LongPress &&
-                    !PreferencesStore.get(context).longPressHaptic
+                    !settings.longPressEnabled()
                 ) return
                 base.performHapticFeedback(hapticFeedbackType)
             }

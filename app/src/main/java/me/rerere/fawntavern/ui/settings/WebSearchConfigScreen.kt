@@ -74,7 +74,6 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.search.SearchCommonOptions
 import me.rerere.fawntavern.data.search.SearchServiceOptions
 import me.rerere.fawntavern.data.search.createSearchService
-import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.PickerRow
@@ -94,8 +93,10 @@ import sh.calvin.reorderable.ReorderableItem
 @Composable
 fun WebSearchConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    var services by remember { mutableStateOf(SearchStore.getServices(context)) }
-    val configWasRecovered = remember { SearchStore.consumeCorruptionNotice(context) }
+    val controller = remember(context) { WebSearchConfigController(AndroidWebSearchConfigDataSource(context)) }
+    var config by remember(controller) { mutableStateOf(controller.load()) }
+    val services = config.services
+    val configWasRecovered = config.recovered
     val configRecoveredMessage = stringResource(R.string.search_config_recovered)
     LaunchedEffect(configWasRecovered) {
         if (configWasRecovered) Toast.makeText(
@@ -111,10 +112,10 @@ fun WebSearchConfigScreen(onBack: () -> Unit) {
             val service = services.find { it.id == editingId } ?: return@SaveableStateProvider
             SearchProviderEditScreen(
                 service = service,
+                resultSize = config.resultSize,
                 onBack = { editingId = null },
                 onSave = { updated ->
-                    services = services.map { if (it.id == updated.id) updated else it }
-                    SearchStore.setServices(context, services)
+                    config = controller.replace(config, services.map { if (it.id == updated.id) updated else it })
                 },
             )
         }
@@ -125,8 +126,7 @@ fun WebSearchConfigScreen(onBack: () -> Unit) {
         AddSearchProviderSheet(
             onDismiss = { showAddSheet = false },
             onAdd = { options ->
-                services = services + options
-                SearchStore.addService(context, options)
+                config = controller.add(config, options)
                 showAddSheet = false
             },
         )
@@ -154,8 +154,7 @@ fun WebSearchConfigScreen(onBack: () -> Unit) {
                 items = services,
                 keyOf = { it.id },
             ) { list ->
-                services = list
-                SearchStore.setServices(context, list)
+                config = controller.replace(config, list)
             }
 
             LazyColumn(
@@ -176,8 +175,7 @@ fun WebSearchConfigScreen(onBack: () -> Unit) {
                             canDelete = services.size > 1,
                             onEdit = { editingId = service.id },
                             onDelete = {
-                                services = services.filter { it.id != service.id }
-                                SearchStore.removeService(context, service.id)
+                                config = controller.remove(config, service.id)
                             },
                             handleModifier = Modifier.longPressDraggableHandle(),
                         )
@@ -187,7 +185,12 @@ fun WebSearchConfigScreen(onBack: () -> Unit) {
                     Text(stringResource(R.string.search_common_options), style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary)
                 }
-                item("common") { CommonOptionsCard() }
+                item("common") {
+                    CommonOptionsCard(
+                        resultSize = config.resultSize,
+                        onResultSizeChange = { config = controller.setResultSize(config, it) },
+                    )
+                }
                 item { Spacer(Modifier.height(80.dp)) }
             }
         }
@@ -246,9 +249,10 @@ private fun SearchProviderCard(
 
 /** 通用选项：结果条数等全局参数（所有提供商共用） */
 @Composable
-private fun CommonOptionsCard() {
-    val context = LocalContext.current
-    var resultSize by remember { mutableStateOf(SearchStore.getResultSize(context)) }
+private fun CommonOptionsCard(
+    resultSize: Int,
+    onResultSizeChange: (Int) -> Unit,
+) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer).padding(Space16),
@@ -258,7 +262,7 @@ private fun CommonOptionsCard() {
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         Slider(
             value = resultSize.toFloat(),
-            onValueChange = { resultSize = it.toInt(); SearchStore.setResultSize(context, resultSize) },
+            onValueChange = { onResultSizeChange(it.toInt()) },
             valueRange = 3f..10f,
             steps = 6,
             colors = SliderDefaults.colors(
@@ -324,6 +328,7 @@ private fun AddSearchProviderSheet(
 @Composable
 private fun SearchProviderEditScreen(
     service: SearchServiceOptions,
+    resultSize: Int,
     onBack: () -> Unit,
     onSave: (SearchServiceOptions) -> Unit,
 ) {
@@ -342,7 +347,7 @@ private fun SearchProviderEditScreen(
                 onSave(updated)
             }
         }
-        SearchTesterCard(draft)
+        SearchTesterCard(draft, resultSize)
     }
 }
 
@@ -471,8 +476,7 @@ private fun DepthSegmented(depth: String, onChange: (String) -> Unit) {
 
 /** 测试搜索：输入关键词实时跑一遍该提供商，展示前几条结果 */
 @Composable
-private fun SearchTesterCard(options: SearchServiceOptions) {
-    val context = LocalContext.current
+private fun SearchTesterCard(options: SearchServiceOptions, resultSize: Int) {
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var query by remember(options.id) { mutableStateOf("") }
@@ -501,7 +505,7 @@ private fun SearchTesterCard(options: SearchServiceOptions) {
                     val text = withContext(Dispatchers.IO) {
                         runCatching {
                             val result = createSearchService(options)
-                                .search(query, SearchCommonOptions(SearchStore.getResultSize(context)), options)
+                                .search(query, SearchCommonOptions(resultSize), options)
                                 .getOrThrow()
                             if (result.items.isEmpty()) resources.getString(R.string.web_search_no_results)
                             else result.items.take(3).joinToString("\n\n") {

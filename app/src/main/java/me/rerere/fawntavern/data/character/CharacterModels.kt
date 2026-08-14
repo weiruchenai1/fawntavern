@@ -23,7 +23,7 @@ data class CharacterCard(
     val depthPrompt: DepthPrompt? = null,  // 角色注入提示（extensions.depth_prompt / Character's Note）
 )
 
-/** 角色注入提示（SillyTavern extensions.depth_prompt）：按深度插入聊天历史。 */
+/** 角色注入提示：按深度插入聊天历史。 */
 data class DepthPrompt(
     val prompt: String = "",
     val depth: Int = 4,

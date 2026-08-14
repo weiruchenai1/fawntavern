@@ -33,6 +33,7 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.CircleHelp
 import com.composables.icons.lucide.Database
 import android.app.Activity
+import android.os.Build
 import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.material3.TextButton
@@ -53,7 +54,6 @@ import com.composables.icons.lucide.SlidersHorizontal
 import com.composables.icons.lucide.SquareLibrary
 import com.composables.icons.lucide.Sun
 import com.composables.icons.lucide.Volume2
-import me.rerere.fawntavern.data.settings.LanguageStore
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 
@@ -79,7 +79,8 @@ fun SettingsScreen(
     onNavigateToAbout: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var currentLang by remember { mutableStateOf(LanguageStore.getLanguage(context)) }
+    val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
+    var currentLang by remember(controller) { mutableStateOf(controller.language()) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showLangDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -151,7 +152,7 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     LANGUAGE_CODES.forEach { code ->
-                        val label = LanguageStore.getLabel(code)
+                        val label = controller.languageLabel(code)
                         val sel = code == currentLang
                         Row(
                             Modifier.fillMaxWidth()
@@ -159,14 +160,11 @@ fun SettingsScreen(
                                 .background(if (sel) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
                                             else MaterialTheme.colorScheme.surface)
                                 .clickable {
-                                    currentLang = code
-                                    LanguageStore.setLanguage(context, code)
-                                    LanguageStore.markPendingChange(context)
+                                    currentLang = controller.selectLanguage(code)
                                     AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(code))
                                     showLangDialog = false
                                     (context as? Activity)?.let { act ->
-                                        act.recreate()
-                                        act.overridePendingTransition(0, 0)
+                                        act.recreateWithoutAnimation()
                                     }
                                 }
                                 .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -230,7 +228,7 @@ fun SettingsScreen(
             SettingsRow(
                 { Icon(Lucide.Globe, null, Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                stringResource(R.string.language), LanguageStore.getLabel(currentLang),
+                stringResource(R.string.language), controller.languageLabel(currentLang),
                 onClick = { showLangDialog = true })
             SettingsRow(
                 { Icon(Lucide.Settings2, null, Modifier.size(24.dp),
@@ -297,6 +295,18 @@ fun SettingsScreen(
                 stringResource(R.string.about),
                 onClick = onNavigateToAbout)
         }
+    }
+}
+
+private fun Activity.recreateWithoutAnimation() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
+        overrideActivityTransition(Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0)
+        recreate()
+    } else {
+        recreate()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
     }
 }
 

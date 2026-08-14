@@ -107,49 +107,53 @@ internal fun ChatCodeBlock(
         Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(6.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-        Row(
+        Box(
             Modifier.fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(start = 10.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 normalizedLanguage.takeIf { it.isNotEmpty() }?.uppercase()
                     ?: stringResource(R.string.code_language_plain),
+                modifier = Modifier.align(Alignment.CenterStart)
+                    .fillMaxWidth()
+                    .padding(end = if (canFold) 108.dp else 72.dp),
                 style = labelStyle.copy(fontWeight = FontWeight.SemiBold),
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-            Icon(
-                if (copied) Lucide.Check else Lucide.Copy,
-                stringResource(R.string.copy),
-                Modifier.size(36.dp).noRippleClickable {
-                    scope.launch {
-                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("code", code)))
-                    }
-                    copied = true
-                }.padding(9.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Icon(
-                Lucide.Download,
-                stringResource(R.string.download),
-                Modifier.size(36.dp).noRippleClickable {
-                    exportLauncher.launch(
-                        "FawnTavern-code-${System.currentTimeMillis()}.${fileType.extension}",
-                    )
-                }.padding(9.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (canFold) {
+            Row(Modifier.align(Alignment.CenterEnd)) {
                 Icon(
-                    if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
-                    stringResource(if (expanded) R.string.collapse else R.string.expand),
-                    Modifier.size(36.dp).noRippleClickable { expansionOverride = !expanded }.padding(9.dp),
+                    if (copied) Lucide.Check else Lucide.Copy,
+                    stringResource(R.string.copy),
+                    Modifier.size(36.dp).noRippleClickable {
+                        scope.launch {
+                            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("code", code)))
+                        }
+                        copied = true
+                    }.padding(9.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Icon(
+                    Lucide.Download,
+                    stringResource(R.string.download),
+                    Modifier.size(36.dp).noRippleClickable {
+                        exportLauncher.launch(
+                            "FawnTavern-code-${System.currentTimeMillis()}.${fileType.extension}",
+                        )
+                    }.padding(9.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (canFold) {
+                    Icon(
+                        if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                        stringResource(if (expanded) R.string.collapse else R.string.expand),
+                        Modifier.size(36.dp).noRippleClickable { expansionOverride = !expanded }
+                            .padding(9.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         val visibleCode = remember(code, expanded, threshold) {

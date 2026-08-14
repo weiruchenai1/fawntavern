@@ -18,7 +18,7 @@ import me.rerere.fawntavern.data.worldbook.WorldBookPos
 import me.rerere.fawntavern.data.worldbook.WorldInfoSettings
 
 /**
- * Prompt 拼装（SillyTavern 风格）。两步走：
+ * Prompt 拼装。两步走：
  * 1. [build] —— 由角色卡 + 已加载的世界书/预设产出 [Built]（历史前后的提示块、
  *    深度注入块、发送侧正则、采样参数）。世界书条目按 constant/关键词扫描激活；
  *    预设存在时按 promptOrder 编排（marker 映射角色卡字段），否则用默认顺序。

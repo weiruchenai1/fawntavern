@@ -29,7 +29,6 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.ui.components.ImportableListScreen
 import me.rerere.fawntavern.ui.components.Space16
@@ -38,6 +37,7 @@ import me.rerere.fawntavern.ui.components.appClickable
 @Composable
 fun PresetListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val controller = remember(context) { PresetDataController(context) }
     var selectedPreset by remember { mutableStateOf<StPreset?>(null) }
     // SaveableStateHolder：进入编辑器时列表离开组合，其 LazyListState 被暂存；
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
@@ -63,11 +63,11 @@ fun PresetListScreen(onBack: () -> Unit) {
         renameLabelRes = R.string.toast_rename_preset_label,
         deleteTitleRes = R.string.delete_preset_title,
         deleteMsgFmtRes = R.string.delete_preset_msg_fmt,
-        listNames = { PresetRepository.listNames(context) },
-        loadItem = { PresetRepository.load(context, it) },
-        importItem = { PresetRepository.import(context, it).name },
-        renameItem = { old, new -> PresetRepository.rename(context, old, new) },
-        deleteItem = { PresetRepository.delete(context, it) },
+        listNames = controller::names,
+        loadItem = controller::load,
+        importItem = controller::import,
+        renameItem = controller::rename,
+        deleteItem = controller::delete,
         onOpen = { selectedPreset = it },
         itemCard = { name, p, onClick, onLongPress ->
             PresetCard(

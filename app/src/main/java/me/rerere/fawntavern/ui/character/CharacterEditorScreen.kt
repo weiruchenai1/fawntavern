@@ -76,16 +76,9 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.SlidersHorizontal
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.character.CharacterCard
-import me.rerere.fawntavern.data.character.CharacterRepository
-import me.rerere.fawntavern.data.preset.PresetRepository
-import me.rerere.fawntavern.data.settings.CharacterModelStore
-import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import me.rerere.fawntavern.ui.components.ModelSelectorSheet
 import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -106,6 +99,9 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
+    val controller = remember(context) {
+        CharacterEditorController(AndroidCharacterEditorDataSource(context))
+    }
     var name by remember { mutableStateOf(card.name) }
     // 多行字段用 TextFieldState（BTF2）：限高交给 AppTextArea 的 lineLimits，滚动在测量期完成
     val description = rememberTextFieldState(card.description)
@@ -132,16 +128,15 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     }
 
     var showAddTagDialog by remember { mutableStateOf(false) }
-    val charModelStore = remember { CharacterModelStore }
     val charModelKey = card.name.ifBlank { cardFileName }
-    var charModel by remember { mutableStateOf(charModelStore.get(context, charModelKey)) }
+    var charModel by remember { mutableStateOf(controller.model(charModelKey)) }
     var showGreetingDialog by remember { mutableStateOf(false) }
     var editingGreetingIdx by remember { mutableStateOf<Int?>(null) }
     var deletingGreetingIdx by remember { mutableStateOf<Int?>(null) }
     var advancedExpanded by remember { mutableStateOf(false) }
 
     // 角色卡图片：导入 PNG 时保留、可在弹窗里更换/移除；更换后主界面/抽屉头像随之更新
-    val imageFile = remember(cardFileName) { CharacterRepository.imageFile(context, cardFileName) }
+    val imageFile = remember(cardFileName) { controller.imageFile(cardFileName) }
     var imageVersion by remember { mutableStateOf(0) }
     val imageBitmap = remember(imageFile.path, imageVersion) {
         if (imageFile.exists()) {
@@ -151,7 +146,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     var showImageDialog by remember { mutableStateOf(false) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) scope.launch {
-            if (CharacterRepository.saveImageFromUri(context, cardFileName, uri)) imageVersion++
+            if (controller.saveImage(cardFileName, uri)) imageVersion++
         }
     }
 
@@ -197,7 +192,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                         OutlinedButton(
                             onClick = {
                                 scope.launch {
-                                    CharacterRepository.deleteImage(context, cardFileName)
+                                    controller.deleteImage(cardFileName)
                                     imageVersion++
                                 }
                             },
@@ -222,7 +217,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     }
 
     suspend fun patchCard(block: (JSONObject) -> Unit): Boolean = try {
-        CharacterRepository.updateJson(context, cardFileName, block)
+        controller.updateJson(cardFileName, block)
         true
     } catch (e: Exception) {
         Toast.makeText(
@@ -267,7 +262,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     }
 
     // API 配置：角色卡模型选择器和模型选择面板都要用
-    val apiConfig = remember { ApiConfigStore.loadConfig(context) }
+    val apiConfig = remember(controller) { controller.apiConfig() }
 
     // 角色默认模型选择面板
     val modelSelector = rememberModelSelectorState(charModel, apiConfig.providers)
@@ -579,10 +574,11 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 showReset = charModel.isNotBlank(),
                 showBolt = false,
                 onPick = { modelSelector.open() },
-                onReset = { charModelStore.set(context, charModelKey, ""); charModel = "" },
+                onReset = { controller.saveModel(charModelKey, ""); charModel = "" },
             )
 
             WorldBookSelector(
+                controller = controller,
                 enabledNames = enabledWb,
                 onToggle = { wbName ->
                     val updated = if (wbName in enabledWb) enabledWb - wbName else enabledWb + wbName
@@ -592,6 +588,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
             )
 
             PresetSelector(
+                controller = controller,
                 selected = linkedPreset,
                 onSelect = { sel ->
                     linkedPreset = sel
@@ -606,7 +603,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
         state = modelSelector,
         onSelect = { providerId, modelId ->
             val spec = "$providerId::$modelId"
-            charModelStore.set(context, charModelKey, spec)
+            controller.saveModel(charModelKey, spec)
             charModel = spec
         },
     )
@@ -614,14 +611,14 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
 
 @Composable
 private fun PresetSelector(
+    controller: CharacterEditorController,
     selected: String,
     onSelect: (String) -> Unit,
 ) {
-    val context = LocalContext.current
     var presetNames by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        presetNames = PresetRepository.listNames(context)
+        presetNames = controller.presetNames()
     }
 
     if (presetNames.isEmpty()) return
@@ -657,14 +654,14 @@ private fun PresetSelector(
 
 @Composable
 private fun WorldBookSelector(
+    controller: CharacterEditorController,
     enabledNames: List<String>,
     onToggle: (String) -> Unit,
 ) {
-    val context = LocalContext.current
     var bookNames by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        bookNames = withContext(Dispatchers.IO) { WorldBookRepository.listNames(context) }
+        bookNames = controller.worldBookNames()
     }
 
     if (bookNames.isEmpty()) return

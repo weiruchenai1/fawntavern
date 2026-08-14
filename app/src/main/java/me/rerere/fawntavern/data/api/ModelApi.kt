@@ -11,7 +11,7 @@ object ModelApi {
     /**
      * 获取提供商的可用模型列表。能力信息优先取接口自己给的（OpenRouter 的
      * architecture/supported_parameters、Gemini 的 thinking），接口没给的才按 ID 猜
-     * —— OpenAI 官方与绝大多数兼容网关的 /models 只返回一个 id，猜是唯一选择。
+     * —— OpenAI 官方与绝大多数兼容网关的 /models 只返回一个 id。
      */
     suspend fun listModels(provider: ApiProvider): List<ModelInfo> = withContext(Dispatchers.IO) {
         when (provider.type) {
@@ -58,7 +58,6 @@ object ModelApi {
         return (0 until data.length()).mapNotNull { openAiModel(data.optJSONObject(it)) }
     }
 
-    /** OpenRouter 一类网关会附带能力字段，照抄；只有 id 的（OpenAI 官方等）退回按 ID 猜 */
     private fun openAiModel(obj: JSONObject?): ModelInfo? {
         val id = obj?.optString("id")?.takeIf { it.isNotBlank() } ?: return null
         val guess = modelInfoOf(id)

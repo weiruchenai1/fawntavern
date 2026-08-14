@@ -28,6 +28,12 @@ android {
         versionName = "0.1.0"
     }
 
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
     signingConfigs {
         // keystore.properties 不入库，缺失时不创建该配置
         if (keystoreProps.isNotEmpty()) {

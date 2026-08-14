@@ -64,7 +64,6 @@ object PreferencesStore {
     private const val K_SHOW_MODEL_ICON = "showModelIcon"
     private const val K_SHOW_MODEL_NAME = "showModelName"
     private const val K_SHOW_MODEL_TIMESTAMP = "showModelTimestamp"
-    private const val K_SHOW_TOKEN_STATS = "showTokenStats"
     private const val K_SHOW_TOKEN_USAGE = "showTokenUsage"
     private const val K_SHOW_TOKEN_SPEED = "showTokenSpeed"
     private const val K_SHOW_GENERATION_TIME = "showGenerationTime"
@@ -94,7 +93,6 @@ object PreferencesStore {
         fun navMode(name: String?): NavButtonsMode = try {
             NavButtonsMode.valueOf(name ?: "")
         } catch (_: Exception) { d.navButtonsMode }
-        val legacyTokenStats = p.getBoolean(K_SHOW_TOKEN_STATS, false)
         return Preferences(
             solidBackground = p.getBoolean(K_SOLID_BACKGROUND, d.solidBackground),
             showUserAvatar = p.getBoolean(K_SHOW_USER_AVATAR, d.showUserAvatar),
@@ -104,9 +102,9 @@ object PreferencesStore {
             showModelIcon = p.getBoolean(K_SHOW_MODEL_ICON, d.showModelIcon),
             showModelName = p.getBoolean(K_SHOW_MODEL_NAME, d.showModelName),
             showModelTimestamp = p.getBoolean(K_SHOW_MODEL_TIMESTAMP, d.showModelTimestamp),
-            showTokenUsage = p.getBoolean(K_SHOW_TOKEN_USAGE, legacyTokenStats),
-            showTokenSpeed = p.getBoolean(K_SHOW_TOKEN_SPEED, legacyTokenStats),
-            showGenerationTime = p.getBoolean(K_SHOW_GENERATION_TIME, legacyTokenStats),
+            showTokenUsage = p.getBoolean(K_SHOW_TOKEN_USAGE, d.showTokenUsage),
+            showTokenSpeed = p.getBoolean(K_SHOW_TOKEN_SPEED, d.showTokenSpeed),
+            showGenerationTime = p.getBoolean(K_SHOW_GENERATION_TIME, d.showGenerationTime),
             mathRendering = p.getBoolean(K_MATH_RENDERING, d.mathRendering),
             userMarkdown = p.getBoolean(K_USER_MARKDOWN, d.userMarkdown),
             thinkingMarkdown = p.getBoolean(K_THINKING_MARKDOWN, d.thinkingMarkdown),

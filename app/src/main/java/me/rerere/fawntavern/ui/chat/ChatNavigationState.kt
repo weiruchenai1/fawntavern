@@ -6,7 +6,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 
-/** Full-screen destinations layered above the chat screen. */
+/** 覆盖在聊天页之上的全屏页面。 */
 internal enum class ChatDestination {
     Settings,
     Presets,

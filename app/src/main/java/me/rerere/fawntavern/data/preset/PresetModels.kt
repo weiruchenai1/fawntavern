@@ -1,7 +1,7 @@
 package me.rerere.fawntavern.data.preset
 
 /**
- * ST 预设的顶层数据。
+ * 预设的顶层数据。
  */
 data class StPreset(
     val name: String = "",

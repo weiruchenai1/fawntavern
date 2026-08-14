@@ -241,7 +241,7 @@ object CharacterRepository {
         embedCharaChunk(base, jsonStr)
     }
 
-    /** 在 PNG 的 IEND 块前插入 chara(V2)+ccv3(V3) 两个 tEXt 块，并剥离已有的 chara/ccv3 块（对齐 ST 双写） */
+    /** 在 PNG 的 IEND 块前插入 chara(V2)+ccv3(V3) 两个 tEXt 块，并剥离已有的 chara/ccv3 块 */
     private fun embedCharaChunk(png: ByteArray, json: String): ByteArray {
         val charaText = "chara".toByteArray() + byteArrayOf(0) + Base64.encode(json.toByteArray(), Base64.NO_WRAP)
         // 派生 ccv3：spec 改为 chara_card_v3 / 3.0（解析失败则跳过 ccv3，仅写 chara）

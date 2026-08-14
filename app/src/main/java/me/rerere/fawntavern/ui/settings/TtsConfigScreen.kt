@@ -70,7 +70,6 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Volume2
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.settings.TtsStore
 import me.rerere.fawntavern.data.speech.TTSProviderSetting
 import me.rerere.fawntavern.data.speech.TtsEngine
 import me.rerere.fawntavern.ui.api.ProviderIcon
@@ -91,15 +90,17 @@ import sh.calvin.reorderable.ReorderableItem
 @Composable
 fun TtsConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    var services by remember { mutableStateOf(TtsStore.getServices(context)) }
-    val configWasRecovered = remember { TtsStore.consumeCorruptionNotice(context) }
+    val controller = remember(context) { TtsConfigController(AndroidTtsConfigDataSource(context)) }
+    var config by remember(controller) { mutableStateOf(controller.load()) }
+    val services = config.services
+    val selectedId = config.selectedId
+    val configWasRecovered = config.recovered
     val configRecoveredMessage = stringResource(R.string.tts_config_recovered)
     LaunchedEffect(configWasRecovered) {
         if (configWasRecovered) Toast.makeText(
             context, configRecoveredMessage, Toast.LENGTH_LONG
         ).show()
     }
-    var selectedId by remember { mutableStateOf(TtsStore.getSelectedId(context)) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }
     val stateHolder = rememberSaveableStateHolder()
@@ -111,8 +112,7 @@ fun TtsConfigScreen(onBack: () -> Unit) {
                 service = service,
                 onBack = { editingId = null },
                 onSave = { updated ->
-                    services = services.map { if (it.id == updated.id) updated else it }
-                    TtsStore.setServices(context, services)
+                    config = controller.replace(config, services.map { if (it.id == updated.id) updated else it })
                 },
             )
         }
@@ -123,8 +123,7 @@ fun TtsConfigScreen(onBack: () -> Unit) {
         AddTtsProviderSheet(
             onDismiss = { showAddSheet = false },
             onAdd = { options ->
-                services = services + options
-                TtsStore.addService(context, options)
+                config = controller.add(config, options)
                 showAddSheet = false
             },
         )
@@ -151,8 +150,7 @@ fun TtsConfigScreen(onBack: () -> Unit) {
                 items = services,
                 keyOf = { it.id },
             ) { list ->
-                services = list
-                TtsStore.setServices(context, list)
+                config = controller.replace(config, list)
             }
 
             LazyColumn(
@@ -171,15 +169,11 @@ fun TtsConfigScreen(onBack: () -> Unit) {
                             provider = provider,
                             selected = provider.id == selectedId,
                             onSelect = {
-                                selectedId = provider.id
-                                TtsStore.setSelectedId(context, provider.id)
+                                config = controller.select(config, provider.id)
                             },
                             onEdit = { editingId = provider.id },
                             onDelete = {
-                                val next = services.filter { it.id != provider.id }
-                                services = next
-                                TtsStore.setServices(context, next)
-                                if (selectedId == provider.id) selectedId = next.first().id
+                                config = controller.remove(config, provider.id)
                             },
                             canDelete = services.size > 1,
                             dragging = dragging,

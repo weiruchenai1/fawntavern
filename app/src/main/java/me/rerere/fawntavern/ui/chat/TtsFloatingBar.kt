@@ -40,7 +40,7 @@ import com.composables.icons.lucide.X
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.speech.TtsUiState
 
-/** 展开的控制区固定宽度（同 kelivo：用固定目标宽度插值，不测量自然宽度） */
+/** 展开的控制区固定宽度（用固定目标宽度插值，不测量自然宽度） */
 private val ControlsWidth = 112.dp
 
 /**
@@ -119,7 +119,7 @@ internal fun TtsFloatingBar(
                     Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            // 控制插槽（同 kelivo）：始终在组合，requiredWidth 按动画宽度裁切、alpha 按展开进度淡入；
+            // 控制插槽：始终在组合，requiredWidth 按动画宽度裁切、alpha 按展开进度淡入；
             // 内容用 requiredWidth 固定展开宽度排布，不随插槽宽度挤压
             Box(Modifier.requiredWidth(controlsSlotWidth).clipToBounds()) {
                 Row(

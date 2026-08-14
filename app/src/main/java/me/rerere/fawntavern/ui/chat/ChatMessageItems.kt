@@ -105,7 +105,7 @@ internal fun UserMsg(
         if (showName || showAvatar || showTimestamp) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(s8)) {
                 val avatarSz = (24f * scale).dp
-                // 时间戳显示在名称下方，不是右侧
+                // 时间戳显示在名称下方
                 if (showName || showTimestamp) {
                     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         if (showName) Text(name, style = textStyle, color = MaterialTheme.colorScheme.onSurface)
@@ -216,7 +216,7 @@ internal fun AIMsg(
                 }
             }
         }
-        // 深度思考 / 联网搜索时间线卡片（Kelivo 风格 Chain of Thought）
+        // 深度思考 / 联网搜索时间线卡片
         ThoughtTimelineCard(
             msg = msg,
             isStreaming = isStreaming,
@@ -247,7 +247,7 @@ internal fun AIMsg(
                 CitationsSheet(items = citations, scale = scale) { showCitations = false }
             }
         }
-        // 操作栏（复制/重答/翻译/更多 + 多版本切换）：流式生成中不显示，生成结束才出现
+        // 操作栏：流式生成中不显示，生成结束才出现
         if (!isStreaming) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

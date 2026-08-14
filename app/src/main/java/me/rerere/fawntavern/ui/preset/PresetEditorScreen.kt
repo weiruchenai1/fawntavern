@@ -66,7 +66,6 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.PromptItem
 import me.rerere.fawntavern.data.preset.RegexScript
 import me.rerere.fawntavern.data.preset.StPreset
@@ -95,9 +94,8 @@ fun PresetEditorScreen(
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    // The repository may emit a fresh StPreset while this screen is open. Keep the local draft
-    // for the lifetime of this editor instance; the parent creates a new instance when opening
-    // another preset.
+    val controller = remember(context) { PresetDataController(context) }
+    // 编辑器打开期间固定使用本地草稿；父级打开另一预设时会创建新的编辑器实例。
     var state by remember { mutableStateOf(PresetEditorState(preset)) }
     fun dispatch(action: PresetEditorAction) {
         state = reducePresetEditor(state, action)
@@ -106,7 +104,7 @@ fun PresetEditorScreen(
     // 退出即落盘：保存当前编辑结果后再执行返回导航
     fun saveAndBack() {
         scope.launch {
-            runCatching { PresetRepository.save(context, state.draft) }
+            runCatching { controller.save(state.draft) }
             onBack()
         }
     }
@@ -173,6 +171,7 @@ fun PresetEditorScreen(
                 )
                 2 -> RegexTab(
                     scripts = state.draft.regexScripts,
+                    parseRegex = controller::parseRegex,
                     onEdit = { dispatch(PresetEditorAction.EditRegex(it)) },
                     onToggle = { dispatch(PresetEditorAction.ToggleRegex(it)) },
                     onDeleteRequest = { dispatch(PresetEditorAction.RequestRegexDelete(it)) },
@@ -352,17 +351,17 @@ private fun PromptRow(
 @Composable
 private fun RegexTab(
     scripts: List<RegexScript>,
+    parseRegex: suspend (android.net.Uri) -> RegexScript,
     onEdit: (RegexScript) -> Unit,
     onToggle: (RegexScript) -> Unit,
     onDeleteRequest: (RegexScript) -> Unit,
     onImport: (RegexScript) -> Unit,
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // 导入：解析文件为内存对象后交给上层追加进 editable.regexScripts（退出随预设落盘）
+    // 导入后只追加到编辑草稿，退出编辑器时再随预设落盘。
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) scope.launch {
-            runCatching { PresetRepository.parseRegexUri(context, uri) }.getOrNull()?.let { onImport(it) }
+            runCatching { parseRegex(uri) }.getOrNull()?.let { onImport(it) }
         }
     }
 

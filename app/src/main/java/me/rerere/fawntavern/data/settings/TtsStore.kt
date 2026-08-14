@@ -11,7 +11,7 @@ import org.json.JSONObject
  * TTS（语音服务）设置（沿用 *Store 惯例：SharedPreferences + org.json 手写序列化）。
  *
  * 存储结构：已配置的提供商列表（有序，每项含实例 id + 类型 key + 各自配置）与选中 id
- * （朗读实际使用的提供商）。旧版「单选中 + 扁平分字段」格式读到时自动迁移成单元素列表。
+ * （朗读实际使用的提供商）。
  */
 object TtsStore {
     private const val PREFS = "tts"
@@ -19,13 +19,13 @@ object TtsStore {
     private const val KEY_SELECTED = "selected"
     private const val KEY_CORRUPTED = "services_corrupted"
 
-    /** 已配置的提供商列表（有序）。旧格式首次读到会迁移并写回。 */
+    /** 已配置的提供商列表（有序）。 */
     fun getServices(context: Context): List<TTSProviderSetting> {
         val p = prefs(context)
         val stored = p.getString(KEY_SERVICES, null)
         val raw = SecurePreferences.getString(context, p, KEY_SERVICES, null)
         if (raw == null) {
-            if (stored == null) return migrateLegacy(context)
+            if (stored == null) return createDefaults(context)
             return recoverDefaults(context, p)
         }
         val list = try {
@@ -112,9 +112,14 @@ object TtsStore {
     )
 
     private fun recoverDefaults(context: Context, p: android.content.SharedPreferences): List<TTSProviderSetting> {
+        val defaults = createDefaults(context)
+        p.edit().putBoolean(KEY_CORRUPTED, true).apply()
+        return defaults
+    }
+
+    private fun createDefaults(context: Context): List<TTSProviderSetting> {
         val defaults = listOf(TTSProviderSetting.SystemTTS())
         setServices(context, defaults)
-        p.edit().putBoolean(KEY_CORRUPTED, true).apply()
         return defaults
     }
 
@@ -192,33 +197,6 @@ object TtsStore {
                 voice = obj.optString("voice", base.voice),
             )
         }
-    }
-
-    /** 旧格式（单选中 provider + 扁平分字段）迁移成单元素列表并写回 */
-    private fun migrateLegacy(context: Context): List<TTSProviderSetting> {
-        val p = prefs(context)
-        val legacyKey = p.getString("provider", null)
-        val service = when (legacyKey) {
-            "openai" -> TTSProviderSetting.OpenAI(
-                apiKey = p.getString("openai_api_key", "") ?: "",
-                baseUrl = p.getString("openai_base_url", "https://api.openai.com/v1") ?: "https://api.openai.com/v1",
-                model = p.getString("openai_model", "gpt-4o-mini-tts") ?: "gpt-4o-mini-tts",
-                voice = p.getString("openai_voice", "alloy") ?: "alloy",
-            )
-            else -> TTSProviderSetting.SystemTTS(
-                speechRate = p.getFloat("system_rate", 1.0f),
-                pitch = p.getFloat("system_pitch", 1.0f),
-            )
-        }
-        setServices(context, listOf(service))
-        p.edit()
-            .remove("provider")
-            .remove("openai_api_key")
-            .remove("openai_base_url")
-            .remove("openai_model")
-            .remove("openai_voice")
-            .apply()
-        return listOf(service)
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

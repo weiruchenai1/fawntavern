@@ -29,7 +29,7 @@ import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.Space8
 
 /**
- * 悬浮滚动导航按钮栏：竖排四个无底色圆钮（跳到顶部 / 上一条 / 下一条 / 回到底部），
+ * 悬浮滚动消息导航按钮栏：竖排四个无底色圆钮（跳到顶部 / 上一条 / 下一条 / 回到底部），
  * 贴在聊天区右下角。
  *
  * 可见性由 [ChatScrollController.showNavButtons] 驱动——滚动时出现，静止两秒后自动隐藏。

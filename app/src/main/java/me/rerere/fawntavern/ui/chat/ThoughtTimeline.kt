@@ -79,7 +79,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /*
- * 深度思考 / 联网搜索的时间线卡片（对齐 Kelivo 的 Chain of Thought 设计）：
+ * 深度思考 / 联网搜索的时间线卡片：
  * 圆角 16 的浅色容器内，思考与搜索作为时间线步骤纵向排列，左侧 24dp 图标列以 1dp 竖线相连。
  * 思考按各搜索"发起时刻"（MsgSearch.reasoningChars/reasoningMs）切成分段，与搜索步骤交错，
  * 还原"思考→搜索→再思考"的真实时序；思考步骤标题带该段耗时，流式期间最后一段未展开时
@@ -603,7 +603,7 @@ private fun DetailViewToggle(json: Boolean, scale: Float, onChange: (Boolean) ->
 
 /**
  * 搜索步骤详情底部弹窗：参数（关键词/搜索服务/结果数）+ 结果列表；
- * 标题下一行右侧的分段开关切换 JSON 原始视图（工具调用的 arguments 与回传给模型的结果，对齐 Kelivo）。
+ * 标题下一行右侧的分段开关切换 JSON 原始视图（工具调用的 arguments 与回传给模型的结果。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

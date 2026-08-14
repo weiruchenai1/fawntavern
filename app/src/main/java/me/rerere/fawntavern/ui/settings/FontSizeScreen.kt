@@ -1,6 +1,5 @@
 package me.rerere.fawntavern.ui.settings
 
-import me.rerere.fawntavern.data.settings.FontSizeStore
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -34,11 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.chat.ChatMessage
-import me.rerere.fawntavern.data.settings.DefaultModelStore
-import me.rerere.fawntavern.data.settings.UserAvatarStore
-import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.ui.chat.AIMsg
 import me.rerere.fawntavern.ui.chat.UserMsg
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -64,6 +59,8 @@ private fun snapToPreset(value: Float): Float {
 @Composable
 fun FontSizeScreen(onBack: () -> Unit, currentScale: Float = 1.0f) {
     val context = LocalContext.current
+    val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
+    val preview = remember(controller) { controller.fontPreview() }
     var selectedScale by remember { mutableFloatStateOf(currentScale) }
 
     BackHandler(onBack = onBack)
@@ -87,22 +84,15 @@ fun FontSizeScreen(onBack: () -> Unit, currentScale: Float = 1.0f) {
                 Text(stringResource(R.string.preview_effect), style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary)
 
-                val userName = remember { UserProfileStore.getName(context) }
-                val avatar = remember { UserAvatarStore.load(context) }
-                // 优先取默认聊天模型，与聊天页 displayModelSpec 的兜底一致；只读全局 currentModel 会漏掉聊天里选的模型
-                val modelSpec = remember {
-                    DefaultModelStore.get(context, DefaultModelStore.ROLE_CHAT).model
-                        .ifBlank { ApiConfigStore.loadConfig(context).currentModel }
-                }
-                val modelId = modelSpec.substringAfter("::", "")
+                val modelId = preview.modelSpec.substringAfter("::", "")
                     .ifBlank { stringResource(R.string.no_model_selected) }
 
                 UserMsg(
-                    name = userName,
+                    name = preview.userName,
                     text = stringResource(R.string.preview_user_text),
                     onCopy = {}, onRegenerate = {}, onMore = {},
                     scale = selectedScale,
-                    avatarBitmap = avatar,
+                    avatarBitmap = preview.avatar,
                 )
 
                 AIMsg(
@@ -150,8 +140,7 @@ fun FontSizeScreen(onBack: () -> Unit, currentScale: Float = 1.0f) {
                 Slider(
                     value = selectedScale,
                     onValueChange = { raw ->
-                        selectedScale = snapToPreset(raw)
-                        FontSizeStore.setScale(context, selectedScale)
+                        selectedScale = controller.saveFontScale(snapToPreset(raw))
                     },
                     valueRange = SCALE_MIN..SCALE_MAX,
                     modifier = Modifier.fillMaxWidth(),

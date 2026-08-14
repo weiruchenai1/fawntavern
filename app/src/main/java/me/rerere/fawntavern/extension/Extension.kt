@@ -3,7 +3,7 @@ package me.rerere.fawntavern.extension
 import me.rerere.fawntavern.data.chat.ChatSession
 
 /**
- * 扩展系统的核心契约（SillyTavern 风格「扩展」的本地化实现）。
+ * 扩展系统的核心契约。
  *
  * 设计要点：
  * - **能力按接口拆分**：[Extension] 只带元信息；一个扩展按需再实现 [PromptContributor] /

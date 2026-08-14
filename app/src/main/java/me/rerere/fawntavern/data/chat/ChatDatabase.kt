@@ -17,8 +17,6 @@ import androidx.room.Relation
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "sessions")
@@ -229,72 +227,10 @@ internal abstract class ChatDatabase : RoomDatabase() {
     companion object {
         const val NAME = "chats.db"
 
-        /** v2：消息表增加图片/文件附件列 */
-        private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE messages ADD COLUMN imagesJson TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE messages ADD COLUMN filesJson TEXT NOT NULL DEFAULT ''")
-            }
-        }
-
-        /** v3：会话表增加世界书定时效果状态列 */
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE sessions ADD COLUMN timedWiJson TEXT NOT NULL DEFAULT ''")
-            }
-        }
-
-        /** v4：会话表增加扩展会话级状态列 */
-        private val MIGRATION_3_4 = object : Migration(3, 4) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE sessions ADD COLUMN extStateJson TEXT NOT NULL DEFAULT ''")
-            }
-        }
-
-        /** v5：会话表增加标题列 */
-        private val MIGRATION_4_5 = object : Migration(4, 5) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE sessions ADD COLUMN title TEXT NOT NULL DEFAULT ''")
-            }
-        }
-
-        /** v6：消息表增加联网搜索引用列 */
-        private val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE messages ADD COLUMN searchJson TEXT NOT NULL DEFAULT ''")
-            }
-        }
-
-        /** v7：会话表增加置顶列 */
-        private val MIGRATION_6_7 = object : Migration(6, 7) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
-            }
-        }
-
-        /** v8：消息表增加 token 用量与生成总耗时 */
-        private val MIGRATION_7_8 = object : Migration(7, 8) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE messages ADD COLUMN promptTokens INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE messages ADD COLUMN completionTokens INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE messages ADD COLUMN generationMs INTEGER NOT NULL DEFAULT 0")
-            }
-        }
-
-        private val MIGRATION_8_9 = object : Migration(8, 9) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE sessions ADD COLUMN localVariablesJson TEXT NOT NULL DEFAULT ''")
-            }
-        }
-
         @Volatile private var instance: ChatDatabase? = null
 
         fun get(context: Context): ChatDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, ChatDatabase::class.java, NAME)
-                .addMigrations(
-                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-                )
                 .build().also { instance = it }
         }
     }

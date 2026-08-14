@@ -11,7 +11,7 @@ import org.json.JSONObject
  * 联网搜索设置（沿用 *Store 惯例：SharedPreferences + org.json 手写序列化）。
  *
  * 存储结构：总开关、结果条数、已配置的提供商列表（有序，每项含实例 id + 类型 key + 各自配置）、
- * 选中下标（联网搜索实际使用的提供商）。旧版「单选中 + 按 key 分存配置」格式读到时自动迁移成单元素列表。
+ * 选中下标（联网搜索实际使用的提供商）。
  */
 object SearchStore {
     private const val PREFS = "web_search"
@@ -36,13 +36,13 @@ object SearchStore {
         prefs(context).edit().putInt(KEY_RESULT_SIZE, size.coerceIn(3, 10)).apply()
     }
 
-    /** 已配置的提供商列表（有序）。旧格式首次读到会迁移并写回。 */
+    /** 已配置的提供商列表（有序）。 */
     fun getServices(context: Context): List<SearchServiceOptions> {
         val p = prefs(context)
         val stored = p.getString(KEY_SERVICES, null)
         val raw = SecurePreferences.getString(context, p, KEY_SERVICES, null)
         if (raw == null) {
-            if (stored == null) return migrateLegacy(context)
+            if (stored == null) return createDefaults(context)
             return recoverDefaults(context, p)
         }
         val list = try {
@@ -134,9 +134,14 @@ object SearchStore {
     )
 
     private fun recoverDefaults(context: Context, p: android.content.SharedPreferences): List<SearchServiceOptions> {
+        val defaults = createDefaults(context)
+        p.edit().putBoolean(KEY_CORRUPTED, true).apply()
+        return defaults
+    }
+
+    private fun createDefaults(context: Context): List<SearchServiceOptions> {
         val defaults = listOf(SearchServiceOptions.fromKey(SearchServiceOptions.ALL.first().key))
         setServices(context, defaults)
-        p.edit().putBoolean(KEY_CORRUPTED, true).apply()
         return defaults
     }
 
@@ -208,57 +213,6 @@ object SearchStore {
             )
             is SearchServiceOptions.BingLocalOptions -> base
         }
-    }
-
-    /** 旧格式（单选中 provider + 按 key 分存 configs）迁移成单元素列表并写回 */
-    private fun migrateLegacy(context: Context): List<SearchServiceOptions> {
-        val p = prefs(context)
-        val legacyKey = p.getString("provider", null)
-        if (legacyKey == null) {
-            val defaults = listOf(SearchServiceOptions.fromKey(SearchServiceOptions.ALL.first().key))
-            setServices(context, defaults)
-            return defaults
-        }
-        val configs = try { JSONObject(p.getString("configs", null) ?: "{}") } catch (_: Exception) { JSONObject() }
-        val service = applyLegacyConfig(SearchServiceOptions.fromKey(legacyKey), configs.optJSONObject(legacyKey))
-        setServices(context, listOf(service))
-        p.edit().remove("provider").remove("configs").apply()
-        return listOf(service)
-    }
-
-    private fun applyLegacyConfig(base: SearchServiceOptions, config: JSONObject?): SearchServiceOptions = when (base) {
-        is SearchServiceOptions.TavilyOptions -> base.copy(apiKey = config?.optString("apiKey").orEmpty(), depth = config?.optString("depth")?.ifEmpty { "advanced" } ?: "advanced")
-        is SearchServiceOptions.ExaOptions -> base.copy(apiKey = config?.optString("apiKey").orEmpty())
-        is SearchServiceOptions.ZhipuOptions -> base.copy(apiKey = config?.optString("apiKey").orEmpty())
-        is SearchServiceOptions.SearXNGOptions -> base.copy(
-            url = config?.optString("url").orEmpty(), engines = config?.optString("engines").orEmpty(),
-            language = config?.optString("language").orEmpty(), username = config?.optString("username").orEmpty(),
-            password = config?.optString("password").orEmpty(),
-        )
-        is SearchServiceOptions.BraveOptions -> base.copy(apiKey = config?.optString("apiKey").orEmpty())
-        is SearchServiceOptions.DuckDuckGoOptions -> base.copy(region = config?.optString("region")?.ifEmpty { "us-en" } ?: "us-en")
-        is SearchServiceOptions.LinkUpOptions -> base.copy(apiKey = config?.optString("apiKey").orEmpty())
-        is SearchServiceOptions.MetasoOptions -> base.copy(apiKey = config?.optString("apiKey").orEmpty())
-        is SearchServiceOptions.OllamaOptions -> base.copy(apiKey = config?.optString("apiKey").orEmpty())
-        is SearchServiceOptions.JinaOptions -> base.copy(apiKey = config?.optString("apiKey").orEmpty())
-        is SearchServiceOptions.BochaOptions -> base.copy(apiKey = config?.optString("apiKey").orEmpty())
-        is SearchServiceOptions.PerplexityOptions -> base.copy(apiKey = config?.optString("apiKey").orEmpty())
-        is SearchServiceOptions.SerperOptions -> base.copy(
-            apiKey = config?.optString("apiKey").orEmpty(), gl = config?.optString("gl").orEmpty(),
-            hl = config?.optString("hl").orEmpty(), tbs = config?.optString("tbs").orEmpty(),
-            page = config?.optInt("page", 1) ?: 1,
-        )
-        is SearchServiceOptions.QueritOptions -> base.copy(
-            apiKey = config?.optString("apiKey").orEmpty(), sitesInclude = config?.optString("sitesInclude").orEmpty(),
-            sitesExclude = config?.optString("sitesExclude").orEmpty(), timeRange = config?.optString("timeRange").orEmpty(),
-            countries = config?.optString("countries").orEmpty(), languages = config?.optString("languages").orEmpty(),
-        )
-        is SearchServiceOptions.GrokOptions -> base.copy(
-            apiKey = config?.optString("apiKey").orEmpty(), model = config?.optString("model").orEmpty(),
-            reasoningEffort = config?.optString("reasoningEffort").orEmpty(),
-            customUrl = config?.optString("customUrl").orEmpty(), systemPrompt = config?.optString("systemPrompt").orEmpty(),
-        )
-        is SearchServiceOptions.BingLocalOptions -> base
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

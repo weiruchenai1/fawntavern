@@ -1,9 +1,8 @@
 package me.rerere.fawntavern.data.worldbook
 
 /**
- * 全局世界书激活设置（对齐 SillyTavern #wiActivationSettings）。
+ * 全局世界书激活设置。
  * 条目级 scanDepth/caseSensitive/matchWholeWords 覆盖此处的全局默认；null 时回落到这里。
- * 默认值取「保持本 App 既有行为 + 对齐用户截图」：不按预算裁剪、不带名称、子串匹配、递归开。
  */
 data class WorldInfoSettings(
     val scanDepth: Int = 2,               // 扫描深度：从最新往前数几条消息做关键词扫描

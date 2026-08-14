@@ -18,8 +18,8 @@ data class WorldBookEntry(
     val enabled: Boolean = true,
     val position: String = WorldBookPos.AFTER_CHAR,  // 见 WorldBookPos（ST 数字 position 已归一化为字符串）
     val insertionOrder: Int = 100,
-    val constant: Boolean = false,        // 常驻条目：不做关键词扫描，始终注入（🔵永久）
-    val vectorized: Boolean = false,      // 向量化激活（🔗，语义检索；需 embedding 后端，当前仅保留状态不激活）
+    val constant: Boolean = false,        // 常驻条目：不做关键词扫描，始终注入
+    val vectorized: Boolean = false,      // 向量化激活（语义检索；需 embedding 后端，当前仅保留状态不激活）
     val depth: Int = 4,                   // position = at_depth 时的注入深度（0 = 紧贴最新消息）
     val role: Int = 0,                    // position = at_depth 时的角色：0=System 1=User 2=Assistant
     val outletName: String = "",          // position = outlet 时的插槽名（{{outlet::name}} 取用）

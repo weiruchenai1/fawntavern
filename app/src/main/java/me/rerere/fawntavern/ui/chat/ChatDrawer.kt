@@ -58,12 +58,8 @@ import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Smile
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.UserPen
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.chat.ChatSession
-import me.rerere.fawntavern.data.settings.UserAvatarStore
-import me.rerere.fawntavern.data.settings.UserProfileStore
 import androidx.compose.foundation.text.input.TextFieldState
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
@@ -122,13 +118,15 @@ fun ChatDrawerContent(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    var userName by remember { mutableStateOf(UserProfileStore.getName(context)) }
-    var personaDescription by remember { mutableStateOf(UserProfileStore.getDescription(context)) }
-    var avatarColor by remember {
-        mutableStateOf(Color(UserProfileStore.getAvatarColor(context).toULong()))
+    val profileController = remember(context) {
+        ChatUserProfileController(AndroidChatUserProfileDataSource(context))
     }
-    var avatarBitmap by remember { mutableStateOf(UserAvatarStore.load(context)) }
+    val initialProfile = remember(profileController) { profileController.load() }
+
+    var userName by remember { mutableStateOf(initialProfile.name) }
+    var personaDescription by remember { mutableStateOf(initialProfile.description) }
+    var avatarColor by remember { mutableStateOf(Color(initialProfile.avatarColor.toULong())) }
+    var avatarBitmap by remember { mutableStateOf(initialProfile.avatar) }
     var showAvatarDialog by remember { mutableStateOf(false) }
     var showNameDialog by remember { mutableStateOf(false) }
 
@@ -137,7 +135,7 @@ fun ChatDrawerContent(
     ) { uri: Uri? ->
         if (uri != null) {
             scope.launch {
-                UserAvatarStore.save(context, uri)?.let { avatarBitmap = it }
+                profileController.saveAvatar(uri)?.let { avatarBitmap = it }
             }
         }
     }
@@ -175,7 +173,7 @@ fun ChatDrawerContent(
                         OutlinedButton(
                             onClick = {
                                 scope.launch {
-                                    withContext(Dispatchers.IO) { UserAvatarStore.delete(context) }
+                                    profileController.deleteAvatar()
                                     avatarBitmap = null
                                 }
                             },

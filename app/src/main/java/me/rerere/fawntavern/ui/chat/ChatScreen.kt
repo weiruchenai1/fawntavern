@@ -63,21 +63,7 @@ import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.domain.GenerationActionGuard
-import me.rerere.fawntavern.ui.api.ApiConfigScreen
-import me.rerere.fawntavern.ui.character.CharacterListScreen
-import me.rerere.fawntavern.ui.preset.PresetListScreen
-import me.rerere.fawntavern.ui.settings.DataManagementScreen
-import me.rerere.fawntavern.ui.settings.FontSizeScreen
-import me.rerere.fawntavern.ui.settings.PreferencesScreen
-import me.rerere.fawntavern.ui.settings.PromptLogScreen
-import me.rerere.fawntavern.ui.settings.AboutScreen
-import me.rerere.fawntavern.ui.settings.DefaultModelPage
-import me.rerere.fawntavern.ui.settings.SettingsScreen
-import me.rerere.fawntavern.ui.settings.TtsConfigScreen
-import me.rerere.fawntavern.ui.settings.WebSearchConfigScreen
-import me.rerere.fawntavern.ui.extension.ExtensionsScreen
 import me.rerere.fawntavern.ui.hooks.ImeLazyListAutoScroller
-import me.rerere.fawntavern.ui.worldbook.WorldBookListScreen
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.vibrate
@@ -213,160 +199,25 @@ fun ChatScreen(
     // SaveableStateProvider 包裹每个分支：从 Settings 进入 Characters 再返回时，
     // Settings 的 ScrollState 被暂存→恢复；否则 Settings 离开组合后重建，滚动回到顶部。
     val screenStateHolder = rememberSaveableStateHolder()
-    when (nav.lastOrNull()) {
-        Screen.Search -> {
-            screenStateHolder.SaveableStateProvider("Search") {
-                SearchScreen(
-                    charFile = vm.session?.charFile ?: "",
-                    onBack = ::navBack,
-                    onOpenSession = { id ->
-                        vm.openSession(id)
-                        drawerState.snapClose()
-                        navBack()
-                    },
-                )
-            }
-            return
-        }
-        Screen.FontSize -> {
-            screenStateHolder.SaveableStateProvider("FontSize") {
-                FontSizeScreen(
-                    onBack = {
-                        navBack()
-                        vm.reloadUiSettings()
-                    },
-                    currentScale = vm.uiSettings.fontScale,
-                )
-            }
-            return
-        }
-        Screen.Preferences -> {
-            screenStateHolder.SaveableStateProvider("Preferences") {
-                PreferencesScreen(
-                    onBack = {
-                        navBack()
-                        vm.reloadUiSettings()
-                    },
-                    solidBackground = solidBackground,
-                    onSolidBackgroundChange = onSolidBackgroundChange,
-                )
-            }
-            return
-        }
-        Screen.PromptLog -> {
-            screenStateHolder.SaveableStateProvider("PromptLog") {
-                PromptLogScreen(onBack = ::navBack)
-            }
-            return
-        }
-        Screen.DataMgmt -> {
-            screenStateHolder.SaveableStateProvider("DataMgmt") {
-                DataManagementScreen(
-                    onBack = {
-                        navBack()
-                        vm.refreshAfterDataManagement()
-                    },
-                    destructiveActionsEnabled = GenerationActionGuard.allowsMutation(vm.generating),
-                )
-            }
-            return
-        }
-        Screen.ApiConfig -> {
-            screenStateHolder.SaveableStateProvider("ApiConfig") {
-                ApiConfigScreen(onBack = {
-                    navBack()
-                    vm.reloadApiConfig()
-                })
-            }
-            return
-        }
-        Screen.WorldBooks -> {
-            screenStateHolder.SaveableStateProvider("WorldBooks") {
-                WorldBookListScreen(onBack = {
-                    navBack()
-                    vm.reloadPromptData()
-                })
-            }
-            return
-        }
-        Screen.Characters -> {
-            screenStateHolder.SaveableStateProvider("Characters") {
-                CharacterListScreen(onBack = {
-                    navBack()
-                    vm.refreshCurrentCard()
-                })
-            }
-            return
-        }
-        Screen.Presets -> {
-            screenStateHolder.SaveableStateProvider("Presets") {
-                PresetListScreen(onBack = {
-                    navBack()
-                    vm.reloadPromptData()
-                })
-            }
-            return
-        }
-        Screen.Settings -> {
-            screenStateHolder.SaveableStateProvider("Settings") {
-                SettingsScreen(
-                    onBack = ::navBack,
-                    themeMode = themeMode,
-                    onThemeModeChange = onThemeModeChange,
-                    onNavigateToPresets = { nav.add(Screen.Presets) },
-                    onNavigateToCharacters = { nav.add(Screen.Characters) },
-                    onNavigateToWorldBooks = { nav.add(Screen.WorldBooks) },
-                    onNavigateToApiConfig = { nav.add(Screen.ApiConfig) },
-                    onNavigateToDataManagement = { nav.add(Screen.DataMgmt) },
-                    onNavigateToFontSize = { nav.add(Screen.FontSize) },
-                    onNavigateToPreferences = { nav.add(Screen.Preferences) },
-                    onNavigateToPromptLog = { nav.add(Screen.PromptLog) },
-                    onNavigateToExtensions = { nav.add(Screen.Extensions) },
-                    onNavigateToDefaultModel = { nav.add(Screen.DefaultModel) },
-                    onNavigateToWebSearch = { nav.add(Screen.WebSearch) },
-                    onNavigateToTts = { nav.add(Screen.Tts) },
-                    onNavigateToAbout = { nav.add(Screen.About) },
-                )
-            }
-            return
-        }
-        Screen.Extensions -> {
-            screenStateHolder.SaveableStateProvider("Extensions") {
-                ExtensionsScreen(onBack = {
-                    navBack()
-                    vm.refreshExtensionSlots()
-                })
-            }
-            return
-        }
-        Screen.About -> {
-            screenStateHolder.SaveableStateProvider("About") {
-                AboutScreen(onBack = ::navBack)
-            }
-            return
-        }
-        Screen.DefaultModel -> {
-            screenStateHolder.SaveableStateProvider("DefaultModel") {
-                DefaultModelPage(onBack = ::navBack)
-            }
-            return
-        }
-        Screen.WebSearch -> {
-            screenStateHolder.SaveableStateProvider("WebSearch") {
-                WebSearchConfigScreen(onBack = {
-                    navBack()
-                    vm.reloadSearchConfig()
-                })
-            }
-            return
-        }
-        Screen.Tts -> {
-            screenStateHolder.SaveableStateProvider("Tts") {
-                TtsConfigScreen(onBack = ::navBack)
-            }
-            return
-        }
-        null -> {}
+    val activeDestination = nav.lastOrNull()
+    if (activeDestination != null) {
+        ChatDestinationHost(
+            destination = activeDestination,
+            stateHolder = screenStateHolder,
+            viewModel = vm,
+            themeMode = themeMode,
+            onThemeModeChange = onThemeModeChange,
+            solidBackground = solidBackground,
+            onSolidBackgroundChange = onSolidBackgroundChange,
+            onBack = ::navBack,
+            onNavigate = nav::add,
+            onOpenSearchSession = { id ->
+                vm.openSession(id)
+                drawerState.snapClose()
+                navBack()
+            },
+        )
+        return
     }
 
     vm.modelRevision // 读 state 建依赖：selectModel 后重读 displayModelSpec，刷新选中图标

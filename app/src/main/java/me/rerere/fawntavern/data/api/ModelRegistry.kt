@@ -1,7 +1,7 @@
 package me.rerere.fawntavern.data.api
 
 /**
- * 按模型 ID 猜测模态与能力（思路取自 rikkahub 的 ModelRegistry）。
+ * 按模型 ID 猜测模态与能力。
  *
  * 把 ID 切成字母/数字 token，规则要求自己的 token 按序出现（子序列匹配，允许中间隔别的 token），
  * 命中 token 最多的规则胜出、同分合并 —— 于是 "claude-3-7-sonnet" 取更具体的 `claude 3 7`
@@ -157,7 +157,7 @@ object ModelRegistry {
         Rule("pixtral", vision = true, tool = true),
     )
 
-    /** 切成小写的字母串 / 数字串，分隔符直接丢弃（子序列匹配不关心它们） */
+    /** 切成小写的字母串 / 数字串，分隔符直接丢弃 */
     private fun tokenize(modelId: String): List<String> {
         val out = mutableListOf<String>()
         val sb = StringBuilder()

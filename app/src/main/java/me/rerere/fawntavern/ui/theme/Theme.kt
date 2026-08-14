@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.core.view.WindowCompat
 import me.rerere.fawntavern.data.settings.ThemeMode
 
-// ── M3 配色方案（色值来自 material-theme 导出） ──
+// ── M3 配色方案（色值来自 material-theme） ──
 
 private val LightColorScheme = lightColorScheme(
     primary = androidx.compose.ui.graphics.Color(0xFF5C5A59),
@@ -102,7 +102,7 @@ fun FawnTavernTheme(
         ThemeMode.DARK -> true
     }
     val base = if (isDark) DarkColorScheme else LightColorScheme
-    // 纯色背景时背景/表面用纯黑纯白（卡片表面保留原值，保证层次不糊在一起）
+    // 纯色背景时背景/表面用纯黑纯白（卡片表面保留原值）
     val solid = if (isDark) Color(0xFF000000) else Color(0xFFFFFFFF)
     val colorScheme = base.copy(
         background = if (solidBackground) solid else base.background,

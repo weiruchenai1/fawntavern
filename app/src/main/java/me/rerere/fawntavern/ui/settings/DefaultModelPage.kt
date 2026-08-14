@@ -25,7 +25,6 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,8 +43,6 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquareText
 import com.composables.icons.lucide.RotateCcw
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.api.ApiConfigStore
-import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.ui.api.ProviderIcon
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
@@ -67,19 +64,20 @@ import me.rerere.fawntavern.ui.components.Space8
 @Composable
 fun DefaultModelPage(onBack: () -> Unit) {
     val context = LocalContext.current
-    val apiConfig = remember { ApiConfigStore.loadConfig(context) }
+    val controller = remember(context) { DefaultModelController(AndroidDefaultModelDataSource(context)) }
+    var state by remember(controller) { mutableStateOf(controller.load()) }
+    val apiConfig = state.apiConfig
 
-    var version by remember { mutableIntStateOf(0) }
-    var pickingRole by remember { mutableStateOf<String?>(null) }
-    var promptRole by remember { mutableStateOf<String?>(null) }
+    var pickingRole by remember { mutableStateOf<DefaultModelRole?>(null) }
+    var promptRole by remember { mutableStateOf<DefaultModelRole?>(null) }
 
     // 三张卡片共用同一个模型选择器；pickingRole 决定当前在给哪个角色选模型
-    val pickCurrent = pickingRole?.let { DefaultModelStore.get(context, it).model } ?: ""
+    val pickCurrent = pickingRole?.let { state.entry(it).model } ?: ""
     val modelSelector = rememberModelSelectorState(pickCurrent, apiConfig.providers)
 
-    val chatEntry = remember(version) { DefaultModelStore.get(context, DefaultModelStore.ROLE_CHAT) }
-    val titleEntry = remember(version) { DefaultModelStore.get(context, DefaultModelStore.ROLE_TITLE) }
-    val summaryEntry = remember(version) { DefaultModelStore.get(context, DefaultModelStore.ROLE_SUMMARY) }
+    val chatEntry = state.entry(DefaultModelRole.CHAT)
+    val titleEntry = state.entry(DefaultModelRole.TITLE)
+    val summaryEntry = state.entry(DefaultModelRole.SUMMARY)
 
     val useCurrentLabel = stringResource(R.string.default_model_use_global)
 
@@ -97,7 +95,7 @@ fun DefaultModelPage(onBack: () -> Unit) {
      * 已选角色模型则显示所选，否则显示"使用当前对话模型"。
      * 三张卡片统一使用此逻辑。
      */
-    fun roleModelParts(entry: DefaultModelStore.Entry): Pair<String, String> {
+    fun roleModelParts(entry: DefaultModelEntry): Pair<String, String> {
         val spec = entry.model.takeIf { it.isNotBlank() }
         if (spec != null) return resolveModel(spec)
         return "" to useCurrentLabel
@@ -115,8 +113,8 @@ fun DefaultModelPage(onBack: () -> Unit) {
             displayName = chName,
             showReset = chatEntry.model.isNotBlank(),
             showBolt = false,
-            onPick = { pickingRole = DefaultModelStore.ROLE_CHAT; modelSelector.open() },
-            onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_CHAT); version++ },
+            onPick = { pickingRole = DefaultModelRole.CHAT; modelSelector.open() },
+            onReset = { state = controller.reset(state, DefaultModelRole.CHAT) },
         )
 
         val (tiIcon, tiName) = roleModelParts(titleEntry)
@@ -128,9 +126,9 @@ fun DefaultModelPage(onBack: () -> Unit) {
             displayName = tiName,
             showReset = titleEntry.model.isNotBlank(),
             showBolt = true,
-            onPick = { pickingRole = DefaultModelStore.ROLE_TITLE; modelSelector.open() },
-            onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_TITLE); version++ },
-            onConfig = { promptRole = DefaultModelStore.ROLE_TITLE },
+            onPick = { pickingRole = DefaultModelRole.TITLE; modelSelector.open() },
+            onReset = { state = controller.reset(state, DefaultModelRole.TITLE) },
+            onConfig = { promptRole = DefaultModelRole.TITLE },
         )
 
         val (suIcon, suName) = roleModelParts(summaryEntry)
@@ -142,9 +140,9 @@ fun DefaultModelPage(onBack: () -> Unit) {
             displayName = suName,
             showReset = summaryEntry.model.isNotBlank(),
             showBolt = true,
-            onPick = { pickingRole = DefaultModelStore.ROLE_SUMMARY; modelSelector.open() },
-            onReset = { DefaultModelStore.reset(context, DefaultModelStore.ROLE_SUMMARY); version++ },
-            onConfig = { promptRole = DefaultModelStore.ROLE_SUMMARY },
+            onPick = { pickingRole = DefaultModelRole.SUMMARY; modelSelector.open() },
+            onReset = { state = controller.reset(state, DefaultModelRole.SUMMARY) },
+            onConfig = { promptRole = DefaultModelRole.SUMMARY },
         )
     }
 
@@ -154,8 +152,7 @@ fun DefaultModelPage(onBack: () -> Unit) {
         ModelSelectorSheet(
             state = modelSelector,
             onSelect = { providerId, modelId ->
-                DefaultModelStore.setModel(context, pickRole, "$providerId::$modelId")
-                version++
+                state = controller.setModel(state, pickRole, "$providerId::$modelId")
                 pickingRole = null
             },
             onDismiss = { pickingRole = null },
@@ -167,14 +164,10 @@ fun DefaultModelPage(onBack: () -> Unit) {
     if (prRole != null) {
         PromptSheet(
             role = prRole,
-            currentPrompt = DefaultModelStore.get(context, prRole).prompt,
-            defaultPrompt = when (prRole) {
-                DefaultModelStore.ROLE_TITLE -> DefaultModelStore.DEFAULT_TITLE_PROMPT
-                else -> DefaultModelStore.DEFAULT_SUMMARY_PROMPT
-            },
+            currentPrompt = state.entry(prRole).prompt,
+            defaultPrompt = controller.defaultPrompt(prRole),
             onSave = { prompt ->
-                DefaultModelStore.setPrompt(context, prRole, prompt)
-                version++
+                state = controller.setPrompt(state, prRole, prompt)
                 promptRole = null
             },
             onDismiss = { promptRole = null },
@@ -268,17 +261,17 @@ internal fun ModelCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PromptSheet(
-    role: String,
+    role: DefaultModelRole,
     currentPrompt: String,
     defaultPrompt: String,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val title = when (role) {
-        DefaultModelStore.ROLE_TITLE -> stringResource(R.string.default_model_prompt_title)
+        DefaultModelRole.TITLE -> stringResource(R.string.default_model_prompt_title)
         else -> stringResource(R.string.default_model_prompt_summary)
     }
-    val hint = if (role == DefaultModelStore.ROLE_TITLE) stringResource(R.string.default_model_prompt_title_hint)
+    val hint = if (role == DefaultModelRole.TITLE) stringResource(R.string.default_model_prompt_title_hint)
         else stringResource(R.string.default_model_prompt_summary_hint)
     val text = rememberTextFieldState(currentPrompt.ifBlank { defaultPrompt })
     val sheetState = rememberBottomSheetState(

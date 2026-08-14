@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import me.rerere.fawntavern.R
 
-/** 删除确认对话框：红色删除键 + 取消 */
+/** 删除确认对话框 */
 @Composable
 fun ConfirmDeleteDialog(title: String, text: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(

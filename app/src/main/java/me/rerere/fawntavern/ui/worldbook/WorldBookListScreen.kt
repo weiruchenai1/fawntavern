@@ -34,7 +34,6 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.SlidersHorizontal
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.worldbook.WorldBook
-import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.ImportableListScreen
 import me.rerere.fawntavern.ui.components.Space12
@@ -44,6 +43,7 @@ import me.rerere.fawntavern.ui.components.appClickable
 @Composable
 fun WorldBookListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val controller = remember(context) { WorldBookDataController(context) }
     var selectedBook by remember { mutableStateOf<WorldBook?>(null) }
     var showWiSettings by remember { mutableStateOf(false) }
     // SaveableStateHolder：进入编辑器/设置时列表离开组合，其 LazyListState 被暂存；
@@ -79,11 +79,11 @@ fun WorldBookListScreen(onBack: () -> Unit) {
         renameLabelRes = R.string.toast_rename_name_label,
         deleteTitleRes = R.string.delete_worldbook_title,
         deleteMsgFmtRes = R.string.delete_worldbook_msg_fmt,
-        listNames = { WorldBookRepository.listNames(context) },
-        loadItem = { WorldBookRepository.load(context, it) },
-        importItem = { WorldBookRepository.import(context, it).name },
-        renameItem = { old, new -> WorldBookRepository.rename(context, old, new) },
-        deleteItem = { WorldBookRepository.delete(context, it) },
+        listNames = controller::names,
+        loadItem = controller::load,
+        importItem = controller::import,
+        renameItem = controller::rename,
+        deleteItem = controller::delete,
         onOpen = { selectedBook = it },
         actions = {
             AppIconButton(

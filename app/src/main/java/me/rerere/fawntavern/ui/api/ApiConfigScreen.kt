@@ -28,13 +28,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.*
-import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ConnectionTester
 import me.rerere.fawntavern.data.api.ModelApi
 import me.rerere.fawntavern.data.api.ModelInfo
 import me.rerere.fawntavern.data.api.modelInfoOf
-import me.rerere.fawntavern.data.api.withValidCurrentModel
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
@@ -55,8 +53,10 @@ val API_TYPES = listOf("openai" to "OpenAI", "google" to "Google", "claude" to "
 fun ApiConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    var config by remember { mutableStateOf(ApiConfigStore.loadConfig(context)) }
-    val configWasRecovered = remember { ApiConfigStore.consumeCorruptionNotice(context) }
+    val controller = remember(context) { ApiConfigController(AndroidApiConfigDataSource(context)) }
+    val initial = remember(controller) { controller.load() }
+    var config by remember(controller) { mutableStateOf(initial.config) }
+    val configWasRecovered = initial.recovered
     val configRecoveredMessage = stringResource(R.string.api_config_recovered)
     LaunchedEffect(configWasRecovered) {
         if (configWasRecovered) {
@@ -65,8 +65,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
     }
     // 每次落盘都校正选中模型：禁用/删除提供商、移除模型后不留悬空选择
     fun save() {
-        config = config.withValidCurrentModel()
-        ApiConfigStore.saveConfig(context, config)
+        config = controller.save(config)
     }
 
     var editingId by remember { mutableStateOf<String?>(null) }

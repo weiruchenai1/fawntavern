@@ -41,7 +41,6 @@ import com.composables.icons.lucide.X
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.extension.Extension
 import me.rerere.fawntavern.extension.ExtensionHost
-import me.rerere.fawntavern.extension.ExtensionStore
 import me.rerere.fawntavern.extension.QuickReply
 import me.rerere.fawntavern.extension.builtin.QuickReplyExtension
 import me.rerere.fawntavern.extension.builtin.SummarizeExtension
@@ -88,7 +87,8 @@ private fun ExtensionsList(onBack: () -> Unit, onOpenSettings: (String) -> Unit)
 @Composable
 private fun ExtensionCard(ext: Extension, onOpenSettings: (String) -> Unit) {
     val context = LocalContext.current
-    var enabled by remember(ext.info.id) { mutableStateOf(ExtensionStore.isEnabled(context, ext.info.id)) }
+    val controller = remember(context) { ExtensionSettingsController(context) }
+    var enabled by remember(ext.info.id) { mutableStateOf(controller.isEnabled(ext.info.id)) }
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
@@ -104,8 +104,7 @@ private fun ExtensionCard(ext: Extension, onOpenSettings: (String) -> Unit) {
             }
             Spacer(Modifier.width(Space12))
             Switch(enabled, {
-                enabled = it
-                ExtensionStore.setEnabled(context, ext.info.id, it)
+                enabled = controller.setEnabled(ext.info.id, it)
             })
         }
         if (ext.info.id in HAS_SETTINGS) {
@@ -142,12 +141,13 @@ private fun extDesc(ext: Extension): String = when (ext.info.id) {
 @Composable
 private fun SummarizeSettings(onBack: () -> Unit) {
     val context = LocalContext.current
+    val controller = remember(context) { ExtensionSettingsController(context) }
     var cfg by remember {
-        mutableStateOf(SummarizeExtension.parseConfig(ExtensionStore.getConfig(context, SummarizeExtension.ID)))
+        mutableStateOf(SummarizeExtension.parseConfig(controller.config(SummarizeExtension.ID)))
     }
     fun save(next: SummarizeExtension.Config) {
         cfg = next
-        ExtensionStore.setConfig(context, SummarizeExtension.ID, SummarizeExtension.encodeConfig(next))
+        controller.setConfig(SummarizeExtension.ID, SummarizeExtension.encodeConfig(next))
     }
     BackHandler(onBack = onBack)
     SettingsSubPage(stringResource(R.string.ext_summarize), onBack, spacing = Space12) {
@@ -164,13 +164,14 @@ private fun SummarizeSettings(onBack: () -> Unit) {
 @Composable
 private fun QuickReplySettings(onBack: () -> Unit) {
     val context = LocalContext.current
+    val controller = remember(context) { ExtensionSettingsController(context) }
     var items by remember {
-        mutableStateOf(QuickReplyExtension.parseConfig(ExtensionStore.getConfig(context, QuickReplyExtension.ID)))
+        mutableStateOf(QuickReplyExtension.parseConfig(controller.config(QuickReplyExtension.ID)))
     }
     var editIdx by remember { mutableStateOf<Int?>(null) }  // -1 = 新增
     fun persist(next: List<QuickReply>) {
         items = next
-        ExtensionStore.setConfig(context, QuickReplyExtension.ID, QuickReplyExtension.encodeConfig(next))
+        controller.setConfig(QuickReplyExtension.ID, QuickReplyExtension.encodeConfig(next))
     }
     BackHandler(onBack = onBack)
     SettingsSubPage(stringResource(R.string.ext_quickreply), onBack, spacing = Space8) {

@@ -25,8 +25,8 @@ import org.json.JSONObject
  * - [onGenerationComplete]（GenerationLifecycle）：生成完成后，把 keepRecent 之外**新增**的历史（超过
  *   triggerTokens 才触发）连同旧摘要一起压成新的滚动摘要，写回会话级状态（水位 coveredUpTo 前进）。
  *
- * 参照 rikkahub `compressConversation` 的 keep-recent-N + 增量压缩思路，但注入方式改为旁路（不重建历史，
- * 以兼容本项目 alts/ts 严格模型）。配置存 `ExtensionStore.getConfig(ID)`，会话级状态存 `ChatSession.extState[ID]`。
+ * 注入方式为旁路（不重建历史，以兼容本项目 alts/ts 严格模型）。配置存 `ExtensionStore.getConfig(ID)`，
+ * 会话级状态存 `ChatSession.extState[ID]`。
  */
 object SummarizeExtension : Extension, PromptContributor, GenerationLifecycle {
 

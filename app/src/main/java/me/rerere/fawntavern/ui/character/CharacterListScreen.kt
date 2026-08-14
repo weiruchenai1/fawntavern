@@ -64,7 +64,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.character.CharacterCard
-import me.rerere.fawntavern.data.character.CharacterRepository
 import sh.calvin.reorderable.ReorderableItem
 import me.rerere.fawntavern.ui.components.rememberReorderableList
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -83,6 +82,9 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
+    val controller = remember(context) {
+        CharacterLibraryController(AndroidCharacterLibraryDataSource(context))
+    }
     var names by remember { mutableStateOf<List<String>>(emptyList()) }
     var chars by remember { mutableStateOf<Map<String, CharacterCard>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
@@ -95,17 +97,14 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     // 图片版本号：编辑器改了角色卡图片后 +1，强制列表缩略图重新解码
     var imageVersion by remember { mutableStateOf(0) }
     // 内置默认角色卡不可删除：它是角色选择面板与主界面的兜底
-    val defaultCardName = remember { CharacterRepository.defaultCardName(context) }
+    val defaultCardName = remember(controller) { controller.defaultCardName() }
 
     fun refresh() {
         scope.launch {
             loading = true
-            names = CharacterRepository.listNames(context)
-            val map = mutableMapOf<String, CharacterCard>()
-            for (n in names) {
-                try { map[n] = CharacterRepository.load(context, n) } catch (_: Exception) {}
-            }
-            chars = map
+            val loaded = controller.load()
+            names = loaded.names
+            chars = loaded.cards
             loading = false
         }
     }
@@ -121,7 +120,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                 var failed = 0
                 for (uri in uris) {
                     try {
-                        CharacterRepository.import(context, uri)
+                        controller.import(uri)
                         imported++
                     } catch (_: Exception) {
                         failed++
@@ -155,10 +154,10 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     }
     val exportPngLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("image/png")
-    ) { uri -> writeExport(uri) { CharacterRepository.exportPngBytes(context, exportTarget) } }
+    ) { uri -> writeExport(uri) { controller.exportPng(exportTarget) } }
     val exportJsonLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
-    ) { uri -> writeExport(uri) { CharacterRepository.exportJsonBytes(context, exportTarget) } }
+    ) { uri -> writeExport(uri) { controller.exportJson(exportTarget) } }
 
     showDeleteDialog?.let { name ->
         ConfirmDeleteDialog(
@@ -166,7 +165,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
             text = stringResource(R.string.delete_character_msg_fmt, name),
             onConfirm = {
                 scope.launch {
-                    CharacterRepository.delete(context, name)
+                    controller.delete(name)
                     Toast.makeText(context, resources.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
                     refresh()
                 }
@@ -218,7 +217,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                 keyOf = { it },
             ) { list ->
                 names = list
-                scope.launch { CharacterRepository.saveOrder(context, names) }
+                scope.launch { controller.saveOrder(names) }
             }
 
             LazyColumn(
@@ -234,7 +233,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                             CharCard(
                                 c = c,
                                 imageKey = imageVersion,
-                                imageFile = CharacterRepository.imageFile(context, name),
+                                imageFile = controller.imageFile(name),
                                 onClick = { selectedChar = c; editingFileName = name },
                                 onLongPress = { longPressName = name },
                                 dragging = dragging,

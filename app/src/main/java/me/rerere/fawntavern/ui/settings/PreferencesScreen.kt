@@ -34,37 +34,18 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.Bot
-import com.composables.icons.lucide.Brain
-import com.composables.icons.lucide.Calculator
-import com.composables.icons.lucide.Calendar
 import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.CircleUser
-import com.composables.icons.lucide.Clock
-import com.composables.icons.lucide.CornerDownLeft
-import com.composables.icons.lucide.EllipsisVertical
-import com.composables.icons.lucide.FoldVertical
-import com.composables.icons.lucide.Hand
 import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MessageSquarePlus
 import com.composables.icons.lucide.MessageSquareText
 import com.composables.icons.lucide.Minus
-import com.composables.icons.lucide.Navigation
 import com.composables.icons.lucide.Palette
-import com.composables.icons.lucide.PanelLeft
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Rocket
-import com.composables.icons.lucide.Rows3
-import com.composables.icons.lucide.ShieldCheck
 import com.composables.icons.lucide.Sigma
-import com.composables.icons.lucide.Tag
-import com.composables.icons.lucide.Type
-import com.composables.icons.lucide.UserPlus
 import com.composables.icons.lucide.Vibrate
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.Preferences
-import me.rerere.fawntavern.data.settings.PreferencesStore
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.noRippleClickable
 import me.rerere.fawntavern.ui.components.vibrate
@@ -110,11 +91,11 @@ private fun PrefHomeScreen(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainer)
         ) {
-            PrefNavRow(PrefIconPalette, stringResource(R.string.theme_settings)) { onOpen(PrefPage.THEME) }
-            PrefNavRow(PrefIconMessageSquareText, stringResource(R.string.chat_item_display)) { onOpen(PrefPage.CHAT_DISPLAY) }
-            PrefNavRow(PrefIconSigma, stringResource(R.string.rendering_settings)) { onOpen(PrefPage.RENDERING) }
-            PrefNavRow(PrefIconRocket, stringResource(R.string.behavior_startup)) { onOpen(PrefPage.BEHAVIOR) }
-            PrefNavRow(PrefIconVibrate, stringResource(R.string.haptics)) { onOpen(PrefPage.HAPTICS) }
+            PrefNavRow(Lucide.Palette, stringResource(R.string.theme_settings)) { onOpen(PrefPage.THEME) }
+            PrefNavRow(Lucide.MessageSquareText, stringResource(R.string.chat_item_display)) { onOpen(PrefPage.CHAT_DISPLAY) }
+            PrefNavRow(Lucide.Sigma, stringResource(R.string.rendering_settings)) { onOpen(PrefPage.RENDERING) }
+            PrefNavRow(Lucide.Rocket, stringResource(R.string.behavior_startup)) { onOpen(PrefPage.BEHAVIOR) }
+            PrefNavRow(Lucide.Vibrate, stringResource(R.string.haptics)) { onOpen(PrefPage.HAPTICS) }
         }
     }
 }
@@ -132,7 +113,7 @@ private fun PrefNavRow(icon: ImageVector, label: String, onClick: () -> Unit) {
         Text(label, style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f))
-        Icon(PrefIconChevronRight, null, Modifier.size(20.dp),
+        Icon(Lucide.ChevronRight, null, Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -164,6 +145,7 @@ internal fun PrefToggle(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
+    val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -185,7 +167,7 @@ internal fun PrefToggle(
             checked = checked,
             onCheckedChange = { new ->
                 // 开关触觉反馈：读旧值决定这次切换是否给反馈（切掉自己那次不反馈）
-                if (PreferencesStore.get(context).switchHaptic) {
+                if (controller.switchHapticEnabled()) {
                     vibrate(context)
                 }
                 onCheckedChange(new)
@@ -217,7 +199,7 @@ internal fun PrefLineInput(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            StepBtn(PrefIconMinus) {
+            StepBtn(Lucide.Minus) {
                 onValueChange((value - 1).coerceAtLeast(1))
             }
             BasicTextField(
@@ -241,13 +223,12 @@ internal fun PrefLineInput(
                     textAlign = TextAlign.Center,
                 ),
             )
-            StepBtn(PrefIconPlus) {
+            StepBtn(Lucide.Plus) {
                 onValueChange((value + 1).coerceAtMost(999))
             }
         }
     }
 }
-
 @Composable
 private fun StepBtn(icon: ImageVector, onClick: () -> Unit) {
     Box(
@@ -296,31 +277,3 @@ internal fun NavButtonsSegmented(
         }
     }
 }
-
-// ── 共享图标别名（Lucide 图标是 Lucide 对象的扩展属性，须逐个导入后经 Lucide.X 访问） ──
-internal val PrefIconPalette = Lucide.Palette
-internal val PrefIconMessageSquareText = Lucide.MessageSquareText
-internal val PrefIconSigma = Lucide.Sigma
-internal val PrefIconRocket = Lucide.Rocket
-internal val PrefIconVibrate = Lucide.Vibrate
-internal val PrefIconChevronRight = Lucide.ChevronRight
-internal val PrefIconCircleUser = Lucide.CircleUser
-internal val PrefIconType = Lucide.Type
-internal val PrefIconClock = Lucide.Clock
-internal val PrefIconEllipsis = Lucide.EllipsisVertical
-internal val PrefIconBot = Lucide.Bot
-internal val PrefIconTag = Lucide.Tag
-internal val PrefIconCalculator = Lucide.Calculator
-internal val PrefIconBrain = Lucide.Brain
-internal val PrefIconFold = Lucide.FoldVertical
-internal val PrefIconRows = Lucide.Rows3
-internal val PrefIconShield = Lucide.ShieldCheck
-internal val PrefIconNav = Lucide.Navigation
-internal val PrefIconCalendar = Lucide.Calendar
-internal val PrefIconUserPlus = Lucide.UserPlus
-internal val PrefIconMsgPlus = Lucide.MessageSquarePlus
-internal val PrefIconEnter = Lucide.CornerDownLeft
-internal val PrefIconPanel = Lucide.PanelLeft
-internal val PrefIconHand = Lucide.Hand
-internal val PrefIconMinus = Lucide.Minus
-internal val PrefIconPlus = Lucide.Plus

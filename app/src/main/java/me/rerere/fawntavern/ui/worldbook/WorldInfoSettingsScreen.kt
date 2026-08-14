@@ -28,7 +28,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.settings.WorldInfoSettingsStore
 import me.rerere.fawntavern.data.worldbook.WorldInfoSettings
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
@@ -38,10 +37,12 @@ import me.rerere.fawntavern.ui.components.Space12
 @Composable
 fun WorldInfoSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    var s by remember { mutableStateOf(WorldInfoSettingsStore.get(context)) }
+    val controller = remember(context) {
+        WorldInfoSettingsController(AndroidWorldInfoSettingsDataSource(context))
+    }
+    var s by remember(controller) { mutableStateOf(controller.load()) }
     fun save(next: WorldInfoSettings) {
-        s = next
-        WorldInfoSettingsStore.set(context, next)
+        s = controller.update(next)
     }
 
     BackHandler(onBack = onBack)
