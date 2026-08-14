@@ -6,7 +6,6 @@
   <p>
     <a href="https://developer.android.com/"><img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+" /></a>
     <a href="https://openjdk.org/"><img src="https://img.shields.io/badge/JDK-17-ED8B00?style=flat&amp;logo=openjdk&amp;logoColor=white" alt="JDK 17" /></a>
-    <a href="https://github.com/weiruchenai1/fawntavern"><img src="https://img.shields.io/github/languages/top/weiruchenai1/fawntavern?style=flat&amp;logo=kotlin&amp;color=7F52FF" alt="Top Language" /></a>
   </p>
 </div>
 
