@@ -11,6 +11,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -80,6 +83,34 @@ class ChatDaoTest {
         ) as PagingSource.LoadResult.Page<Int, MessageEntity>
 
         assertEquals(listOf(10L, 20L, 30L), page.data.map { it.ts })
+    }
+
+    @Test
+    fun failedBatchRestoreRollsBackEverySession() = runBlocking {
+        dao.saveSession(
+            session("existing", title = "before"),
+            listOf(message("existing", 1, "user", "original")),
+        )
+
+        val failure = runCatching {
+            dao.restoreSessions(
+                sessions = listOf(
+                    session("existing", title = "overwritten"),
+                    session("new", title = "new"),
+                ),
+                messagesBySession = listOf(
+                    listOf(message("existing", 2, "user", "replacement")),
+                    listOf(message("missing-parent", 1, "user", "invalid")),
+                ),
+            )
+        }.exceptionOrNull()
+
+        assertNotNull(failure)
+        val existing = dao.getSession("existing")
+        assertEquals("before", existing?.session?.title)
+        assertEquals(listOf("original"), existing?.messages?.map { it.content })
+        assertNull(dao.getSession("new"))
+        assertTrue(dao.countSessions() == 1)
     }
 
     private fun session(id: String, title: String = "title") = SessionEntity(

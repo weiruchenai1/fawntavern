@@ -5,7 +5,6 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.map
-import androidx.room.withTransaction
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -58,15 +57,12 @@ object ChatRepository {
 
     /** 原子恢复备份内的会话；同 id 覆盖，任一项失败则整批回滚。 */
     suspend fun restore(context: Context, sessions: List<ChatSession>) {
-        val db = ChatDatabase.get(context)
-        db.withTransaction {
-            sessions.forEach { session ->
-                db.dao().saveSession(
-                    s = session.toEntity(),
-                    ms = session.messages.map { it.toEntity(session.id) },
-                )
-            }
-        }
+        ChatDatabase.get(context).dao().restoreSessions(
+            sessions = sessions.map { it.toEntity() },
+            messagesBySession = sessions.map { session ->
+                session.messages.map { it.toEntity(session.id) }
+            },
+        )
     }
 
     suspend fun delete(context: Context, id: String) {

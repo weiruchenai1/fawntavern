@@ -33,7 +33,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,29 +60,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.backup.AppBackup
-import me.rerere.fawntavern.data.character.CharacterRepository
-import me.rerere.fawntavern.data.chat.ChatRepository
-import me.rerere.fawntavern.data.preset.PresetRepository
-import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
-import java.io.File
 
 @Composable
 private fun DataCategory.label(): String = stringResource(labelResId)
 
 private data class DataCategory(
-    val key: String,
+    val key: DataCategoryKey,
     val labelResId: Int,
     val icon: @Composable () -> Unit,
-    val itemCount: suspend () -> Int,
-    val dir: (android.content.Context) -> File?,
-    val clear: suspend (android.content.Context) -> Unit,
 )
 
 private val credentialBackupSections = setOf(
@@ -111,6 +101,9 @@ fun DataManagementScreen(
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
+    val controller = remember(context) {
+        DataManagementController(AndroidDataManagementDataSource(context))
+    }
     val backupImportedMessage: (Int, Int) -> String = { files, sessions ->
         resources.getQuantityString(R.plurals.backup_files, files, files) +
             resources.getQuantityString(R.plurals.backup_sessions_suffix, sessions, sessions)
@@ -123,91 +116,72 @@ fun DataManagementScreen(
     var showExportSelection by remember { mutableStateOf(false) }
     var exportSections by remember { mutableStateOf(AppBackup.defaultExportSections) }
     var pendingExportSections by remember { mutableStateOf<Set<AppBackup.Section>>(emptySet()) }
-    var pendingImportFile by remember { mutableStateOf<File?>(null) }
+    var pendingImport by remember { mutableStateOf<PendingBackup?>(null) }
     var importAvailableSections by remember { mutableStateOf<Set<AppBackup.Section>>(emptySet()) }
     var importSections by remember { mutableStateOf<Set<AppBackup.Section>>(emptySet()) }
-    val currentPendingImportFile by rememberUpdatedState(pendingImportFile)
+    val currentPendingImport by rememberUpdatedState(pendingImport)
 
-    DisposableEffect(Unit) {
-        onDispose { currentPendingImportFile?.delete() }
+    DisposableEffect(controller) {
+        onDispose { controller.discard(currentPendingImport) }
     }
 
     val categories = remember {
         listOf(
             DataCategory(
-                key = "characters",
+                key = DataCategoryKey.CHARACTERS,
                 labelResId = R.string.characters,
                 icon = {
                     Icon(Lucide.Smile, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
-                itemCount = { CharacterRepository.listNames(context).size },
-                dir = { CharacterRepository.charsDir(it) },
-                clear = { ctx -> CharacterRepository.clear(ctx) },
             ),
             DataCategory(
-                key = "presets",
+                key = DataCategoryKey.PRESETS,
                 labelResId = R.string.presets,
                 icon = {
                     Icon(Lucide.SlidersHorizontal, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
-                itemCount = { PresetRepository.listNames(context).size },
-                dir = { PresetRepository.presetsDir(it) },
-                clear = { ctx -> PresetRepository.clear(ctx) },
             ),
             DataCategory(
-                key = "worldbooks",
+                key = DataCategoryKey.WORLDBOOKS,
                 labelResId = R.string.world_books,
                 icon = {
                     Icon(Lucide.SquareLibrary, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
-                itemCount = { WorldBookRepository.listNames(context).size },
-                dir = { WorldBookRepository.worldDir(it) },
-                clear = { ctx -> WorldBookRepository.clear(ctx) },
             ),
             DataCategory(
-                key = "chats",
+                key = DataCategoryKey.CHATS,
                 labelResId = R.string.chat_history,
                 icon = {
                     Icon(Lucide.MessageCircle, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
-                itemCount = { ChatRepository.count(context) },
-                dir = { ChatRepository.storageDir(it) },
-                clear = { ctx -> ChatRepository.clear(ctx) },
             ),
         )
     }
 
     // 加载各分类的条目数与占用大小
-    var catInfos by remember { mutableStateOf<List<Triple<DataCategory, Int, String>>>(emptyList()) }
-    var apiCount by remember { mutableIntStateOf(0) }
-    var totalItems by remember { mutableIntStateOf(0) }
-    var totalSize by remember { mutableStateOf("0 B") }
+    var snapshot by remember {
+        mutableStateOf(DataManagementSnapshot(emptyList(), apiCount = 0))
+    }
 
     fun refresh() {
         scope.launch {
             working = true
-            withContext(Dispatchers.IO) {
-                catInfos = categories.map { cat ->
-                    val count = cat.itemCount()
-                    val size = cat.dir(context)?.let { dirSize(it) } ?: 0L
-                    Triple(cat, count, formatSize(size))
-                }
-                apiCount = ApiConfigStore.loadConfig(context).providers.size
+            try {
+                snapshot = withContext(Dispatchers.IO) { controller.snapshot() }
+            } finally {
+                working = false
             }
-            totalItems = catInfos.sumOf { it.second }
-            totalSize = formatSize(catInfos.map { it.first.dir(context)?.let { dirSize(it) } ?: 0L }.sum())
-            working = false
         }
     }
 
     LaunchedEffect(Unit) { refresh() }
 
     showClearCategory?.let { cat ->
-        val cnt = catInfos.find { it.first.key == cat.key }?.second ?: 0
+        val cnt = snapshot.categories.find { it.key == cat.key }?.itemCount ?: 0
         AlertDialog(
             onDismissRequest = { showClearCategory = null },
             icon = {
@@ -220,13 +194,16 @@ fun DataManagementScreen(
                 TextButton(enabled = destructiveActionsEnabled, onClick = {
                     scope.launch {
                         working = true
-                        withContext(Dispatchers.IO) { cat.clear(context) }
-                        refresh()
-                        Toast.makeText(
-                            context,
-                            resources.getString(R.string.toast_cleared_fmt, resources.getString(cat.labelResId)),
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                        try {
+                            snapshot = withContext(Dispatchers.IO) { controller.clear(cat.key) }
+                            Toast.makeText(
+                                context,
+                                resources.getString(R.string.toast_cleared_fmt, resources.getString(cat.labelResId)),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        } finally {
+                            working = false
+                        }
                     }
                     showClearCategory = null
                 }) { Text(stringResource(R.string.clear_category_btn), color = MaterialTheme.colorScheme.error) }
@@ -248,11 +225,12 @@ fun DataManagementScreen(
                 TextButton(enabled = destructiveActionsEnabled, onClick = {
                     scope.launch {
                         working = true
-                        withContext(Dispatchers.IO) {
-                            categories.forEach { it.clear(context) }
+                        try {
+                            snapshot = withContext(Dispatchers.IO) { controller.clearAll() }
+                            Toast.makeText(context, resources.getString(R.string.toast_cleared_all), Toast.LENGTH_SHORT).show()
+                        } finally {
+                            working = false
                         }
-                        refresh()
-                        Toast.makeText(context, resources.getString(R.string.toast_cleared_all), Toast.LENGTH_SHORT).show()
                     }
                     showClearAll = false
                 }) { Text(stringResource(R.string.clear_all_btn), color = MaterialTheme.colorScheme.error) }
@@ -268,9 +246,17 @@ fun DataManagementScreen(
             text = { Text(stringResource(R.string.reset_api_msg)) },
             confirmButton = {
                 TextButton(enabled = destructiveActionsEnabled, onClick = {
-                    apiCount = ApiConfigStore.resetToDefaults(context).providers.size
                     showResetApi = false
-                    Toast.makeText(context, resources.getString(R.string.toast_api_reset), Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        working = true
+                        try {
+                            val apiCount = withContext(Dispatchers.IO) { controller.resetApi() }
+                            snapshot = snapshot.copy(apiCount = apiCount)
+                            Toast.makeText(context, resources.getString(R.string.toast_api_reset), Toast.LENGTH_SHORT).show()
+                        } finally {
+                            working = false
+                        }
+                    }
                 }) { Text(stringResource(R.string.reset_btn), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { showResetApi = false }) { Text(stringResource(R.string.cancel)) } }
@@ -287,7 +273,7 @@ fun DataManagementScreen(
                 try {
                     withContext(Dispatchers.IO) {
                         context.contentResolver.openOutputStream(uri)?.use { out ->
-                            AppBackup.export(context, out, pendingExportSections)
+                            controller.export(out, pendingExportSections)
                         } ?: error("Unable to create backup")
                     }
                     Toast.makeText(context, resources.getString(R.string.toast_export_success), Toast.LENGTH_SHORT).show()
@@ -305,26 +291,19 @@ fun DataManagementScreen(
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                working = true
-                try {
-                    val inspected = withContext(Dispatchers.IO) {
-                        pendingImportFile?.delete()
-                        val cached = File.createTempFile("backup_selected_", ".zip", context.cacheDir)
-                        try {
+                    working = true
+                    try {
+                        val previous = pendingImport
+                        pendingImport = null
+                        val inspected = withContext(Dispatchers.IO) {
+                            controller.discard(previous)
                             context.contentResolver.openInputStream(uri)?.use { input ->
-                                cached.outputStream().use { input.copyTo(it) }
+                                controller.cacheAndInspect(input)
                             } ?: error("Unable to open backup")
-                            val available = cached.inputStream().use { AppBackup.inspect(context, it) }
-                            require(available.isNotEmpty()) { "No supported content found in backup" }
-                            cached to available
-                        } catch (e: Exception) {
-                            cached.delete()
-                            throw e
-                        }
                     }
-                    pendingImportFile = inspected.first
-                    importAvailableSections = inspected.second
-                    importSections = inspected.second
+                    pendingImport = inspected
+                    importAvailableSections = inspected.availableSections
+                    importSections = inspected.availableSections
                 } catch (e: Exception) {
                     Toast.makeText(context, resources.getString(R.string.toast_import_failed_fmt, e.message ?: ""), Toast.LENGTH_SHORT).show()
                 }
@@ -350,7 +329,7 @@ fun DataManagementScreen(
         )
     }
 
-    if (pendingImportFile != null) {
+    if (pendingImport != null) {
         BackupSelectionDialog(
             title = stringResource(R.string.select_import_content),
             available = importAvailableSections,
@@ -360,20 +339,20 @@ fun DataManagementScreen(
             confirmEnabled = destructiveActionsEnabled,
             onSelectedChange = { importSections = it },
             onDismiss = {
-                pendingImportFile?.delete()
-                pendingImportFile = null
+                controller.discard(pendingImport)
+                pendingImport = null
             },
             onConfirm = {
                 if (!destructiveActionsEnabled) return@BackupSelectionDialog
-                val cached = pendingImportFile ?: return@BackupSelectionDialog
-                pendingImportFile = null
+                val cached = pendingImport ?: return@BackupSelectionDialog
+                pendingImport = null
                 scope.launch {
                     working = true
                     try {
                         val result = withContext(Dispatchers.IO) {
-                            cached.inputStream().use { AppBackup.import(context, it, importSections) }
+                            controller.import(cached, importSections)
                         }
-                        refresh()
+                        snapshot = withContext(Dispatchers.IO) { controller.snapshot() }
                         val message = if (result.files > 0 || result.sessions > 0) {
                             backupImportedMessage(result.files, result.sessions)
                         } else {
@@ -387,7 +366,7 @@ fun DataManagementScreen(
                             Toast.LENGTH_SHORT,
                         ).show()
                     } finally {
-                        cached.delete()
+                        controller.discard(cached)
                         working = false
                     }
                 }
@@ -400,20 +379,21 @@ fun DataManagementScreen(
     SettingsSubPage(stringResource(R.string.data_management), onBack) {
         SectionHeader(stringResource(R.string.storage_overview))
         OverviewCard(
-            totalItems = totalItems,
-            totalSize = totalSize,
-            apiCount = apiCount,
+            totalItems = snapshot.totalItems,
+            totalSize = formatDataSize(snapshot.totalSizeBytes),
+            apiCount = snapshot.apiCount,
         )
 
         SectionHeader(stringResource(R.string.category_management))
-        catInfos.forEach { (cat, count, size) ->
-            val fileCount = cat.dir(context)?.listFiles()?.size ?: 0
+        categories.forEach { cat ->
+            val info = snapshot.categories.find { it.key == cat.key }
+            val count = info?.itemCount ?: 0
             CategoryCard(
                 icon = cat.icon,
                 label = cat.label(),
                 count = count,
-                size = size,
-                fileCount = fileCount,
+                size = formatDataSize(info?.sizeBytes ?: 0),
+                fileCount = info?.fileCount ?: 0,
                 onClear = { showClearCategory = cat },
                 enabled = count > 0 && destructiveActionsEnabled,
             )
@@ -421,7 +401,7 @@ fun DataManagementScreen(
 
         SectionHeader(stringResource(R.string.api_config))
         ApiConfigCard(
-            providerCount = apiCount,
+            providerCount = snapshot.apiCount,
             onReset = { showResetApi = true },
             enabled = destructiveActionsEnabled,
         )
@@ -463,7 +443,7 @@ fun DataManagementScreen(
         Button(
             onClick = { showClearAll = true },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !working && destructiveActionsEnabled && totalItems > 0,
+            enabled = !working && destructiveActionsEnabled && snapshot.totalItems > 0,
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer,
                 contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -684,20 +664,4 @@ private fun ApiConfigCard(
             Text(stringResource(R.string.reset_to_default))
         }
     }
-}
-
-private fun dirSize(dir: File): Long {
-    var total = 0L
-    dir.listFiles()?.forEach { f ->
-        if (f.isFile) total += f.length()
-        else if (f.isDirectory) total += dirSize(f)
-    }
-    return total
-}
-
-private fun formatSize(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-    bytes < 1024 * 1024 * 1024 -> "%.1f MB".format(bytes.toDouble() / (1024 * 1024))
-    else -> "%.1f GB".format(bytes.toDouble() / (1024 * 1024 * 1024))
 }

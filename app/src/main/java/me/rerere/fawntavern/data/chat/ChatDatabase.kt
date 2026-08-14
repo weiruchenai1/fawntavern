@@ -191,6 +191,18 @@ internal interface ChatDao {
         insertMessages(ms)
     }
 
+    /** 整批恢复共用一个事务；任一会话或消息失败时全部回滚。 */
+    @Transaction
+    suspend fun restoreSessions(
+        sessions: List<SessionEntity>,
+        messagesBySession: List<List<MessageEntity>>,
+    ) {
+        require(sessions.size == messagesBySession.size)
+        sessions.indices.forEach { index ->
+            saveSession(sessions[index], messagesBySession[index])
+        }
+    }
+
     @Query("DELETE FROM sessions WHERE id = :id")
     suspend fun deleteSession(id: String)
 

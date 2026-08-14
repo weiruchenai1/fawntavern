@@ -1,98 +1,45 @@
 package me.rerere.fawntavern.ui.chat
 
-import android.Manifest
-import android.content.ClipData
-import android.content.ContentValues
-import android.content.Context
-import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.media.MediaScannerConnection
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.times
-import androidx.core.content.ContextCompat
-import com.mikepenz.markdown.annotator.annotatorSettings
-import com.mikepenz.markdown.annotator.buildMarkdownAnnotatedString
-import com.mikepenz.markdown.compose.LocalMarkdownComponents
-import com.mikepenz.markdown.compose.MarkdownElement
 import com.mikepenz.markdown.compose.components.CurrentComponentsBridge
-import com.mikepenz.markdown.compose.components.MarkdownComponent
-import com.mikepenz.markdown.compose.components.MarkdownComponentModel
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
-import com.mikepenz.markdown.compose.elements.MarkdownHeader
-import com.mikepenz.markdown.compose.elements.MarkdownTableBasicText
-import com.mikepenz.markdown.compose.elements.MarkdownText
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.m3.elements.MarkdownCheckBox
@@ -103,32 +50,14 @@ import com.mikepenz.markdown.model.MarkdownTypography
 import com.mikepenz.markdown.model.ReferenceLinkHandlerImpl
 import com.mikepenz.markdown.model.State
 import com.mikepenz.markdown.model.markdownPadding
-import com.mikepenz.markdown.utils.MARKDOWN_TAG_IMAGE_URL
-import com.composables.icons.lucide.Copy
-import com.composables.icons.lucide.Download
-import com.composables.icons.lucide.Lucide
 import coil3.compose.rememberAsyncImagePainter
-import org.intellij.markdown.IElementType
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
-import org.intellij.markdown.ast.findChildOfType
-import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
-import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 import org.intellij.markdown.parser.MarkdownParser
-import ru.noties.jlatexmath.JLatexMathDrawable
-import ru.noties.jlatexmath.JLatexMathSplitter
-import java.io.File
-import java.io.FileOutputStream
-import java.util.Base64
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.RegexEngine
-import me.rerere.fawntavern.ui.components.noRippleClickable
 
 /** 共享的 Markdown 解析器（无状态，只在组合期的主线程上使用） */
 private val markdownFlavour = GFMFlavourDescriptor()
@@ -140,34 +69,6 @@ private val markdownParser = MarkdownParser(markdownFlavour)
  * 的同帧锚定漂移（句子下滑、整体下移一截）。
  */
 private val noTextAnimations = DefaultMarkdownAnimation(animateTextSize = { this })
-
-private const val MAX_INLINE_MATH_LENGTH = 512
-private const val MAX_BLOCK_MATH_LENGTH = 4_096
-
-private data class EncodedMath(val formula: String, val displayMode: Boolean)
-
-private object MathLink {
-    private const val Prefix = "latex:"
-
-    fun encode(formula: String, displayMode: Boolean): String {
-        val mode = if (displayMode) "d:" else "i:"
-        return Prefix + mode + Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(formula.toByteArray(Charsets.UTF_8))
-    }
-
-    fun decode(link: String): EncodedMath? {
-        if (!link.startsWith(Prefix)) return null
-        val encoded = link.removePrefix(Prefix)
-        val displayMode = encoded.startsWith("d:")
-        if (!displayMode && !encoded.startsWith("i:")) return null
-        return runCatching {
-            EncodedMath(
-                formula = String(Base64.getUrlDecoder().decode(encoded.drop(2)), Charsets.UTF_8),
-                displayMode = displayMode,
-            )
-        }.getOrNull()
-    }
-}
 
 /** 消息渲染偏好（渲染设置分组），用户 / 思维链 / 角色消息共用一套开关 */
 data class RenderPrefs(
@@ -349,183 +250,8 @@ private fun MarkdownMessageBlock(
     ComposeMarkdownBlock(content, textStyle, modifier, renderPrefs, fillWidth)
 }
 
-private data class MathRenderSegment(
-    val text: String,
-    val formula: Boolean,
-    val displayMode: Boolean = false,
-)
-
-private data class MathDelimiterMatch(
-    val start: Int,
-    val endExclusive: Int,
-    val formula: String,
-    val displayMode: Boolean,
-)
-
-private fun splitMathSegments(text: String, includeInline: Boolean = true): List<MathRenderSegment> {
-    val root = runCatching { markdownParser.buildMarkdownTreeFromString(text) }.getOrNull() ?: return emptyList()
-    val protected = mutableListOf<IntRange>()
-    fun collectCode(node: ASTNode) {
-        if (node.type == MarkdownElementTypes.CODE_FENCE || node.type == MarkdownElementTypes.CODE_BLOCK ||
-            node.type == MarkdownElementTypes.CODE_SPAN || node.type == GFMElementTypes.TABLE) {
-            protected += node.startOffset until node.endOffset
-            return
-        }
-        node.children.forEach(::collectCode)
-    }
-    collectCode(root)
-    val matches = findMathDelimiters(text, includeInline).filter { match ->
-        protected.none { range -> match.start <= range.last && match.endExclusive - 1 >= range.first }
-    }
-    if (matches.isEmpty()) return emptyList()
-
-    val result = mutableListOf<MathRenderSegment>()
-    var cursor = 0
-    matches.forEach { match ->
-        if (match.start > cursor) result += MathRenderSegment(text.substring(cursor, match.start), false)
-        result += MathRenderSegment(
-            text = match.formula.trim(),
-            formula = true,
-            displayMode = match.displayMode,
-        )
-        cursor = match.endExclusive
-    }
-    if (cursor < text.length) result += MathRenderSegment(text.substring(cursor), false)
-    return result.filter { it.text.isNotBlank() }
-}
-
-private fun findMathDelimiters(text: String, includeInline: Boolean): List<MathDelimiterMatch> {
-    val result = mutableListOf<MathDelimiterMatch>()
-    var index = 0
-    while (index < text.length) {
-        val match = when {
-            text.startsWith("$$", index) && !isEscapedAt(text, index) ->
-                findDelimitedMath(text, index, "$$", "$$", MAX_BLOCK_MATH_LENGTH, true)
-            text.startsWith("\\[", index) && !isEscapedAt(text, index) ->
-                findDelimitedMath(text, index, "\\[", "\\]", MAX_BLOCK_MATH_LENGTH, true)
-            includeInline && text.startsWith("\\(", index) && !isEscapedAt(text, index) ->
-                findDelimitedMath(text, index, "\\(", "\\)", MAX_INLINE_MATH_LENGTH, false, allowNewline = false)
-            includeInline && text[index] == '$' &&
-                (index == 0 || text[index - 1] != '$') &&
-                (index + 1 >= text.length || text[index + 1] != '$') &&
-                canOpenInlineDollar(text, index) -> findInlineDollarMath(text, index)
-            else -> null
-        }
-        if (match != null) {
-            result += match
-            index = match.endExclusive
-        } else {
-            index++
-        }
-    }
-    return result
-}
-
-private fun findDelimitedMath(
-    text: String,
-    start: Int,
-    open: String,
-    close: String,
-    maxLength: Int,
-    displayMode: Boolean,
-    allowNewline: Boolean = true,
-): MathDelimiterMatch? {
-    val bodyStart = start + open.length
-    val searchEnd = minOf(text.length, bodyStart + maxLength + close.length)
-    var cursor = bodyStart
-    while (cursor < searchEnd) {
-        if (!allowNewline && text[cursor] == '\n') return null
-        if (text.startsWith(close, cursor) && !isEscapedAt(text, cursor)) {
-            val body = text.substring(bodyStart, cursor).trim()
-            if (body.isEmpty()) return null
-            return MathDelimiterMatch(start, cursor + close.length, body, displayMode)
-        }
-        cursor++
-    }
-    return null
-}
-
-private fun findInlineDollarMath(text: String, start: Int): MathDelimiterMatch? {
-    val bodyStart = start + 1
-    val searchEnd = minOf(text.length, bodyStart + MAX_INLINE_MATH_LENGTH + 1)
-    var cursor = bodyStart
-    while (cursor < searchEnd) {
-        val char = text[cursor]
-        if (char == '\n') return null
-        if (char == '$' && !isEscapedAt(text, cursor)) {
-            if (cursor + 1 < text.length && text[cursor + 1] == '$') return null
-            val body = text.substring(bodyStart, cursor)
-            if (body.isNotEmpty() && !body.first().isWhitespace() && !body.last().isWhitespace() &&
-                canCloseInlineDollar(text, cursor)) {
-                return MathDelimiterMatch(start, cursor + 1, body, false)
-            }
-            return null
-        }
-        cursor++
-    }
-    return null
-}
-
-private fun canOpenInlineDollar(text: String, index: Int): Boolean {
-    if (index + 1 >= text.length || text[index + 1].isWhitespace()) return false
-    if (index == 0) return true
-    val previous = text[index - 1]
-    return previous.isWhitespace() || isCjk(previous) || previous in "([{（【=:;,!?，。！？、：；"
-}
-
-private fun canCloseInlineDollar(text: String, index: Int): Boolean {
-    if (index == 0 || text[index - 1].isWhitespace()) return false
-    if (index + 1 >= text.length) return true
-    val next = text[index + 1]
-    return next.isWhitespace() || isCjk(next) || next in ")]}）】,.:;!?，。！？、：；"
-}
-
-private fun isCjk(char: Char): Boolean = char.code in 0x3400..0x4DBF ||
-    char.code in 0x4E00..0x9FFF || char.code in 0xF900..0xFAFF
-
-private fun isEscapedAt(text: String, index: Int): Boolean {
-    var slashes = 0
-    var cursor = index - 1
-    while (cursor >= 0 && text[cursor] == '\\') {
-        slashes++
-        cursor--
-    }
-    return slashes % 2 == 1
-}
-
-private fun prepareMath(text: String): String {
-    val root = runCatching { markdownParser.buildMarkdownTreeFromString(text) }.getOrNull() ?: return text
-    val protected = mutableListOf<IntRange>()
-    fun collectProtected(node: ASTNode) {
-        if (node.type == MarkdownElementTypes.CODE_FENCE || node.type == MarkdownElementTypes.CODE_BLOCK ||
-            node.type == MarkdownElementTypes.CODE_SPAN || node.type == GFMElementTypes.TABLE) {
-            protected += node.startOffset until node.endOffset
-            return
-        }
-        node.children.forEach(::collectProtected)
-    }
-    collectProtected(root)
-    val matches = findMathDelimiters(text, includeInline = true).filter { match ->
-        protected.none { range ->
-            match.start <= range.last && match.endExclusive - 1 >= range.first
-        }
-    }
-    if (matches.isEmpty()) return text
-    return buildString(text.length + matches.size * 12) {
-        var cursor = 0
-        matches.forEach { match ->
-            append(text, cursor, match.start)
-            append("![latex](")
-            append(MathLink.encode(match.formula, match.displayMode))
-            append(')')
-            cursor = match.endExclusive
-        }
-        append(text, cursor, text.length)
-    }
-}
-
 @Composable
-private fun ComposeMarkdownBlock(
+internal fun ComposeMarkdownBlock(
     content: String,
     textStyle: TextStyle,
     modifier: Modifier,
@@ -637,241 +363,6 @@ private class PreviewImageTransformer(
     }
 }
 
-/** A fixed toolbar plus a horizontally scrollable, image-exportable table body. */
-@Composable
-private fun ChatMarkdownTable(
-    content: String,
-    node: ASTNode,
-    style: TextStyle,
-    renderMath: Boolean,
-) {
-    val context = LocalContext.current
-    val resources = LocalResources.current
-    val clipboard = LocalClipboard.current
-    val scope = rememberCoroutineScope()
-    val graphicsLayer = rememberGraphicsLayer()
-    var isSaving by remember { mutableStateOf(false) }
-    val columns = remember(node) {
-        node.findChildOfType(GFMElementTypes.HEADER)?.children?.count { it.type == GFMTokenTypes.CELL } ?: 0
-    }
-    val tableWidth = columns.coerceAtLeast(1) * 148.dp
-    val tableSource = remember(content, node) { content.substring(node.startOffset, node.endOffset) }
-    val saveImage: () -> Unit = {
-        if (!isSaving) scope.launch {
-            isSaving = true
-            val saved = runCatching {
-                val image = graphicsLayer.toImageBitmap().asAndroidBitmap()
-                withContext(Dispatchers.IO) { saveBitmapToGallery(context, image) }
-            }.getOrDefault(false)
-            isSaving = false
-            Toast.makeText(
-                context,
-                resources.getString(if (saved) R.string.image_saved_to_gallery else R.string.image_save_failed),
-                Toast.LENGTH_SHORT,
-            ).show()
-        }
-    }
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) saveImage()
-        else Toast.makeText(context, R.string.image_save_failed, Toast.LENGTH_SHORT).show()
-    }
-    val outline = MaterialTheme.colorScheme.outlineVariant
-    val tableBackground = MaterialTheme.colorScheme.surfaceContainerLow
-    val panelShape = RoundedCornerShape(6.dp)
-
-    Column(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp)
-            .clip(panelShape)
-            .background(tableBackground),
-    ) {
-        Row(
-            Modifier.fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .padding(start = 10.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                stringResource(R.string.markdown_table),
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-            Icon(
-                Lucide.Copy,
-                stringResource(R.string.copy),
-                Modifier.size(36.dp).noRippleClickable {
-                    scope.launch {
-                        clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("table", tableSource)))
-                    }
-                    Toast.makeText(context, R.string.copied, Toast.LENGTH_SHORT).show()
-                }.padding(9.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Icon(
-                Lucide.Download,
-                stringResource(R.string.download),
-                Modifier.size(36.dp).noRippleClickable {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
-                        ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
-                        PackageManager.PERMISSION_GRANTED) {
-                        saveImage()
-                    } else {
-                        permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    }
-                }.padding(9.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        HorizontalDivider(color = outline)
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val scrollable = tableWidth > maxWidth
-            Column(
-                (if (scrollable) {
-                    Modifier.horizontalScroll(rememberScrollState()).requiredWidth(tableWidth)
-                } else {
-                    Modifier.fillMaxWidth()
-                }).drawWithContent {
-                    graphicsLayer.record {
-                        drawRect(tableBackground)
-                        this@drawWithContent.drawContent()
-                    }
-                    drawLayer(graphicsLayer)
-                },
-            ) {
-                var renderedRows = 0
-                node.children.forEach { child ->
-                    val isHeader = child.type == GFMElementTypes.HEADER
-                    if (isHeader || child.type == GFMElementTypes.ROW) {
-                        if (renderedRows > 0) HorizontalDivider(color = outline)
-                        ChatMarkdownTableRow(
-                            content = content,
-                            row = child,
-                            tableWidth = tableWidth,
-                            style = style,
-                            header = isHeader,
-                            renderMath = renderMath,
-                            dividerColor = outline,
-                        )
-                        renderedRows++
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** Keep the library's table geometry, but render TeX delimiters inside individual cells. */
-@Composable
-private fun ChatMarkdownTableRow(
-    content: String,
-    row: ASTNode,
-    tableWidth: Dp,
-    style: TextStyle,
-    header: Boolean,
-    renderMath: Boolean,
-    dividerColor: androidx.compose.ui.graphics.Color,
-) {
-    val markdownComponents = LocalMarkdownComponents.current
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.widthIn(tableWidth).height(IntrinsicSize.Max),
-    ) {
-        row.children.filter { it.type == GFMTokenTypes.CELL }.forEachIndexed { index, cell ->
-            if (index > 0) VerticalDivider(color = dividerColor)
-            val cellSource = remember(content, cell) {
-                content.substring(cell.startOffset, cell.endOffset).trim()
-            }
-            val segments = remember(cellSource, renderMath) {
-                if (renderMath) splitMathSegments(cellSource) else emptyList()
-            }
-            val cellStyle = if (header) style.copy(fontWeight = FontWeight.Bold) else style
-            Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp).weight(1f)) {
-                if (segments.isEmpty() && cell.children.any { it.type == MarkdownElementTypes.IMAGE }) {
-                    MarkdownElement(
-                        node = cell,
-                        components = markdownComponents,
-                        content = content,
-                        includeSpacer = false,
-                    )
-                } else if (segments.isEmpty()) {
-                    MarkdownTableBasicText(
-                        content = content,
-                        cell = cell,
-                        style = cellStyle,
-                        maxLines = Int.MAX_VALUE,
-                        overflow = TextOverflow.Clip,
-                    )
-                } else {
-                    segments.forEachIndexed { index, segment ->
-                        key(index, segment.text.hashCode(), segment.formula, segment.displayMode) {
-                            if (segment.formula) {
-                                LatexFormulaBlock(
-                                    formula = segment.text,
-                                    style = cellStyle,
-                                    displayMode = segment.displayMode,
-                                    compact = true,
-                                )
-                            } else {
-                                ComposeMarkdownBlock(
-                                    content = segment.text,
-                                    textStyle = cellStyle,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    renderPrefs = RenderPrefs(math = false),
-                                    fillWidth = false,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun saveBitmapToGallery(context: Context, bitmap: Bitmap): Boolean {
-    val fileName = "FawnTavern-table-${System.currentTimeMillis()}.png"
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
-            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-            put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/FawnTavern")
-            put(MediaStore.Images.Media.IS_PENDING, 1)
-        }
-        val resolver = context.contentResolver
-        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
-        try {
-            val written = resolver.openOutputStream(uri)?.use { output ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
-            } == true
-            if (!written) {
-                resolver.delete(uri, null, null)
-                false
-            } else {
-                values.clear()
-                values.put(MediaStore.Images.Media.IS_PENDING, 0)
-                resolver.update(uri, values, null, null)
-                true
-            }
-        } catch (_: Throwable) {
-            resolver.delete(uri, null, null)
-            false
-        }
-    } else {
-        @Suppress("DEPRECATION")
-        val directory = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-            "FawnTavern",
-        )
-        if (!directory.exists() && !directory.mkdirs()) return false
-        val file = File(directory, fileName)
-        val written = runCatching {
-            FileOutputStream(file).use { output -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, output) }
-        }.getOrDefault(false)
-        if (written) MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), arrayOf("image/png"), null)
-        written
-    }
-}
-
 /**
  * 聊天场景的 Markdown 排版：全部样式派生自消息正文的 [textStyle]（已含全局字体缩放），
  * 修掉两个库默认值的问题——
@@ -908,183 +399,6 @@ private fun chatMarkdownTypography(textStyle: TextStyle): MarkdownTypography {
         quote = textStyle.copy(fontStyle = FontStyle.Italic),
         link = textStyle.copy(fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline),
     )
-}
-
-private fun latexFlowHeading(
-    enabled: Boolean,
-    contentChildType: IElementType = MarkdownTokenTypes.ATX_CONTENT,
-    style: (MarkdownComponentModel) -> TextStyle,
-): MarkdownComponent = if (enabled) {
-    { model ->
-        LatexFlowMarkdownText(
-            model = model,
-            style = style(model),
-            contentChildType = contentChildType,
-        )
-    }
-} else {
-    { model -> MarkdownHeader(model.content, model.node, style(model), contentChildType) }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun LatexFlowMarkdownText(
-    model: MarkdownComponentModel,
-    style: TextStyle,
-    contentChildType: IElementType? = null,
-) {
-    val child = contentChildType?.let { type -> model.node.children.firstOrNull { it.type == type } } ?: model.node
-    val settings = annotatorSettings()
-    val styled = remember(model.content, child, style, settings) {
-        buildAnnotatedString {
-            pushStyle(style.toSpanStyle())
-            buildMarkdownAnnotatedString(model.content, child, settings)
-            pop()
-        }
-    }
-    val formulas = remember(styled) {
-        styled.getStringAnnotations(start = 0, end = styled.length).mapNotNull { range ->
-            if (range.item != MARKDOWN_TAG_IMAGE_URL) return@mapNotNull null
-            val link = styled.text.substring(range.start, range.end)
-            MathLink.decode(link)?.let { encoded -> Triple(range, encoded, link) }
-        }
-    }
-    if (formulas.isEmpty()) {
-        MarkdownText(styled, style = style)
-        return
-    }
-
-    val density = LocalDensity.current
-    val color = MaterialTheme.colorScheme.onSurface.toArgb()
-    val fontSizePx = with(density) {
-        if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.dp.toPx()
-    }
-    val rendered = formulas.map { (range, encoded, _) ->
-        val drawables = remember(encoded, fontSizePx, color) {
-            if (encoded.displayMode || encoded.formula.length > MAX_INLINE_MATH_LENGTH) {
-                emptyList()
-            } else runCatching {
-                JLatexMathSplitter.split(encoded.formula, fontSizePx * 8f, fontSizePx, color)
-            }.getOrElse { emptyList() }
-        }
-        FlowFormula(range, encoded.formula, encoded.displayMode, drawables)
-    }
-
-    FlowRow(modifier = Modifier.fillMaxWidth()) {
-        var cursor = 0
-        rendered.forEach { item ->
-            if (item.range.start > cursor) {
-                MarkdownText(
-                    styled.subSequence(cursor, item.range.start),
-                    modifier = Modifier.alignByBaseline(),
-                    style = style,
-                )
-            }
-            if (item.displayMode) {
-                LatexFormulaBlock(item.formula, style, displayMode = true)
-            } else if (item.drawables.isEmpty()) {
-                Text(
-                    "\$${item.formula}\$",
-                    modifier = Modifier.alignByBaseline(),
-                    style = style,
-                )
-            } else {
-                item.drawables.forEach { drawable ->
-                    LatexDrawableCanvas(
-                        drawable = drawable,
-                        modifier = Modifier.alignBy { measured ->
-                            // TeX drawables expose no baseline; center them around the text baseline
-                            // while reserving roughly one quarter-em for the normal descender area.
-                            (measured.measuredHeight / 2f + fontSizePx * 0.25f)
-                                .toInt()
-                                .coerceIn(0, measured.measuredHeight)
-                        },
-                    )
-                }
-            }
-            cursor = item.range.end
-        }
-        if (cursor < styled.length) {
-            MarkdownText(
-                styled.subSequence(cursor, styled.length),
-                modifier = Modifier.alignByBaseline(),
-                style = style,
-            )
-        }
-    }
-}
-
-private data class FlowFormula(
-    val range: AnnotatedString.Range<String>,
-    val formula: String,
-    val displayMode: Boolean,
-    val drawables: List<JLatexMathDrawable>,
-)
-
-@Composable
-private fun LatexDrawableCanvas(
-    drawable: JLatexMathDrawable,
-    modifier: Modifier = Modifier,
-) {
-    val density = LocalDensity.current
-    val width = with(density) { drawable.bounds.width().coerceIn(1, 8_192).toDp() }
-    val height = with(density) { drawable.bounds.height().coerceIn(1, 2_048).toDp() }
-    Canvas(modifier.size(width, height)) {
-        runCatching {
-            drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
-            drawable.draw(drawContext.canvas.nativeCanvas)
-        }
-    }
-}
-
-@Composable
-private fun LatexFormulaBlock(
-    formula: String,
-    style: TextStyle,
-    displayMode: Boolean = true,
-    compact: Boolean = false,
-) {
-    val density = LocalDensity.current
-    val color = MaterialTheme.colorScheme.onSurface.toArgb()
-    val textSizePx = with(density) {
-        if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.dp.toPx()
-    }
-    val drawable = remember(formula, textSizePx, color, displayMode, compact) {
-        if (formula.length > MAX_BLOCK_MATH_LENGTH) null else runCatching {
-            JLatexMathDrawable.builder(formula)
-                .textSize(textSizePx)
-                .color(color)
-                .padding(if (displayMode && !compact) 2 else 0)
-                .align(JLatexMathDrawable.ALIGN_LEFT)
-                .build()
-        }.getOrNull()
-    }
-    if (drawable == null) {
-        Text(formula, style = style)
-        return
-    }
-    // Keep normal equations at their intrinsic width so the viewport scrolls horizontally. The
-    // upper bounds prevent hostile or malformed model output from overflowing Compose constraints.
-    val width = with(density) { drawable.intrinsicWidth.coerceIn(1, 16_384).toDp() }
-    val height = with(density) { drawable.intrinsicHeight.coerceIn(1, 4_096).toDp() }
-    Box(
-        if (compact) {
-            Modifier.fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(vertical = 2.dp)
-        } else {
-            Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 2.dp, vertical = 2.dp)
-        },
-    ) {
-        Canvas(Modifier.size(width, height)) {
-            runCatching {
-                drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
-                drawable.draw(drawContext.canvas.nativeCanvas)
-            }
-        }
-    }
 }
 
 /** 三个依次呼吸亮起的小圆点，用于流式生成等待状态。 */

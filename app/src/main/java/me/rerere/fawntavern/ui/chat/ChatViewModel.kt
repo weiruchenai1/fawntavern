@@ -26,7 +26,6 @@ import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.PromptContextLoader
 import me.rerere.fawntavern.data.api.ApiConfigStore
-import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.ReasoningLevel
@@ -165,8 +164,16 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val generation = GenerationController()
     private val ctx: Application get() = getApplication()
+    private val generationCoordinator by lazy {
+        ChatGenerationCoordinator(
+            scope = viewModelScope,
+            stopCurrent = generation::stop,
+            onRunningChanged = { generating = it },
+        )
+    }
     private val messageCoordinator by lazy { ChatMessageCoordinator(ctx) }
     private val searchTool by lazy { ChatSearchTool(ctx) }
+    private val titleGenerator by lazy { ChatTitleGenerator(ctx) }
 
     /**
      * 当前会话消息的分页流（Paging 3）。随 [session] 的 id 切换：初始加载偏移定位到最后一页，
@@ -484,50 +491,45 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         inputText = ""
         attachments = emptyList()
-        generating = true  // 同步置位:附件落盘/DB 读等挂起点之前就挡住重复发送与并发生成
-        viewModelScope.launch {
-            try {
-                // 附件先拷入自有目录（content URI 的读权限是临时的，落盘副本才能支撑历史展示与重答）。
-                // 任一落盘失败（提供方不报大小、读取中途出错等）都中止发送并恢复输入与附件
-                val images = mutableListOf<String>()
-                val files = mutableListOf<MsgFile>()
-                var persistFailed = false
-                for (a in atts) {
-                    val persisted = if (a.isImage) {
-                        AttachmentStore.persistImage(ctx, a.uri)?.also { images.add(it) } != null
-                    } else {
-                        AttachmentStore.persistFile(ctx, a.uri)?.also { files.add(it) } != null
-                    }
-                    if (!persisted) {
-                        persistFailed = true
-                        break
-                    }
+        generationCoordinator.launch generationTask@{
+            // 附件先拷入自有目录（content URI 的读权限是临时的，落盘副本才能支撑历史展示与重答）。
+            // 任一落盘失败（提供方不报大小、读取中途出错等）都中止发送并恢复输入与附件
+            val images = mutableListOf<String>()
+            val files = mutableListOf<MsgFile>()
+            var persistFailed = false
+            for (a in atts) {
+                val persisted = if (a.isImage) {
+                    AttachmentStore.persistImage(ctx, a.uri)?.also { images.add(it) } != null
+                } else {
+                    AttachmentStore.persistFile(ctx, a.uri)?.also { files.add(it) } != null
                 }
-                if (persistFailed) {
-                    ChatRepository.collectUnusedAttachments(ctx)
-                    inputText = text
-                    attachments = atts
-                    sendError = ctx.getString(R.string.attachment_send_failed)
-                    return@launch
+                if (!persisted) {
+                    persistFailed = true
+                    break
                 }
-                // 以 DB 为准取当前会话（内存态可能落后于分支切换等 DB 变更）；未落盘的新会话回退内存态
-                val existing = session?.id?.let { ChatRepository.get(ctx, it) }
-                val src = existing ?: session ?: ChatSession()
-                val base = ConversationOps.appendUserMessage(src, text, images, files)
-                session = base
-                val userMsg = base.messages.last()
-                // 新用户消息即时进 overlay：putMessage 触发的分页 refresh 要过几帧才把它纳入 pagedBase，
-                // 这期间渲染列表若少这一条，发送瞬间的贴底/滚动会按"少一条"的高度算，加载图标落不到真正底部。
-                // 放进 overlay 后任何时刻列表都不缺它，分页补齐后由 settle 逻辑自动撤下。
-                overlays = overlays + (userMsg.ts to userMsg)
-                // 用户消息先落盘：生成中途 App 被杀/Activity 重建也不丢消息。
-                // 已落盘会话只插新用户消息；未落盘的新会话整存一次（含开场白）
-                if (existing != null) ChatRepository.putMessage(ctx, base.id, userMsg)
-                else ChatRepository.save(ctx, base)
-                runGeneration(base.id, prov, modelId, GenMode.SEND, null)
-            } finally {
-                generating = false
             }
+            if (persistFailed) {
+                ChatRepository.collectUnusedAttachments(ctx)
+                inputText = text
+                attachments = atts
+                sendError = ctx.getString(R.string.attachment_send_failed)
+                return@generationTask
+            }
+            // 以 DB 为准取当前会话（内存态可能落后于分支切换等 DB 变更）；未落盘的新会话回退内存态
+            val existing = session?.id?.let { ChatRepository.get(ctx, it) }
+            val src = existing ?: session ?: ChatSession()
+            val base = ConversationOps.appendUserMessage(src, text, images, files)
+            session = base
+            val userMsg = base.messages.last()
+            // 新用户消息即时进 overlay：putMessage 触发的分页 refresh 要过几帧才把它纳入 pagedBase，
+            // 这期间渲染列表若少这一条，发送瞬间的贴底/滚动会按"少一条"的高度算，加载图标落不到真正底部。
+            // 放进 overlay 后任何时刻列表都不缺它，分页补齐后由 settle 逻辑自动撤下。
+            overlays = overlays + (userMsg.ts to userMsg)
+            // 用户消息先落盘：生成中途 App 被杀/Activity 重建也不丢消息。
+            // 已落盘会话只插新用户消息；未落盘的新会话整存一次（含开场白）
+            if (existing != null) ChatRepository.putMessage(ctx, base.id, userMsg)
+            else ChatRepository.save(ctx, base)
+            runGeneration(base.id, prov, modelId, GenMode.SEND, null)
         }
         return SendOutcome.STARTED
     }
@@ -552,7 +554,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun stopGenerate() {
-        generation.stop()
+        generationCoordinator.stop()
     }
 
     /** 切换联网搜索开关（持久化，面板开关据此点亮/熄灭） */
@@ -653,14 +655,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val (prov, modelId) = currentProviderAndModel() ?: return SendOutcome.NO_MODEL
         // 走到这里说明其后没有 AI 回复（正常对话流总是有）：极罕见的用户消息连排场景，
         // 没有分支点可挂下文，直接截断到该用户消息后再生成（截断需先于生成完成，故同一协程内顺序执行）
-        generating = true  // 同步置位:截断/DB 读挂起点之前就挡住并发
-        viewModelScope.launch {
-            try {
-                ChatRepository.truncateAfter(ctx, s.id, ts)
-                runGeneration(s.id, prov, modelId, GenMode.SEND, null)
-            } finally {
-                generating = false
-            }
+        generationCoordinator.launch {
+            ChatRepository.truncateAfter(ctx, s.id, ts)
+            runGeneration(s.id, prov, modelId, GenMode.SEND, null)
         }
         return SendOutcome.STARTED
     }
@@ -668,13 +665,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private enum class GenMode { SEND, REGEN }
 
     private fun startGenerate(sessionId: String, prov: ApiProvider, modelId: String, mode: GenMode, targetTs: Long?) {
-        generating = true  // 同步置位:runGeneration 内首个 get() 挂起前就挡住重复触发（防双击并发生成）
-        viewModelScope.launch {
-            try {
-                runGeneration(sessionId, prov, modelId, mode, targetTs)
-            } finally {
-                generating = false
-            }
+        generationCoordinator.launch {
+            runGeneration(sessionId, prov, modelId, mode, targetTs)
         }
     }
 
@@ -884,48 +876,19 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun generateTitle(session: ChatSession, force: Boolean) {
-        if (!force && session.title.isNotBlank()) return
-        val userMsgs = session.messages.filter { it.role == "user" }
-        val aiMsgs = session.messages.filter { it.role == "assistant" }
-        if (userMsgs.isEmpty() || aiMsgs.isEmpty()) return
         viewModelScope.launch {
             try {
                 val chatModel = displayModelSpec() ?: return@launch
-                val resolved = DefaultModelStore.resolveModel(ctx, DefaultModelStore.ROLE_TITLE, chatModel)
-                    ?: return@launch
-                val (provId, modelId) = resolved
-                val prov = apiConfig.providers.find { it.id == provId && it.enabled } ?: return@launch
-                // 取前 2 轮对答摘要作为标题上下文
-                val historyLines = mutableListOf<String>()
-                val cName = currentCard?.name ?: session.charName
-                val maxPairs = minOf(userMsgs.size, aiMsgs.size, 2)
-                for (i in 0 until maxPairs) {
-                    historyLines.add("${userName}: ${userMsgs[i].content.take(200)}")
-                    historyLines.add("$cName: ${aiMsgs[i].content.take(200)}")
-                }
-                val historyPreview = historyLines.joinToString("\n")
-
-                val promptEntry = DefaultModelStore.get(ctx, DefaultModelStore.ROLE_TITLE)
-                val titlePrompt = if (promptEntry.prompt.isNotBlank()) {
-                    promptEntry.prompt.replace("{content}", historyPreview)
-                } else {
-                    DefaultModelStore.DEFAULT_TITLE_PROMPT.replace("{content}", historyPreview)
-                }
-
-                val services = HostServices(ctx, apiConfig)
-                val title = services.callModel(
-                    messages = listOf(
-                        ApiMessage("user", titlePrompt),
-                    ),
-                    params = null,
-                    modelId = "$provId::$modelId",
-                ).trim().take(80)
-
-                if (title.isNotBlank()) {
-                    ChatRepository.updateTitle(ctx, session.id, title)
-                    if (session.id == this@ChatViewModel.session?.id) {
-                        this@ChatViewModel.session = this@ChatViewModel.session?.copy(title = title)
-                    }
+                val title = titleGenerator.generate(
+                    session = session,
+                    force = force,
+                    chatModel = chatModel,
+                    apiConfig = apiConfig,
+                    userName = userName,
+                    charName = currentCard?.name ?: session.charName,
+                ) ?: return@launch
+                if (session.id == this@ChatViewModel.session?.id) {
+                    this@ChatViewModel.session = this@ChatViewModel.session?.copy(title = title)
                 }
             } catch (_: Exception) { /* 标题生成失败静默跳过 */ }
         }

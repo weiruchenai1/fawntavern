@@ -43,19 +43,10 @@ import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.delay
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.chat.ChatRepository
-import me.rerere.fawntavern.data.settings.SearchHistoryStore
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
-
-/** 一条消息命中结果 */
-private data class SearchHit(
-    val sessionId: String,
-    val title: String,
-    val snippet: String,
-)
 
 @Composable
 fun SearchScreen(
@@ -64,11 +55,12 @@ fun SearchScreen(
     onOpenSession: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val controller = remember(context) { ChatSearchController(AndroidChatSearchDataSource(context)) }
     var query by remember { mutableStateOf("") }
-    var history by remember { mutableStateOf(SearchHistoryStore.getHistory(context)) }
+    var history by remember(controller) { mutableStateOf(controller.history()) }
     val focusRequester = remember { FocusRequester() }
 
-    var hits by remember { mutableStateOf<List<SearchHit>>(emptyList()) }
+    var hits by remember { mutableStateOf<List<ChatSearchHit>>(emptyList()) }
     LaunchedEffect(charFile, query) {
         val q = query.trim()
         if (q.isBlank()) {
@@ -77,9 +69,7 @@ fun SearchScreen(
         }
         hits = emptyList()
         delay(250)
-        hits = ChatRepository.searchMessages(context, charFile, q).map {
-            SearchHit(it.sessionId, it.title, buildSnippet(it.content, q))
-        }
+        hits = controller.search(charFile, q)
     }
 
     BackHandler(onBack = onBack)
@@ -181,7 +171,7 @@ fun SearchScreen(
                         Row(
                             Modifier.fillMaxWidth()
                                 .clickable {
-                                    SearchHistoryStore.add(context, query.trim())
+                                    controller.record(query)
                                     onOpenSession(hit.sessionId)
                                 }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -222,8 +212,7 @@ fun SearchScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.clickable {
-                                SearchHistoryStore.clear(context)
-                                history = emptyList()
+                                history = controller.clearHistory()
                             },
                         )
                     }
@@ -255,8 +244,7 @@ fun SearchScreen(
                                 icon = Lucide.X,
                                 contentDescription = stringResource(R.string.delete),
                                 onClick = {
-                                    SearchHistoryStore.remove(context, item)
-                                    history = SearchHistoryStore.getHistory(context)
+                                    history = controller.removeHistory(item)
                                 },
                                 size = 32.dp,
                                 iconSize = 16.dp,
@@ -268,16 +256,4 @@ fun SearchScreen(
         }
         } // 外层 Column 结束
     }
-}
-
-// 生成命中片段：让关键词居中露出，前后各留一些上下文
-private fun buildSnippet(content: String, query: String): String {
-    val flat = content.replace('\n', ' ')
-    val idx = flat.indexOf(query, ignoreCase = true)
-    if (idx < 0) return flat.take(50)
-    val start = (idx - 15).coerceAtLeast(0)
-    val end = (idx + query.length + 35).coerceAtMost(flat.length)
-    val prefix = if (start > 0) "…" else ""
-    val suffix = if (end < flat.length) "…" else ""
-    return "$prefix${flat.substring(start, end)}$suffix"
 }
