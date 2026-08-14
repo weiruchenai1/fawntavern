@@ -55,10 +55,12 @@ class ChatDatabaseMigrationTest {
             .addMigrations(ChatDatabase.MIGRATION_9_10)
             .allowMainThreadQueries()
             .build()
-        migrated.use { database ->
-            val session = runBlocking { database.dao().getSession("session-1") }
+        try {
+            val session = runBlocking { migrated.dao().getSession("session-1") }
             assertEquals("Existing chat", session?.session?.title)
             assertEquals(listOf("Keep me"), session?.messages?.map(MessageEntity::content))
+        } finally {
+            migrated.close()
         }
     }
 
