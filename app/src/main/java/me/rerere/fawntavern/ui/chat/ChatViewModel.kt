@@ -33,11 +33,9 @@ import me.rerere.fawntavern.data.api.supportsBuiltInTool
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
-import me.rerere.fawntavern.data.chat.AttachmentStore
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
-import me.rerere.fawntavern.data.chat.MsgFile
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.toCharRegex
 import me.rerere.fawntavern.data.settings.SearchStore
@@ -172,6 +170,12 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
     private val messageCoordinator by lazy { ChatMessageCoordinator(ctx) }
+    private val attachmentCoordinator by lazy {
+        ChatAttachmentCoordinator(AndroidChatAttachmentDataSource(ctx))
+    }
+    private val sessionCoordinator by lazy {
+        ChatSessionCoordinator(AndroidChatSessionDataSource(ctx))
+    }
     private val searchTool by lazy { ChatSearchTool(ctx) }
     private val titleGenerator by lazy { ChatTitleGenerator(ctx) }
 
@@ -361,7 +365,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (generating) return
         // 悬浮窗是系统级、独立于会话：切换会话不停朗读
         viewModelScope.launch {
-            ChatRepository.get(ctx, id)?.let { session = it }
+            sessionCoordinator.open(id)?.let { session = it }
         }
     }
 
@@ -371,9 +375,12 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val alreadyNew = cur != null && cur.messages.none { it.role == "user" }
         if (generating || alreadyNew) return
         viewModelScope.launch {
-            val s = ConversationOps.newSession(currentCard, cur?.charFile ?: "", cur?.charName ?: "")
-            session = s
-            ChatRepository.save(ctx, s)
+            session = sessionCoordinator.create(
+                card = currentCard,
+                charFile = cur?.charFile ?: "",
+                charName = cur?.charName ?: "",
+                persist = true,
+            )
         }
     }
 
@@ -385,34 +392,26 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (!PreferencesStore.get(ctx).newChatOnCharSwitch) {
                 val existing = sessions.firstOrNull { it.charFile == fileName }
                 if (existing != null) {
-                    session = ChatRepository.get(ctx, existing.id) ?: existing
+                    session = sessionCoordinator.open(existing.id) ?: existing
                     return@launch
                 }
             }
             val card = if (fileName.isBlank()) null else loadCard(fileName)
             currentCard = card
-            session = ConversationOps.newSession(card, fileName, displayName)
+            session = sessionCoordinator.create(card, fileName, displayName, persist = false)
         }
     }
 
     fun deleteSession(id: String) {
         if (!GenerationActionGuard.allowsMutation(generating)) return
         viewModelScope.launch {
-            val curCharFile = session?.charFile ?: ""
-            val curCharName = session?.charName ?: ""
-            ChatRepository.delete(ctx, id)
-            val fresh = ChatRepository.listSummaries(ctx)
-            if (session?.id == id) {
-                // 留在当前角色：默认优先切到该角色的其他会话；偏好"删除话题后新建对话"
-                // 开启时总是新建（内存态，不落盘）。没有其他会话时也回退到新建。
-                session = if (PreferencesStore.get(ctx).newChatOnDeleteTopic) {
-                    ConversationOps.newSession(currentCard, curCharFile, curCharName)
-                } else {
-                    fresh.firstOrNull { it.charFile == curCharFile }
-                        ?.let { ChatRepository.get(ctx, it.id) }
-                        ?: ConversationOps.newSession(currentCard, curCharFile, curCharName)
-                }
-            }
+            val replacement = sessionCoordinator.delete(
+                id = id,
+                currentSession = session,
+                currentCard = currentCard,
+                newChatOnDeleteTopic = PreferencesStore.get(ctx).newChatOnDeleteTopic,
+            )
+            if (session?.id == id) session = replacement
         }
     }
 
@@ -420,14 +419,14 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val trimmed = title.trim()
         if (trimmed.isBlank()) return
         viewModelScope.launch {
-            ChatRepository.updateTitle(ctx, id, trimmed)
+            sessionCoordinator.rename(id, trimmed)
             if (session?.id == id) session = session?.copy(title = trimmed)
         }
     }
 
     fun setSessionPinned(id: String, pinned: Boolean) {
         viewModelScope.launch {
-            ChatRepository.updatePinned(ctx, id, pinned)
+            sessionCoordinator.setPinned(id, pinned)
             if (session?.id == id) session = session?.copy(pinned = pinned)
         }
     }
@@ -486,7 +485,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
         val (prov, modelId) = currentProviderAndModel() ?: return SendOutcome.NO_MODEL
         // 发送前同步校验文件大小：过大直接拦截（不清空附件，用户可移除或换文件）
-        if (atts.any { !it.isImage && AttachmentStore.isTooLarge(ctx, it.uri) }) {
+        if (attachmentCoordinator.hasOversizedFile(atts)) {
             return SendOutcome.FILE_TOO_LARGE
         }
         inputText = ""
@@ -494,22 +493,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         generationCoordinator.launch generationTask@{
             // 附件先拷入自有目录（content URI 的读权限是临时的，落盘副本才能支撑历史展示与重答）。
             // 任一落盘失败（提供方不报大小、读取中途出错等）都中止发送并恢复输入与附件
-            val images = mutableListOf<String>()
-            val files = mutableListOf<MsgFile>()
-            var persistFailed = false
-            for (a in atts) {
-                val persisted = if (a.isImage) {
-                    AttachmentStore.persistImage(ctx, a.uri)?.also { images.add(it) } != null
-                } else {
-                    AttachmentStore.persistFile(ctx, a.uri)?.also { files.add(it) } != null
-                }
-                if (!persisted) {
-                    persistFailed = true
-                    break
-                }
-            }
-            if (persistFailed) {
-                ChatRepository.collectUnusedAttachments(ctx)
+            val persisted = attachmentCoordinator.persist(atts)
+            if (persisted == null) {
                 inputText = text
                 attachments = atts
                 sendError = ctx.getString(R.string.attachment_send_failed)
@@ -518,7 +503,12 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             // 以 DB 为准取当前会话（内存态可能落后于分支切换等 DB 变更）；未落盘的新会话回退内存态
             val existing = session?.id?.let { ChatRepository.get(ctx, it) }
             val src = existing ?: session ?: ChatSession()
-            val base = ConversationOps.appendUserMessage(src, text, images, files)
+            val base = ConversationOps.appendUserMessage(
+                src,
+                text,
+                persisted.images,
+                persisted.files,
+            )
             session = base
             val userMsg = base.messages.last()
             // 新用户消息即时进 overlay：putMessage 触发的分页 refresh 要过几帧才把它纳入 pagedBase，
