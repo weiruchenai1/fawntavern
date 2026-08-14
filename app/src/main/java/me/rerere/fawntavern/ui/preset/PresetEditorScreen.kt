@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.ui.preset
 
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -65,6 +67,7 @@ import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
+import kotlinx.coroutines.CancellationException
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.preset.PromptItem
 import me.rerere.fawntavern.data.preset.RegexScript
@@ -86,6 +89,8 @@ val SOURCES = listOf("openai", "claude", "makersuite", "custom", "openrouter", "
 val ROLES = listOf("system", "user", "assistant")
 val POSITIONS = listOf("Before Chat" to 0, "After Chat" to 1)
 
+private const val PRESET_EDITOR_TAG = "PresetEditor"
+
 @Composable
 fun PresetEditorScreen(
     preset: StPreset,
@@ -97,15 +102,31 @@ fun PresetEditorScreen(
     val controller = remember(context) { PresetDataController(context) }
     // 编辑器打开期间固定使用本地草稿；父级打开另一预设时会创建新的编辑器实例。
     var state by remember { mutableStateOf(PresetEditorState(preset)) }
+    var saving by remember { mutableStateOf(false) }
     fun dispatch(action: PresetEditorAction) {
         state = reducePresetEditor(state, action)
     }
 
     // 退出即落盘：保存当前编辑结果后再执行返回导航
     fun saveAndBack() {
+        if (saving) return
+        saving = true
         scope.launch {
-            runCatching { controller.save(state.draft) }
-            onBack()
+            try {
+                controller.save(state.draft)
+                onBack()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e(PRESET_EDITOR_TAG, "Failed to save preset: ${state.draft.name}", error)
+                Toast.makeText(
+                    context,
+                    resources.getString(R.string.preset_save_failed_fmt, error.message.orEmpty()),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } finally {
+                saving = false
+            }
         }
     }
 

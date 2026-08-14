@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.AlertDialog
 import me.rerere.fawntavern.ui.components.FloatingWindow
 import me.rerere.fawntavern.ui.components.rememberInteractiveDrawerState
 import me.rerere.fawntavern.ui.components.InteractiveDrawer
@@ -30,7 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -136,6 +134,18 @@ fun ChatScreen(
         vm.sendError?.let { err ->
             Toast.makeText(ctx, err, Toast.LENGTH_SHORT).show()
             vm.consumeSendError()
+        }
+    }
+    LaunchedEffect(vm.promptContextFailures) {
+        val failures = vm.promptContextFailures
+        if (failures.isNotEmpty()) {
+            val names = failures.map { it.name }.distinct().joinToString()
+            Toast.makeText(
+                ctx,
+                resources.getString(R.string.prompt_context_load_failed_fmt, names),
+                Toast.LENGTH_LONG,
+            ).show()
+            vm.consumePromptContextFailures()
         }
     }
 
@@ -614,77 +624,36 @@ fun ChatScreen(
         )
     }
 
-    // ── 删除会话对话框 ──
-    deleteSessionId?.let { id ->
-        AlertDialog(
-            onDismissRequest = { deleteSessionId = null },
-            title = { Text(stringResource(R.string.delete_chat_title)) },
-            text = { Text(stringResource(R.string.delete_chat_msg)) },
-            confirmButton = {
-                TextButton(enabled = GenerationActionGuard.allowsMutation(vm.generating), onClick = {
-                    vm.deleteSession(id)
-                    deleteSessionId = null
-                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteSessionId = null }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
-
-    // ── 重新生成确认对话框 ──
-    pendingRegenerate?.let { action ->
-        AlertDialog(
-            onDismissRequest = { pendingRegenerate = null },
-            title = { Text(stringResource(R.string.confirm_regenerate_title)) },
-            text = { Text(stringResource(R.string.confirm_regenerate_msg)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingRegenerate = null
-                    action()
-                }) { Text(stringResource(R.string.confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingRegenerate = null }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
-
-    // ── 删除当前版本确认对话框 ──
-    pendingDeleteCurrentVersion?.let { action ->
-        AlertDialog(
-            onDismissRequest = { pendingDeleteCurrentVersion = null },
-            title = { Text(stringResource(R.string.confirm_delete_current_version_title)) },
-            text = { Text(stringResource(R.string.confirm_delete_current_version_msg)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingDeleteCurrentVersion = null
-                    action()
-                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDeleteCurrentVersion = null }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
-
-    // ── 删除全部版本确认对话框 ──
-    pendingDeleteAllVersions?.let { action ->
-        AlertDialog(
-            onDismissRequest = { pendingDeleteAllVersions = null },
-            title = { Text(stringResource(R.string.confirm_delete_all_versions_title)) },
-            text = { Text(stringResource(R.string.confirm_delete_all_versions_msg)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingDeleteAllVersions = null
-                    action()
-                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDeleteAllVersions = null }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
+    ChatConfirmationDialogs(
+        showDeleteSession = deleteSessionId != null,
+        deleteSessionEnabled = GenerationActionGuard.allowsMutation(vm.generating),
+        onDeleteSession = {
+            deleteSessionId?.let(vm::deleteSession)
+            deleteSessionId = null
+        },
+        onDismissDeleteSession = { deleteSessionId = null },
+        showRegenerate = pendingRegenerate != null,
+        onRegenerate = {
+            val action = pendingRegenerate
+            pendingRegenerate = null
+            action?.invoke()
+        },
+        onDismissRegenerate = { pendingRegenerate = null },
+        showDeleteCurrentVersion = pendingDeleteCurrentVersion != null,
+        onDeleteCurrentVersion = {
+            val action = pendingDeleteCurrentVersion
+            pendingDeleteCurrentVersion = null
+            action?.invoke()
+        },
+        onDismissDeleteCurrentVersion = { pendingDeleteCurrentVersion = null },
+        showDeleteAllVersions = pendingDeleteAllVersions != null,
+        onDeleteAllVersions = {
+            val action = pendingDeleteAllVersions
+            pendingDeleteAllVersions = null
+            action?.invoke()
+        },
+        onDismissDeleteAllVersions = { pendingDeleteAllVersions = null },
+    )
 
     // ── 模型选择面板 ──
     ModelSelectorSheet(

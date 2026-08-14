@@ -1,14 +1,18 @@
 package me.rerere.fawntavern.ui.components
 
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -21,6 +25,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,17 +35,49 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.FilePlus
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
+import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Trash2
+import com.composables.icons.lucide.TriangleAlert
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import me.rerere.fawntavern.R
+
+private const val IMPORTABLE_LIST_TAG = "ImportableList"
+
+internal data class ImportableLoadResult<T : Any>(
+    val names: List<String>,
+    val items: Map<String, T>,
+    val failures: Map<String, Exception>,
+)
+
+internal suspend fun <T : Any> loadImportableItems(
+    listNames: suspend () -> List<String>,
+    loadItem: suspend (String) -> T,
+): ImportableLoadResult<T> {
+    val names = listNames()
+    val items = mutableMapOf<String, T>()
+    val failures = mutableMapOf<String, Exception>()
+    names.forEach { name ->
+        try {
+            items[name] = loadItem(name)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            failures[name] = error
+        }
+    }
+    return ImportableLoadResult(names, items, failures)
+}
 
 /**
  * 可导入条目的通用列表页（预设/世界书）：顶栏 + 导入 FAB + 加载/空状态 +
@@ -72,6 +109,8 @@ fun <T : Any> ImportableListScreen(
     val scope = rememberCoroutineScope()
     var names by remember { mutableStateOf<List<String>>(emptyList()) }
     var items by remember { mutableStateOf<Map<String, T>>(emptyMap()) }
+    var failedItems by remember { mutableStateOf<Map<String, Exception>>(emptyMap()) }
+    var loadError by remember { mutableStateOf<Exception?>(null) }
     var loading by remember { mutableStateOf(true) }
 
     var longPressName by remember { mutableStateOf<String?>(null) }
@@ -81,13 +120,38 @@ fun <T : Any> ImportableListScreen(
     fun refresh() {
         scope.launch {
             loading = true
-            names = listNames()
-            val map = mutableMapOf<String, T>()
-            for (n in names) {
-                try { map[n] = loadItem(n) } catch (_: Exception) {}
+            loadError = null
+            try {
+                val result = loadImportableItems(listNames, loadItem)
+                names = result.names
+                items = result.items
+                failedItems = result.failures
+                result.failures.forEach { (name, error) ->
+                    Log.e(IMPORTABLE_LIST_TAG, "Failed to load item: $name", error)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e(IMPORTABLE_LIST_TAG, "Failed to load item list", error)
+                loadError = error
+            } finally {
+                loading = false
             }
-            items = map
-            loading = false
+        }
+    }
+
+    fun retryItem(name: String) {
+        scope.launch {
+            try {
+                val item = loadItem(name)
+                items = items + (name to item)
+                failedItems = failedItems - name
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e(IMPORTABLE_LIST_TAG, "Failed to reload item: $name", error)
+                failedItems = failedItems + (name to error)
+            }
         }
     }
 
@@ -164,6 +228,13 @@ fun <T : Any> ImportableListScreen(
     ) { padding ->
         if (loading) {
             LoadingState(Modifier.padding(padding))
+        } else if (loadError != null) {
+            ErrorState(
+                icon = Lucide.TriangleAlert,
+                message = resources.getString(R.string.list_load_failed_fmt, loadError?.message.orEmpty()),
+                onRetry = ::refresh,
+                modifier = Modifier.padding(padding),
+            )
         } else if (names.isEmpty()) {
             EmptyState(emptyIcon, stringResource(emptyTitleRes),
                 stringResource(emptyDescRes), Modifier.padding(padding))
@@ -174,11 +245,21 @@ fun <T : Any> ImportableListScreen(
                 verticalArrangement = Arrangement.spacedBy(Space12)
             ) {
                 items(names, key = { it }) { name ->
-                    val item = items[name] ?: return@items
+                    val item = items[name]
+                    val failure = failedItems[name]
                     Box {
-                        itemCard(name, item,
-                            { onOpen(item) },
-                            { longPressName = name })
+                        if (item != null) {
+                            itemCard(name, item,
+                                { onOpen(item) },
+                                { longPressName = name })
+                        } else {
+                            FailedImportableItem(
+                                name = name,
+                                detail = failure?.message,
+                                onRetry = { retryItem(name) },
+                                onLongPress = { longPressName = name },
+                            )
+                        }
                         DropdownMenu(
                             expanded = longPressName == name,
                             onDismissRequest = { longPressName = null },
@@ -196,6 +277,45 @@ fun <T : Any> ImportableListScreen(
                 }
                 item { Spacer(Modifier.height(80.dp)) }
             }
+        }
+    }
+}
+
+@Composable
+private fun FailedImportableItem(
+    name: String,
+    detail: String?,
+    onRetry: () -> Unit,
+    onLongPress: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().appClickable(onClick = onRetry, onLongClick = onLongPress),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Space12, vertical = Space12),
+            horizontalArrangement = Arrangement.spacedBy(Space12),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Lucide.TriangleAlert, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
+            Column(Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    detail?.takeIf { it.isNotBlank() } ?: stringResource(R.string.item_load_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            AppIconButton(
+                icon = Lucide.RefreshCw,
+                contentDescription = stringResource(R.string.retry),
+                onClick = onRetry,
+                size = 36.dp,
+                iconSize = 18.dp,
+            )
         }
     }
 }

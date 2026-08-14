@@ -18,6 +18,11 @@
     <string name="change_image">Tap to set image</string>
     <string name="remove_image">Remove Image</string>
     <string name="clear">Clear</string>
+    <string name="retry">Retry</string>
+    <string name="preset_save_failed_fmt">Could not save the preset. Your edits are still open: %1$s</string>
+    <string name="prompt_context_load_failed_fmt">Some prompt context could not be loaded: %1$s</string>
+    <string name="list_load_failed_fmt">Could not load the list: %1$s</string>
+    <string name="item_load_failed">Could not load this item</string>
 
     <!-- Settings -->
     <string name="settings">Settings</string>
@@ -444,7 +449,6 @@
     <string name="filter_models">Filter models</string>
     <string name="loading_models">Loading models…</string>
     <string name="models_load_failed">Failed to load models</string>
-    <string name="retry">Retry</string>
     <string name="test_success_fmt">Connected — %d models available</string>
     <string name="test_failed_fmt">Connection failed: %s</string>
     <string name="edit_model">Edit Model</string>

@@ -65,6 +65,16 @@ object ChatRepository {
         )
     }
 
+    /** 用完整快照替换数据库内容，供跨存储导入失败时精确回滚。 */
+    suspend fun replaceAll(context: Context, sessions: List<ChatSession>) {
+        ChatDatabase.get(context).dao().replaceAllSessions(
+            sessions = sessions.map { it.toEntity() },
+            messagesBySession = sessions.map { session ->
+                session.messages.map { it.toEntity(session.id) }
+            },
+        )
+    }
+
     suspend fun delete(context: Context, id: String) {
         dao(context).deleteSession(id)
         collectUnusedAttachments(context)

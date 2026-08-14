@@ -113,6 +113,25 @@ class ChatDaoTest {
         assertTrue(dao.countSessions() == 1)
     }
 
+    @Test
+    fun replaceAllSessionsRestoresExactSnapshot() = runBlocking {
+        dao.saveSession(
+            session("old", title = "remove me"),
+            listOf(message("old", 1, "user", "stale")),
+        )
+
+        dao.replaceAllSessions(
+            sessions = listOf(session("snapshot", title = "restored")),
+            messagesBySession = listOf(listOf(message("snapshot", 2, "assistant", "saved"))),
+        )
+
+        assertNull(dao.getSession("old"))
+        val restored = dao.getSession("snapshot")
+        assertEquals("restored", restored?.session?.title)
+        assertEquals(listOf("saved"), restored?.messages?.map { it.content })
+        assertEquals(1, dao.countSessions())
+    }
+
     private fun session(id: String, title: String = "title") = SessionEntity(
         id = id,
         charFile = "char.json",

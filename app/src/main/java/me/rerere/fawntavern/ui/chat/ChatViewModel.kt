@@ -44,22 +44,17 @@ import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.data.settings.UserAvatarStore
 import me.rerere.fawntavern.data.settings.PromptLogStore
 import me.rerere.fawntavern.data.settings.GlobalVariableStore
-import me.rerere.fawntavern.data.settings.WorldInfoSettingsStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.domain.ConversationOps
 import me.rerere.fawntavern.domain.GenerationController
 import me.rerere.fawntavern.domain.GenerationActionGuard
-import me.rerere.fawntavern.domain.MacroVariableState
 import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.domain.PromptLog
-import org.json.JSONObject
 import me.rerere.fawntavern.extension.BuiltinExtensions
 import me.rerere.fawntavern.extension.ExtensionStore
 import me.rerere.fawntavern.extension.GenerationContext
 import me.rerere.fawntavern.extension.GenerationLifecycle
 import me.rerere.fawntavern.extension.HostServices
-import me.rerere.fawntavern.extension.PromptContext
-import me.rerere.fawntavern.extension.PromptContributor
 import me.rerere.fawntavern.extension.QuickReply
 import me.rerere.fawntavern.extension.QuickReplyProvider
 
@@ -109,6 +104,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // 当前角色关联的世界书/预设（随角色卡切换加载，生成时进入 Prompt 拼装）
     var activeWorldBooks by mutableStateOf<List<WorldBook>>(emptyList()); private set
     var activePreset by mutableStateOf<StPreset?>(null); private set
+    var promptContextFailures by mutableStateOf<List<PromptContextLoader.LoadFailure>>(emptyList())
+        private set
     private var loadedPromptCharFile: String? = null
     private var promptContextRevision = 0L
     // 输入草稿放这里，Activity 重建后不丢。BTF2 的 TextFieldState 即单一事实源，
@@ -187,6 +184,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
     private val searchTool by lazy { ChatSearchTool(ctx) }
     private val titleGenerator by lazy { ChatTitleGenerator(ctx) }
+    private val promptAssembler by lazy { ChatPromptAssembler(ctx) }
 
     /**
      * 当前会话消息的分页流（Paging 3）。随 [session] 的 id 切换：初始加载偏移定位到最后一页，
@@ -315,7 +313,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 按当前角色卡加载关联的世界书与预设（缺失/损坏的静默跳过） */
+    /** 按当前角色卡加载关联的世界书与预设；保留可用项并向 UI 上报损坏项。 */
     private suspend fun loadPromptData(revision: Long) {
         val file = session?.charFile.orEmpty()
         applyPromptContext(
@@ -340,8 +338,13 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         currentCard = loaded.card
         activeWorldBooks = loaded.worldBooks
         activePreset = loaded.preset
+        promptContextFailures = loaded.failures
         charImageBitmap = image
         loadedPromptCharFile = loaded.charFile
+    }
+
+    fun consumePromptContextFailures() {
+        promptContextFailures = emptyList()
     }
 
     fun currentProviderAndModel(): Pair<ApiProvider, String>? =
@@ -683,36 +686,6 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // 目标消息只进 overlay、不落盘空行：进程被杀不会残留空 assistant 行，也不需起始那次写库
         // （generating 已由调用方在挂起点之前同步置位，此处不再重复设置）
         overlays = overlays + (genMessage.ts to genMessage)
-        // 收集启用扩展的提示贡献（如摘要），并入历史之外的固定块（不进历史流、不被预算裁剪）
-        val extraPre = mutableListOf<PromptBuilder.Piece>()
-        val extraPost = mutableListOf<PromptBuilder.Piece>()
-        val extraDepth = mutableListOf<PromptBuilder.DepthPiece>()
-        var historySkip = 0
-        val enabledExtensions = ExtensionStore.enabledExtensions(ctx)
-        for (ext in enabledExtensions) {
-            if (ext !is PromptContributor) continue
-            val c = ext.contribute(
-                PromptContext(
-                    session = base,
-                    charName = currentCard?.name ?: base.charName,
-                    userName = userName,
-                    extState = base.extState[ext.info.id] ?: "",
-                    config = ExtensionStore.getConfig(ctx, ext.info.id),
-                )
-            )
-            val srcTag = PromptBuilder.PromptSource.EXTENSION
-            extraPre += c.preHistory.map { PromptBuilder.Piece(it.role, it.content, srcTag, ext.info.name) }
-            extraPost += c.postHistory.map { PromptBuilder.Piece(it.role, it.content, srcTag, ext.info.name) }
-            extraDepth += c.depthInjections.map { PromptBuilder.DepthPiece(it.role, it.content, it.depth, srcTag, ext.info.name) }
-            if (c.skipMessagesUpTo > historySkip) historySkip = c.skipMessagesUpTo
-        }
-        // 扩展声明了要跳过的历史消息（如摘要已压缩前 N 条）→ 裁剪 buildHistory 和 promptHistory，
-        // 用扩展注入的固定块（preHistory 中的摘要）代替原文。仅 SEND 模式裁剪（REGEN 重答中间消息
-        // 时前面的上下文不可省略）；跳过数不得超过实际消息数
-        val slicedBuildHistory = if (mode == GenMode.SEND && historySkip > 0 && historySkip < buildHistory.size)
-            buildHistory.drop(historySkip) else buildHistory
-        val slicedPromptHistory = if (mode == GenMode.SEND && historySkip > 0 && historySkip < promptHistory.size)
-            promptHistory.drop(historySkip) else promptHistory
         // 联网搜索：开关开启时注册 search_web 函数工具，由模型思考后自行决定是否搜索、
         // 用什么关键词、搜几次（不再拿用户原话直搜）；模型内置搜索开启时不下发
         //（结果重复，且 Gemini 不允许内置搜索与函数工具并存）。搜索过程以时间线步骤
@@ -724,43 +697,26 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // 仅开启 URL 上下文不影响 App 网络搜索（与搜索面板的显隐逻辑保持一致）。
         val builtInSearchOn = prov.model(modelId)?.tools?.contains(BuiltInTool.SEARCH) == true
         val webSearchOn = searchEnabled && !builtInSearchOn
-        val variableState = MacroVariableState(
-            localVariables = base.localVariables,
-            globalVariables = GlobalVariableStore.get(ctx),
-        )
         val commitVariables = mode == GenMode.SEND
-        val built = PromptBuilder.build(
+        val assembledPrompt = promptAssembler.assemble(ChatPromptAssembler.Request(
+            session = base,
             card = currentCard,
             userName = userName,
-            userDescription = UserProfileStore.getDescription(ctx),
             worldBooks = activeWorldBooks,
             preset = activePreset,
-            history = slicedBuildHistory,
             promptRegex = (currentCard?.regexScripts ?: emptyList()) + presetRegex,
-            timedWi = base.timedWi,
+            buildHistory = buildHistory,
+            promptHistory = promptHistory,
+            trimSummarizedHistory = mode == GenMode.SEND,
             updateTimed = updateTimed,
-            wiSettings = WorldInfoSettingsStore.get(ctx),
             reasoning = reasoning,
-            extraPre = extraPre,
-            extraPost = extraPost,
-            extraDepth = extraDepth,
-            sessionId = base.id,
-            input = base.messages.lastOrNull { it.role == "user" }?.content.orEmpty(),
-            model = modelId,
-            summary = runCatching {
-                JSONObject(base.extState["builtin.summarize"].orEmpty()).optString("summary")
-            }.getOrDefault(""),
-            enabledExtensions = enabledExtensions.flatMap { listOf(it.info.id, it.info.name) }.toSet(),
-            pickSalt = genMessage.alts.size,
-            variableState = variableState,
-            allowVariableMutations = commitVariables,
-        )
-        val apiMessages = PromptBuilder.assemble(
-            built = built,
-            history = slicedPromptHistory,
-            baseDir = ctx.filesDir,
-            mutateLastUserMessage = commitVariables,
-        )
+            modelId = modelId,
+            generationMessage = genMessage,
+            commitVariables = commitVariables,
+        ))
+        val built = assembledPrompt.built
+        val apiMessages = assembledPrompt.apiMessages
+        val variableState = assembledPrompt.variableState
         if (commitVariables) {
             val localChanged = variableState.localChanged()
             val globalChanged = variableState.globalChanged()

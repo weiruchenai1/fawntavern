@@ -201,6 +201,19 @@ internal interface ChatDao {
         }
     }
 
+    /** 精确恢复完整数据库快照；删除与重建处于同一个 Room 事务中。 */
+    @Transaction
+    suspend fun replaceAllSessions(
+        sessions: List<SessionEntity>,
+        messagesBySession: List<List<MessageEntity>>,
+    ) {
+        require(sessions.size == messagesBySession.size)
+        clearSessions()
+        sessions.indices.forEach { index ->
+            saveSession(sessions[index], messagesBySession[index])
+        }
+    }
+
     @Query("DELETE FROM sessions WHERE id = :id")
     suspend fun deleteSession(id: String)
 

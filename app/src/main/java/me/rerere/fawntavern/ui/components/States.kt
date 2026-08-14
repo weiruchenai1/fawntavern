@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,6 +39,31 @@ fun EmptyState(icon: ImageVector, title: String, desc: String, modifier: Modifie
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(desc, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** 可恢复的整页加载失败状态。 */
+@Composable
+fun ErrorState(
+    icon: ImageVector,
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Space8),
+        ) {
+            Icon(icon, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error)
+            Text(
+                message,
+                Modifier.padding(horizontal = Space16),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = onRetry) { Text(stringResource(R.string.retry)) }
         }
     }
 }

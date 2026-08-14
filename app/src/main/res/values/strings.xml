@@ -18,6 +18,11 @@
     <string name="change_image">点击设置图片</string>
     <string name="remove_image">移除图片</string>
     <string name="clear">清除</string>
+    <string name="retry">重试</string>
+    <string name="preset_save_failed_fmt">预设保存失败，编辑内容仍保留：%1$s</string>
+    <string name="prompt_context_load_failed_fmt">部分 Prompt 上下文加载失败：%1$s</string>
+    <string name="list_load_failed_fmt">列表加载失败：%1$s</string>
+    <string name="item_load_failed">条目加载失败</string>
 
     <!-- Settings -->
     <string name="settings">设置</string>
@@ -442,7 +447,6 @@
     <string name="filter_models">过滤模型</string>
     <string name="loading_models">正在获取模型…</string>
     <string name="models_load_failed">模型列表获取失败</string>
-    <string name="retry">重试</string>
     <string name="test_success_fmt">连接成功，获取到 %d 个模型</string>
     <string name="test_failed_fmt">连接失败：%s</string>
     <string name="edit_model">编辑模型</string>

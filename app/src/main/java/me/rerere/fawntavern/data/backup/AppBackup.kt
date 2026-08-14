@@ -1,7 +1,9 @@
 package me.rerere.fawntavern.data.backup
 
 import android.content.Context
+import android.util.Log
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
@@ -9,6 +11,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -25,6 +28,7 @@ import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 
 object AppBackup {
+    private const val TAG = "AppBackup"
     private const val FORMAT_VERSION = 4
     private const val CHAT_ENTRY = "data/chats.json"
     private const val API_ENTRY = "data/api-config.json"
@@ -150,6 +154,7 @@ object AppBackup {
                 TtsStore.parsePortable(TtsStore.exportPortable(context))
             }
             val previousGlobalVariables = chatArchive?.globalVariables?.let { GlobalVariableStore.get(context) }
+            val previousSessions = if (Section.CHATS in sections) ChatRepository.list(context) else null
             val previousAvatarPath = if (Section.AVATAR in sections) {
                 UserProfileStore.getAvatarPath(context)
             } else null
@@ -157,6 +162,12 @@ object AppBackup {
             val rollbackDir = File(staging, "_rollback").also { it.mkdirs() }
             val restored = mutableListOf<RestoredFile>()
             var restoredFiles = 0
+            var avatarPathTouched = false
+            var apiConfigTouched = false
+            var searchConfigTouched = false
+            var ttsConfigTouched = false
+            var globalVariablesTouched = false
+            var chatDatabaseTouched = false
             try {
                 if (Section.CHARACTERS in sections) {
                     restoredFiles += restoreDirectory(
@@ -185,26 +196,81 @@ object AppBackup {
                 if (Section.AVATAR in sections) {
                     val avatarTarget = File(context.filesDir, "avatars/user_avatar")
                     restoreFile(File(staging, AVATAR_ENTRY), avatarTarget, File(rollbackDir, "avatar"), restored)
+                    avatarPathTouched = true
                     UserProfileStore.setAvatarPath(context, avatarTarget.absolutePath)
                     restoredFiles++
                 }
 
-                apiConfig?.let { ApiConfigStore.saveConfig(context, it) }
-                searchConfig?.let { SearchStore.importPortable(context, it) }
-                ttsConfig?.let { TtsStore.importPortable(context, it) }
-                chatArchive?.globalVariables?.let { GlobalVariableStore.set(context, it) }
-                chatArchive?.let { ChatRepository.restore(context, it.sessions) }
-            } catch (e: Exception) {
-                restored.asReversed().forEach { record ->
-                    if (record.original == null) record.target.delete()
-                    else record.original.copyTo(record.target, overwrite = true)
+                apiConfig?.let {
+                    apiConfigTouched = true
+                    ApiConfigStore.saveConfig(context, it)
                 }
-                previousApi?.let { runCatching { ApiConfigStore.saveConfig(context, it) } }
-                previousSearch?.let { runCatching { SearchStore.importPortable(context, it) } }
-                previousTts?.let { runCatching { TtsStore.importPortable(context, it) } }
-                previousGlobalVariables?.let { runCatching { GlobalVariableStore.set(context, it) } }
-                if (Section.AVATAR in sections) {
-                    UserProfileStore.setAvatarPath(context, previousAvatarPath)
+                searchConfig?.let {
+                    searchConfigTouched = true
+                    SearchStore.importPortable(context, it)
+                }
+                ttsConfig?.let {
+                    ttsConfigTouched = true
+                    TtsStore.importPortable(context, it)
+                }
+                chatArchive?.globalVariables?.let {
+                    globalVariablesTouched = true
+                    GlobalVariableStore.set(context, it)
+                }
+                chatArchive?.let {
+                    chatDatabaseTouched = true
+                    ChatRepository.restore(context, it.sessions)
+                }
+            } catch (e: Exception) {
+                val rollbackSteps = buildList {
+                    previousSessions?.takeIf { chatDatabaseTouched }?.let { sessions ->
+                        add(BackupRollbackStep("chat database") {
+                            ChatRepository.replaceAll(context, sessions)
+                        })
+                    }
+                    previousGlobalVariables?.takeIf { globalVariablesTouched }?.let { variables ->
+                        add(BackupRollbackStep("global variables") {
+                            GlobalVariableStore.set(context, variables)
+                        })
+                    }
+                    previousTts?.takeIf { ttsConfigTouched }?.let { config ->
+                        add(BackupRollbackStep("TTS configuration") {
+                            TtsStore.importPortable(context, config)
+                        })
+                    }
+                    previousSearch?.takeIf { searchConfigTouched }?.let { config ->
+                        add(BackupRollbackStep("search configuration") {
+                            SearchStore.importPortable(context, config)
+                        })
+                    }
+                    previousApi?.takeIf { apiConfigTouched }?.let { config ->
+                        add(BackupRollbackStep("API configuration") {
+                            ApiConfigStore.saveConfig(context, config)
+                        })
+                    }
+                    if (avatarPathTouched) {
+                        add(BackupRollbackStep("avatar path") {
+                            UserProfileStore.setAvatarPath(context, previousAvatarPath)
+                        })
+                    }
+                    restored.asReversed().forEach { record ->
+                        add(BackupRollbackStep("file ${record.target.absolutePath}") {
+                            rollbackFile(record)
+                        })
+                    }
+                }
+                withContext(NonCancellable) {
+                    rollbackAfterFailure(e, rollbackSteps) { description, rollbackError ->
+                        Log.e(TAG, "Backup rollback failed: $description", rollbackError)
+                    }
+                }
+                if (e.suppressed.isNotEmpty()) {
+                    throw IOException(
+                        "Backup import failed and ${e.suppressed.size} rollback step(s) also failed",
+                        e,
+                    ).also { incompleteRollback ->
+                        e.suppressed.forEach(incompleteRollback::addSuppressed)
+                    }
                 }
                 throw e
             }
@@ -334,5 +400,16 @@ object AppBackup {
         val original = if (target.exists()) target.copyTo(rollbackFile, overwrite = true) else null
         restoreLog += RestoredFile(target, original)
         source.copyTo(target, overwrite = true)
+    }
+
+    private fun rollbackFile(record: RestoredFile) {
+        val original = record.original
+        if (original != null) {
+            original.copyTo(record.target, overwrite = true)
+            return
+        }
+        if (record.target.exists() && !record.target.delete()) {
+            throw IOException("Unable to remove restored file: ${record.target.absolutePath}")
+        }
     }
 }
