@@ -38,9 +38,6 @@ jobs:
       - name: Verify Android version calculation
         run: bash scripts/android-version-code.sh --self-test
 
-      - name: Run unit tests, lint, and debug build
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
-
       - name: Prepare Firebase configuration
         if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
         run: |
@@ -48,9 +45,13 @@ jobs:
           mkdir -p app/src/release
           printf '%s' "$GOOGLE_SERVICES_JSON" > app/src/release/google-services.json
 
-      - name: Build unsigned release APK
-        if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
-        run: ./gradlew --no-daemon assembleRelease
+      - name: Run unit tests, lint, and builds
+        run: |
+          TASKS=(testDebugUnitTest lintDebug assembleDebug)
+          if [[ -n "$GOOGLE_SERVICES_JSON" ]]; then
+            TASKS+=(assembleRelease)
+          fi
+          ./gradlew --no-daemon "${TASKS[@]}"
 
       - name: Verify committed Room schemas
         run: git diff --exit-code -- app/schemas
@@ -82,7 +83,6 @@ jobs:
 
   ui-tests:
     name: Instrumented UI tests
-    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 35
 

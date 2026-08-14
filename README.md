@@ -45,6 +45,8 @@ API 提供商、搜索和 TTS 凭据使用 Android Keystore 中的 AES-GCM 密�
 
 推送 `v0.2.0-beta.1` 形式的标签会触发 `.github/workflows/beta.yml`，运行相同的签名构建并创建带 APK、AAB 和 SHA-256 校验文件的 GitHub Pre-release。
 
+发布标签必须指向 `main` 分支中已通过 Android CI 的提交。标签工作流会复用该验证结果，仅执行一次签名构建，不再重复运行测试和 Lint。
+
 首次发布前，需要配置以下仓库 Secrets：
 
 - `ANDROID_KEYSTORE_BASE64`

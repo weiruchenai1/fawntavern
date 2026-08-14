@@ -45,6 +45,8 @@ Pushing a tag such as `v0.2.0` starts `.github/workflows/release.yml`, builds si
 
 Pushing a tag such as `v0.2.0-beta.1` starts `.github/workflows/beta.yml`, runs the same signed build, and creates a GitHub prerelease with the APK, AAB, and SHA-256 checksums.
 
+Release tags must point to a commit on `main` that has passed Android CI. Tag workflows reuse that verification result and run only one signed build instead of repeating tests and lint.
+
 Before the first tagged release, configure these repository secrets:
 
 - `ANDROID_KEYSTORE_BASE64`
