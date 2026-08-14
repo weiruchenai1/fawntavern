@@ -1,5 +1,8 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+import me.rerere.fawntavern.data.commitChanges
+
 import android.content.Context
 import me.rerere.fawntavern.data.security.SecurePreferences
 import me.rerere.fawntavern.data.speech.TTSProviderSetting
@@ -45,7 +48,7 @@ object TtsStore {
         SecurePreferences.putString(context, p, KEY_SERVICES, arr.toString())
         val selectedId = p.getString(KEY_SELECTED, null)
         if (selectedId == null || services.none { it.id == selectedId }) {
-            prefs(context).edit().putString(KEY_SELECTED, services.firstOrNull()?.id ?: "").apply()
+            prefs(context).edit { putString(KEY_SELECTED, services.firstOrNull()?.id ?: "") }
         }
     }
 
@@ -70,7 +73,7 @@ object TtsStore {
     }
 
     fun setSelectedId(context: Context, id: String) {
-        prefs(context).edit().putString(KEY_SELECTED, id).apply()
+        prefs(context).edit { putString(KEY_SELECTED, id) }
     }
 
     /** 当前选中提供商（朗读实际使用的配置），保留此名供 TtsEngine 读取 */
@@ -82,7 +85,7 @@ object TtsStore {
     fun consumeCorruptionNotice(context: Context): Boolean {
         val p = prefs(context)
         if (!p.getBoolean(KEY_CORRUPTED, false)) return false
-        p.edit().putBoolean(KEY_CORRUPTED, false).apply()
+        p.edit { putBoolean(KEY_CORRUPTED, false) }
         return true
     }
 
@@ -105,7 +108,7 @@ object TtsStore {
         val services = JSONArray().apply { config.services.forEach { put(toJson(it)) } }
         val p = prefs(context)
         SecurePreferences.putStringSync(context, p, KEY_SERVICES, services.toString())
-        check(p.edit().putString(KEY_SELECTED, config.selectedId).commit()) {
+        check(p.commitChanges { putString(KEY_SELECTED, config.selectedId) }) {
             "Unable to persist TTS configuration"
         }
     }
@@ -117,7 +120,7 @@ object TtsStore {
 
     private fun recoverDefaults(context: Context, p: android.content.SharedPreferences): List<TTSProviderSetting> {
         val defaults = createDefaults(context)
-        p.edit().putBoolean(KEY_CORRUPTED, true).apply()
+        p.edit { putBoolean(KEY_CORRUPTED, true) }
         return defaults
     }
 

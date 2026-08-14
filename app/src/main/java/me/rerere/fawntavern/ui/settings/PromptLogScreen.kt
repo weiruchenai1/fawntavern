@@ -111,7 +111,7 @@ fun PromptLogScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    stringResource(R.string.debug_log_entry_count, entries.size),
+                    androidx.compose.ui.res.pluralStringResource(R.plurals.debug_log_entry_count, entries.size, entries.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
@@ -187,9 +187,9 @@ private fun LogEntryCard(entry: PromptLogEntry) {
 
         // 摘要行：角色 / 预设 / 世界书条数 / 消息条数 / token 估算 / 思考档位（非 AUTO 才显示）
         val noPreset = stringResource(R.string.debug_log_no_preset)
-        val wi = stringResource(R.string.debug_log_wi_count, entry.worldInfoCount)
-        val msgs = stringResource(R.string.debug_log_msg_count, entry.messages.size)
-        val tok = stringResource(R.string.debug_log_tokens, entry.approxTokens)
+        val wi = androidx.compose.ui.res.pluralStringResource(R.plurals.debug_log_wi_count, entry.worldInfoCount, entry.worldInfoCount)
+        val msgs = androidx.compose.ui.res.pluralStringResource(R.plurals.debug_log_msg_count, entry.messages.size, entry.messages.size)
+        val tok = androidx.compose.ui.res.pluralStringResource(R.plurals.debug_log_tokens, entry.approxTokens, entry.approxTokens)
         val reasoning = entry.params?.reasoning
             ?.takeIf { it != me.rerere.fawntavern.data.api.ReasoningLevel.AUTO }
             ?.let { stringResource(R.string.debug_log_reasoning, it.name) }
@@ -239,7 +239,7 @@ private fun MessageRow(msg: LoggedMessage) {
             SourceChip(msg.role)
             if (msg.imageCount > 0) {
                 Text(
-                    stringResource(R.string.debug_log_images, msg.imageCount),
+                    androidx.compose.ui.res.pluralStringResource(R.plurals.debug_log_images, msg.imageCount, msg.imageCount),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -7,7 +7,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -71,17 +70,20 @@ object JsonFileDir {
 
     /** Write in the target directory, flush it, then replace the destination with one move. */
     fun atomicWriteText(target: File, content: String) {
+        atomicWriteBytes(target, content.toByteArray(StandardCharsets.UTF_8))
+    }
+
+    /** Write bytes in the target directory, flush them, then replace the destination with one move. */
+    fun atomicWriteBytes(target: File, content: ByteArray) {
         val parent = requireNotNull(target.parentFile).canonicalFile
         require(target.canonicalFile.parentFile == parent) { "JSON file escapes its storage directory" }
         parent.mkdirs()
         val temp = File.createTempFile(".${target.nameWithoutExtension}_", ".tmp", parent)
         try {
             FileOutputStream(temp).use { output ->
-                OutputStreamWriter(output, StandardCharsets.UTF_8).buffered().use { writer ->
-                    writer.write(content)
-                    writer.flush()
-                    output.fd.sync()
-                }
+                output.write(content)
+                output.flush()
+                output.fd.sync()
             }
             try {
                 Files.move(

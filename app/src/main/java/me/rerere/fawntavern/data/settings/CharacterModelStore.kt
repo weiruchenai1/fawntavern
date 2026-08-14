@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+
 import android.content.Context
 import org.json.JSONObject
 
@@ -24,7 +26,7 @@ object CharacterModelStore {
         if (model.isBlank()) root.remove(characterName)
         else root.put(characterName, model)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_DATA, root.toString()).apply()
+            .edit { putString(KEY_DATA, root.toString()) }
     }
 
     private fun read(context: Context): JSONObject {

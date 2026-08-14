@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+
 import android.content.Context
 
 /** Prompt 调试日志开关 — SharedPreferences 持久化，默认关闭 */
@@ -12,6 +14,6 @@ object PromptLogStore {
 
     fun setEnabled(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_ENABLED, enabled).apply()
+            .edit { putBoolean(KEY_ENABLED, enabled) }
     }
 }

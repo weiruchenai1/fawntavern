@@ -48,6 +48,7 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -137,7 +138,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
 
     // 角色卡图片：导入 PNG 时保留、可在弹窗里更换/移除；更换后主界面/抽屉头像随之更新
     val imageFile = remember(cardFileName) { controller.imageFile(cardFileName) }
-    var imageVersion by remember { mutableStateOf(0) }
+    var imageVersion by remember { mutableIntStateOf(0) }
     val imageBitmap = remember(imageFile.path, imageVersion) {
         if (imageFile.exists()) {
             try { BitmapFactory.decodeFile(imageFile.path) } catch (_: Exception) { null }
@@ -540,7 +541,6 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .clickable {
                         streaming = !streaming
-                        scope.launch { patchCard { it.put("streaming", streaming) } }
                     }
                     .padding(horizontal = Space12, vertical = Space8),
                 verticalAlignment = Alignment.CenterVertically,
@@ -556,7 +556,6 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 }
                 Switch(checked = streaming, onCheckedChange = {
                     streaming = it
-                    scope.launch { patchCard { d -> d.put("streaming", it) } }
                 })
             }
 
@@ -583,7 +582,6 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 onToggle = { wbName ->
                     val updated = if (wbName in enabledWb) enabledWb - wbName else enabledWb + wbName
                     enabledWb = updated
-                    scope.launch { patchCard { it.put("enabled_world_books", JSONArray(updated)) } }
                 }
             )
 
@@ -592,7 +590,6 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 selected = linkedPreset,
                 onSelect = { sel ->
                     linkedPreset = sel
-                    scope.launch { patchCard { it.put("linked_preset", sel) } }
                 }
             )
         }

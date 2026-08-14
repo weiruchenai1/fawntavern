@@ -1,12 +1,43 @@
 package me.rerere.fawntavern
 
 import android.app.Application
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import me.rerere.fawntavern.data.backup.AppBackup
 
 class FawnTavernApplication : Application() {
+    sealed interface RecoveryState {
+        data object Recovering : RecoveryState
+        data object Ready : RecoveryState
+        data class Failed(val error: Throwable) : RecoveryState
+    }
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val _recoveryState = MutableStateFlow<RecoveryState>(RecoveryState.Recovering)
+    val recoveryState: StateFlow<RecoveryState> = _recoveryState.asStateFlow()
+    private var recoveryJob: Job? = null
+
     override fun onCreate() {
         super.onCreate()
-        runBlocking { AppBackup.recoverInterruptedImport(this@FawnTavernApplication) }
+        retryRecovery()
+    }
+
+    fun retryRecovery() {
+        if (recoveryJob?.isActive == true) return
+        _recoveryState.value = RecoveryState.Recovering
+        recoveryJob = applicationScope.launch {
+            _recoveryState.value = try {
+                AppBackup.recoverInterruptedImport(this@FawnTavernApplication)
+                RecoveryState.Ready
+            } catch (error: Throwable) {
+                RecoveryState.Failed(error)
+            }
+        }
     }
 }

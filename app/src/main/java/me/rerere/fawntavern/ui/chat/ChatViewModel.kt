@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -97,7 +98,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
      */
     var overlays by mutableStateOf<Map<Long, ChatMessage>>(emptyMap()); private set
     // selectModel 写的是持久化 store，displayModelSpec 读 store，二者非 state——自增它以强制 UI 刷新
-    var modelRevision by mutableStateOf(0); private set
+    var modelRevision by mutableIntStateOf(0); private set
     /** 当前/最近一次生成的目标消息 ts（重答时指向被重答的消息），null = 尚未生成过 */
     var genTargetTs by mutableStateOf<Long?>(null); private set
     var userName by mutableStateOf(UserProfileStore.getName(app)); private set
@@ -525,21 +526,42 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             } catch (error: Exception) {
                 val before = originalSession
                 if (before != null) {
-                    runCatching {
+                    val rollbackSucceeded = runCatching {
                         if (createdNewSession) ChatRepository.delete(ctx, before.id)
                         else ChatRepository.save(ctx, before)
                     }.onFailure { rollbackError ->
                         error.addSuppressed(rollbackError)
                         Log.e(CHAT_VIEW_MODEL_TAG, "发送失败后的会话回滚失败", rollbackError)
+                    }.isSuccess
+                    if (rollbackSucceeded) {
+                        if (session?.id == before.id) session = before
+                        val originalTimestamps = before.messages.mapTo(HashSet()) { it.ts }
+                        overlays = overlays.filterKeys { it in originalTimestamps }
+                        restoreDraftAfterFailedSend(text, atts)
+                        sendError = ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty())
+                    } else {
+                        runCatching { ChatRepository.get(ctx, before.id) }
+                            .onSuccess { persisted ->
+                                if (persisted != null && session?.id == before.id) session = persisted
+                                if (persisted != null) {
+                                    val persistedTimestamps = persisted.messages.mapTo(HashSet()) { it.ts }
+                                    overlays = overlays.filterKeys { it in persistedTimestamps }
+                                }
+                            }
+                            .onFailure { refreshError ->
+                                error.addSuppressed(refreshError)
+                                Log.e(CHAT_VIEW_MODEL_TAG, "回滚失败后刷新会话也失败", refreshError)
+                            }
+                        sendError = ctx.getString(
+                            R.string.chat_send_rollback_failed_fmt,
+                            error.message.orEmpty(),
+                        )
                     }
-                    if (session?.id == before.id) session = before
-                    val originalTimestamps = before.messages.mapTo(HashSet()) { it.ts }
-                    overlays = overlays.filterKeys { it in originalTimestamps }
                 } else {
                     runCatching { attachmentCoordinator.collectUnused() }
+                    restoreDraftAfterFailedSend(text, atts)
+                    sendError = ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty())
                 }
-                restoreDraftAfterFailedSend(text, atts)
-                sendError = ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty())
                 Log.e(CHAT_VIEW_MODEL_TAG, "发送消息失败", error)
             }
         }

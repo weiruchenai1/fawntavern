@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.extension
 
+import androidx.core.content.edit
+
 import android.content.Context
 import org.json.JSONObject
 
@@ -35,14 +37,14 @@ object ExtensionStore {
             JSONObject()
         }
         o.put(id, enabled)
-        p.edit().putString(K_ENABLED, o.toString()).apply()
+        p.edit { putString(K_ENABLED, o.toString()) }
     }
 
     /** 本扩展的配置 JSON 串（空 = 未配置，由扩展按自身默认处理）。 */
     fun getConfig(ctx: Context, id: String): String = prefs(ctx).getString(K_CONFIG_PREFIX + id, "") ?: ""
 
     fun setConfig(ctx: Context, id: String, json: String) {
-        prefs(ctx).edit().putString(K_CONFIG_PREFIX + id, json).apply()
+        prefs(ctx).edit { putString(K_CONFIG_PREFIX + id, json) }
     }
 
     /** 已启用的扩展（注册表 ∩ 启用状态）。消费方据此再 `filterIsInstance<能力接口>()`。 */

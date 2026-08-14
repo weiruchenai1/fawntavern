@@ -21,6 +21,8 @@
     <string name="retry">Retry</string>
     <string name="preset_save_failed_fmt">Could not save the preset. Your edits are still open: %1$s</string>
     <string name="worldbook_save_failed_fmt">Could not save the world book. Your edits are still open: %1$s</string>
+    <string name="backup_recovery_in_progress">Recovering an interrupted backup</string>
+    <string name="backup_recovery_failed_fmt">Backup recovery failed. Your data has not been opened: %1$s</string>
     <string name="prompt_context_load_failed_fmt">Some prompt context could not be loaded: %1$s</string>
     <string name="list_load_failed_fmt">Could not load the list: %1$s</string>
     <string name="delete_failed_fmt">Delete failed: %1$s</string>
@@ -34,8 +36,6 @@
     <string name="light">Light</string>
     <string name="dark">Dark</string>
     <string name="language">Language</string>
-    <string name="chinese_simplified">中文(简体中文)</string>
-    <string name="english">English</string>
     <string name="font_size">Font Size</string>
     <string name="workspace">Workspace</string>
     <string name="characters">Characters</string>
@@ -45,12 +45,8 @@
     <string name="data_management">Data Management</string>
     <string name="about">About</string>
     <string name="check_update">Check Update</string>
-    <string name="update_checking">Checking for updates…</string>
     <string name="update_latest_title">Up to Date</string>
     <string name="update_latest_msg">Version %1$s is the latest, no update needed.</string>
-    <string name="update_available_title">New Version Available</string>
-    <string name="update_available_msg">Version %1$s is available (current: %2$s). Please download the update.</string>
-    <string name="update_go_download">Download</string>
     <string name="about_version">Version %1$s</string>
     <string name="about_description">A lightweight AI role-playing chat client.\n\nSupports importing SillyTavern-compatible character cards, presets, and world books with multiple LLM API backends. Chat with your favorite characters anytime, anywhere.</string>
     <string name="about_tech">Tech Stack</string>
@@ -65,13 +61,13 @@
     <string name="debug_log_empty">No logs yet. Enable logging and send a message to inspect the full assembled prompt here.</string>
     <string name="debug_log_clear">Clear</string>
     <string name="debug_log_messages">Final messages</string>
-    <string name="debug_log_entry_count">%1$d entries</string>
+    <plurals name="debug_log_entry_count"><item quantity="one">%1$d entry</item><item quantity="other">%1$d entries</item></plurals>
     <string name="debug_log_no_preset">No preset</string>
-    <string name="debug_log_wi_count">%1$d world info</string>
-    <string name="debug_log_msg_count">%1$d messages</string>
-    <string name="debug_log_tokens">≈%1$d tokens</string>
+    <plurals name="debug_log_wi_count"><item quantity="one">%1$d world info entry</item><item quantity="other">%1$d world info entries</item></plurals>
+    <plurals name="debug_log_msg_count"><item quantity="one">%1$d message</item><item quantity="other">%1$d messages</item></plurals>
+    <plurals name="debug_log_tokens"><item quantity="one">≈%1$d token</item><item quantity="other">≈%1$d tokens</item></plurals>
     <string name="debug_log_reasoning">Reasoning %1$s</string>
-    <string name="debug_log_images">%1$d image(s)</string>
+    <plurals name="debug_log_images"><item quantity="one">%1$d image</item><item quantity="other">%1$d images</item></plurals>
 
     <!-- Chat -->
     <string name="new_chat">New Chat</string>
@@ -87,7 +83,6 @@
     <string name="persona_description_label">Persona Description</string>
     <string name="pick_from_gallery">Pick from Gallery</string>
     <string name="remove_avatar">Remove Custom Avatar</string>
-    <string name="or_pick_color">Or pick a color</string>
     <string name="search_chats">Search chats</string>
     <string name="search_message_content">Search messages</string>
     <string name="search_history">Search history</string>
@@ -106,7 +101,6 @@
     <string name="copy">Copy</string>
     <string name="select_copy">Select &amp; Copy</string>
     <string name="regenerate">Regenerate</string>
-    <string name="translate">Translate</string>
     <string name="more">More</string>
     <string name="take_photo">Camera</string>
     <string name="gallery">Gallery</string>
@@ -114,17 +108,17 @@
 
     <!-- Data Management -->
     <string name="storage_overview">Storage Overview</string>
-    <string name="total_items_fmt">%d items total</string>
+    <plurals name="total_items_fmt"><item quantity="one">%1$d item total</item><item quantity="other">%1$d items total</item></plurals>
     <string name="items_unit">Files</string>
     <string name="space_unit">Space</string>
     <string name="api_unit">API</string>
     <string name="items_count_fmt">%d</string>
     <string name="providers_count_fmt">%d</string>
     <string name="category_management">Categories</string>
-    <string name="items_with_count_fmt">%d items</string>
+    <plurals name="items_with_count_fmt"><item quantity="one">%1$d item</item><item quantity="other">%1$d items</item></plurals>
     <string name="no_data">Empty</string>
     <string name="clear_all_prefix">Clear All</string>
-    <string name="providers_unit_fmt">%d providers</string>
+    <plurals name="providers_unit_fmt"><item quantity="one">%1$d provider</item><item quantity="other">%1$d providers</item></plurals>
     <string name="reset_to_default">Reset to Default</string>
     <string name="backup_restore">Backup &amp; Restore</string>
     <string name="import_backup">Import Backup</string>
@@ -170,7 +164,6 @@
     <string name="delete_model_msg_fmt">Delete \"%s\"?</string>
 
     <!-- Toasts -->
-    <string name="toast_imported_fmt">Imported: %s</string>
     <string name="toast_import_failed_fmt">Import failed: %s</string>
     <string name="toast_deleted">Deleted</string>
     <string name="toast_renamed">Renamed</string>
@@ -183,7 +176,7 @@
     <string name="toast_export_success">Export successful</string>
     <string name="toast_backup_content_imported">Selected backup content imported</string>
     <string name="toast_export_failed_fmt">Export failed: %s</string>
-    <string name="toast_imported_files_fmt">Imported %d files</string>
+    <plurals name="toast_imported_files_fmt"><item quantity="one">Imported %1$d file</item><item quantity="other">Imported %1$d files</item></plurals>
     <plurals name="backup_files">
         <item quantity="one">Restored %d file</item>
         <item quantity="other">Restored %d files</item>
@@ -192,24 +185,21 @@
         <item quantity="one"> and %d conversation</item>
         <item quantity="other"> and %d conversations</item>
     </plurals>
-    <string name="toast_import_failed_count_fmt">Failed to import %d file(s)</string>
+    <plurals name="toast_import_failed_count_fmt"><item quantity="one">Failed to import %1$d file</item><item quantity="other">Failed to import %1$d files</item></plurals>
     <string name="file_too_large_to_send">File too large (over 20 MB), cannot send</string>
     <string name="attachment_send_failed">Failed to process attachment, please retry</string>
     <string name="chat_send_failed_fmt">Send failed. Your draft was restored: %1$s</string>
+    <string name="chat_send_rollback_failed_fmt">Send and rollback both failed. The conversation was reloaded; check it before sending again: %1$s</string>
     <string name="chat_generation_failed_fmt">Generation failed: %1$s</string>
-    <string name="toast_no_export_data_fmt">No %s to export</string>
-    <string name="toast_rename_title">Rename</string>
     <string name="toast_rename_name_label">Name</string>
     <string name="toast_rename_preset_label">Preset name</string>
 
     <!-- Font Size -->
-    <string name="select_font_size">Font Size</string>
     <string name="font_size_small">Small</string>
     <string name="font_size_default">Default</string>
     <string name="font_size_large">Large</string>
     <string name="font_size_xlarge">X-Large</string>
     <string name="preview_effect">Preview</string>
-    <string name="current_scale_fmt">Scale: %s</string>
     <string name="preview_user_text">Hi! The weather is great today ☀️</string>
     <string name="preview_ai_reasoning">The user greeted me and mentioned the nice weather. I should respond warmly and ask if there\'s anything I can help with.</string>
     <string name="preview_ai_text">Hi! Nice to meet you 😊 Is there anything I can help with? Feel free to chat, ask questions, or anything else～</string>
@@ -223,7 +213,6 @@
     <string name="add_button">Add</string>
     <string name="add_greeting">Add Greeting</string>
     <string name="edit_greeting">Edit Greeting</string>
-    <string name="greeting_content">Greeting text</string>
     <string name="delete_greeting">Delete Greeting</string>
     <string name="delete_greeting_msg">Delete this greeting?</string>
     <string name="char_name_label">Name</string>
@@ -249,15 +238,12 @@
     <string name="stream_output_desc">Show the reply as it is generated; off shows it all at once when done</string>
     <string name="new_character">New Character</string>
     <string name="edit_character">Edit Character</string>
-    <string name="char_import_failed_fmt">Cannot parse character card. Make sure it\'s a valid PNG/JSON SillyTavern card.</string>
     <string name="char_save_failed_fmt">Failed to save character card: %s</string>
-    <string name="char_file_not_found">Character file not found: %s</string>
+    <string name="char_order_save_failed_fmt">Failed to save character order: %s</string>
 
     <!-- Presets -->
     <string name="no_presets_title">No presets</string>
     <string name="no_presets_desc">Tap + to import a SillyTavern preset</string>
-    <string name="preset_import_failed_fmt">Cannot read file</string>
-    <string name="preset_file_not_found">Preset file not found: %s</string>
     <string name="basic_params">Parameters</string>
     <string name="prompts">Prompts</string>
     <string name="regex_tab">Regex</string>
@@ -284,17 +270,13 @@
     <string name="prompt_content">Prompt Content</string>
     <string name="system_prompt_label">System Prompt</string>
     <string name="forbid_overrides_label">Forbid Overrides</string>
-    <string name="prompts_count_fmt">%d prompts</string>
-    <string name="regex_coming_soon">Coming soon</string>
+    <plurals name="prompts_count_fmt"><item quantity="one">%1$d prompt</item><item quantity="other">%1$d prompts</item></plurals>
     <string name="unnamed_prompt">Unnamed</string>
-    <string name="move_up">Move up</string>
-    <string name="move_down">Move down</string>
     <string name="help_temperature">Controls randomness. 0=deterministic, 1=more random, >1=very unpredictable</string>
     <string name="help_top_p">Nucleus sampling: only considers top tokens up to this cumulative probability. 0.9=top 90%</string>
     <string name="help_top_k">Only sample from top K tokens. 0=unlimited, lower=more conservative</string>
     <string name="help_frequency_penalty">Penalizes repeated tokens. Positive=less repetition</string>
     <string name="help_presence_penalty">Penalizes tokens already present to encourage new topics. Positive=more diverse</string>
-    <string name="help_repetition_penalty">Direct repetition penalty. >1=less repetition, 1.0=off</string>
     <string name="help_seed">Random seed; a fixed value reproduces the same result for identical input. -1=random each time</string>
     <string name="help_max_context">Maximum context length sent to AI (tokens)</string>
     <string name="help_max_tokens">Maximum generation length for AI response (tokens)</string>
@@ -303,12 +285,11 @@
     <string name="no_worldbooks_title">No world books</string>
     <string name="no_worldbooks_desc">Tap + to import a world book JSON</string>
     <string name="no_entries">No entries</string>
-    <string name="entries_count_fmt">%d entries</string>
+    <plurals name="entries_count_fmt"><item quantity="one">%1$d entry</item><item quantity="other">%1$d entries</item></plurals>
     <string name="entry_name_label">Name</string>
     <string name="entry_keys_label">Trigger words (comma separated)</string>
     <string name="entry_content_label">Content</string>
     <string name="entry_enabled">Enabled</string>
-    <string name="entry_constant">Constant (always inject)</string>
     <string name="entry_position">Position</string>
     <string name="entry_order">Order</string>
     <string name="entry_depth">Depth</string>
@@ -317,7 +298,6 @@
     <string name="entry_selective_logic">Secondary logic</string>
     <string name="pos_before_char">Before character</string>
     <string name="pos_after_char">After character</string>
-    <string name="pos_at_depth">At depth</string>
     <string name="pos_em_top">Before examples</string>
     <string name="pos_em_bottom">After examples</string>
     <string name="pos_an_top">Before author\'s note</string>
@@ -335,7 +315,6 @@
     <string name="edit_entry">Edit Entry</string>
 
     <!-- World Info entry — status & advanced fields -->
-    <string name="entry_status">Status</string>
     <string name="status_constant">Constant</string>
     <string name="status_keyword">Keyword</string>
     <string name="status_vectorized">Vectorized</string>
@@ -390,7 +369,7 @@
     <string name="enabled_label">Enabled</string>
     <string name="disabled_label">Disabled</string>
     <string name="is_enabled_label">Enabled</string>
-    <string name="models_count_fmt">%d models</string>
+    <plurals name="models_count_fmt"><item quantity="one">%1$d model</item><item quantity="other">%1$d models</item></plurals>
     <string name="no_models">No models</string>
     <string name="add_models_hint">Tap the button below to add models</string>
     <string name="provider_no_models_hint">No models yet — add them in API settings</string>
@@ -408,14 +387,11 @@
     <string name="select_model_first">Please select a model first</string>
     <string name="copied">Copied</string>
     <string name="copy_all">Copy all</string>
-    <string name="edit_message">Edit message</string>
     <string name="editing_in_progress">Editing</string>
     <string name="input_content">Input content</string>
-    <string name="thinking_label">Thinking</string>
-    <string name="thinking_running">Thinking…</string>
     <string name="cot_deep_thinking">Deep thinking</string>
     <string name="cot_web_search_fmt">Web search: %1$s</string>
-    <string name="cot_citations_fmt">%1$d citations</string>
+    <plurals name="cot_citations_fmt"><item quantity="one">%1$d citation</item><item quantity="other">%1$d citations</item></plurals>
     <string name="cot_search_results">Search results</string>
     <string name="cot_search_detail_params">Parameters</string>
     <string name="cot_search_detail_results">Results</string>
@@ -436,7 +412,7 @@
     <string name="reasoning_medium">Medium</string>
     <string name="reasoning_high">High</string>
     <string name="reasoning_xhigh">Max</string>
-    <string name="reasoning_budget_fmt">~%1$d tokens</string>
+    <plurals name="reasoning_budget_fmt"><item quantity="one">~%1$d token</item><item quantity="other">~%1$d tokens</item></plurals>
     <string name="stop">Stop</string>
     <string name="chat_error_fmt">Request error: %s</string>
     <string name="delete_chat_title">Delete Chat</string>
@@ -453,8 +429,6 @@
     <string name="filter_models">Filter models</string>
     <string name="loading_models">Loading models…</string>
     <string name="models_load_failed">Failed to load models</string>
-    <string name="test_success_fmt">Connected — %d models available</string>
-    <string name="test_failed_fmt">Connection failed: %s</string>
     <string name="edit_model">Edit Model</string>
     <string name="model_id_label">Model ID</string>
 
@@ -584,14 +558,13 @@
 
     <!-- TTS -->
     <string name="tts">Voice service</string>
-    <string name="tts_desc">Tap the speaker icon on an AI message to have the model read the reply aloud</string>
     <string name="tts_provider">Voice provider</string>
     <string name="tts_add_provider">Add voice service</string>
     <string name="tts_provider_config">Provider config</string>
     <string name="tts_speech_rate">Speech rate</string>
-    <string name="tts_speech_rate_desc">Control speech speed (0.1 - 3.0, 1.0 is normal)</string>
+    <string name="tts_speech_rate_desc">Control speech speed (0.1 &#8211; 3.0, 1.0 is normal)</string>
     <string name="tts_pitch">Pitch</string>
-    <string name="tts_pitch_desc">Control speech pitch (0.1 - 2.0, 1.0 is normal)</string>
+    <string name="tts_pitch_desc">Control speech pitch (0.1 &#8211; 2.0, 1.0 is normal)</string>
     <string name="tts_base_url">Base URL</string>
     <string name="tts_model">Model</string>
     <string name="tts_voice">Voice</string>
@@ -636,7 +609,6 @@
     <string name="character_markdown">Character message markdown</string>
     <string name="auto_collapse_code">Auto-collapse code blocks</string>
     <string name="auto_collapse_code_lines">Collapse after how many lines</string>
-    <string name="unit_lines">lines</string>
     <string name="behavior_startup">Behavior &amp; startup</string>
     <string name="auto_collapse_thinking">Auto-collapse thinking</string>
     <string name="confirm_regenerate">Confirm before regenerating</string>
@@ -668,7 +640,6 @@
     <string name="total_duration">Total duration</string>
     <string name="expand">Expand</string>
     <string name="collapse">Collapse</string>
-    <string name="code_block_lines_fmt">%1$d lines</string>
     <string name="code_language_plain">code</string>
     <string name="markdown_table">Table</string>
     <string name="download">Download</string>

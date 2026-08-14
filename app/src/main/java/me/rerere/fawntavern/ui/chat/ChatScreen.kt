@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -95,7 +96,7 @@ fun ChatScreen(
     var copyPanel by remember { mutableStateOf<CopyPanel?>(null) }
     var deleteSessionId by rememberSaveable { mutableStateOf<String?>(null) }
     var renameSession by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var scrollToBottomTrigger by remember { mutableStateOf(0) }
+    var scrollToBottomTrigger by remember { mutableIntStateOf(0) }
     // 重新生成前确认：偏好开启时把待执行的重答存这里，弹框确认后执行
     var pendingRegenerate by remember { mutableStateOf<(() -> Unit)?>(null) }
     // 删除前确认：偏好开启时把待执行的删除存这里，弹框确认后执行

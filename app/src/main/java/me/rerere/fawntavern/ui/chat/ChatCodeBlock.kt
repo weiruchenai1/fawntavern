@@ -165,7 +165,7 @@ internal fun ChatCodeBlock(
         ) {
             Text(
                 visibleCode,
-                style = style.copy(color = colors.codeText),
+                style = style.copy(color = colors.text),
                 softWrap = false,
                 modifier = Modifier.padding(codePad),
             )

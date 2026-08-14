@@ -8,9 +8,22 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
@@ -64,24 +77,67 @@ class MainActivity : ComponentActivity() {
             var themeMode by remember { mutableStateOf(ThemeStore.getMode(this)) }
             val initialPrefs = remember { PreferencesStore.get(this) }
             var solidBackground by remember { mutableStateOf(initialPrefs.solidBackground) }
+            val app = application as FawnTavernApplication
+            val recoveryState by app.recoveryState.collectAsState()
             FawnTavernTheme(themeMode = themeMode, solidBackground = solidBackground) {
                 // 长按触觉闸门：按"长按触觉反馈"偏好过滤系统 LongPress 触觉（角色卡片/会话长按等）
                 HapticGate {
-                    ChatScreen(
-                        themeMode = themeMode,
-                        onThemeModeChange = { mode ->
-                            themeMode = mode
-                            ThemeStore.setMode(this@MainActivity, mode)
-                        },
-                        solidBackground = solidBackground,
-                        onSolidBackgroundChange = { value ->
-                            solidBackground = value
-                            PreferencesStore.update(this@MainActivity) { it.copy(solidBackground = value) }
-                        },
-                        startAtSettings = startAtSettings,
-                    )
+                    when (val state = recoveryState) {
+                        FawnTavernApplication.RecoveryState.Recovering -> RecoveryLoading()
+                        FawnTavernApplication.RecoveryState.Ready -> ChatScreen(
+                            themeMode = themeMode,
+                            onThemeModeChange = { mode ->
+                                themeMode = mode
+                                ThemeStore.setMode(this@MainActivity, mode)
+                            },
+                            solidBackground = solidBackground,
+                            onSolidBackgroundChange = { value ->
+                                solidBackground = value
+                                PreferencesStore.update(this@MainActivity) { it.copy(solidBackground = value) }
+                            },
+                            startAtSettings = startAtSettings,
+                        )
+                        is FawnTavernApplication.RecoveryState.Failed -> RecoveryFailure(
+                            message = state.error.message.orEmpty(),
+                            onRetry = app::retryRecovery,
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun RecoveryLoading() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        CircularProgressIndicator()
+        Text(
+            text = stringResource(R.string.backup_recovery_in_progress),
+            modifier = Modifier.padding(top = 16.dp),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun RecoveryFailure(message: String, onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = stringResource(R.string.backup_recovery_failed_fmt, message),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Button(onClick = onRetry, modifier = Modifier.padding(top = 16.dp)) {
+            Text(stringResource(R.string.retry))
         }
     }
 }

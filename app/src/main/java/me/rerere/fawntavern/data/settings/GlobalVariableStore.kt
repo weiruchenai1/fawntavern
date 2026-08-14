@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
+import me.rerere.fawntavern.data.commitChanges
+
 import android.content.Context
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -18,7 +20,7 @@ object GlobalVariableStore {
 
     fun set(context: Context, variables: Map<String, String>) {
         val value = if (variables.isEmpty()) null else json.encodeToString(variables)
-        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_DATA, value).commit()) {
+        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).commitChanges { putString(KEY_DATA, value) }) {
             "Unable to persist global macro variables"
         }
     }

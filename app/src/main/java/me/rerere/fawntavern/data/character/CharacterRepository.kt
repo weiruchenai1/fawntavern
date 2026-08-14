@@ -1,5 +1,8 @@
 package me.rerere.fawntavern.data.character
 
+import androidx.core.content.edit
+import androidx.core.graphics.createBitmap
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -8,14 +11,14 @@ import android.graphics.Paint
 import android.net.Uri
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.JsonFileDir
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.zip.CRC32
 import java.util.zip.Inflater
 
@@ -25,6 +28,7 @@ object CharacterRepository {
     private const val PREFS = "character_repo"
     private const val KEY_DEFAULT_NAME = "default_card_name"
     private const val KEY_ORDER = "card_order"
+    private val mutationMutex = Mutex()
 
     fun charsDir(context: Context): File =
         File(context.filesDir, CHARS_DIR).also { it.mkdirs() }
@@ -36,23 +40,25 @@ object CharacterRepository {
      * @return 默认卡的文件名
      */
     suspend fun ensureDefaultCard(context: Context, fallbackName: String): String = withContext(Dispatchers.IO) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val name = prefs.getString(KEY_DEFAULT_NAME, null)
-            ?: fallbackName.also { prefs.edit().putString(KEY_DEFAULT_NAME, it).apply() }
-        val file = File(charsDir(context), "$name.json")
-        if (!file.exists()) {
-            val json = JSONObject()
-                .put("spec", "chara_card_v2")
-                .put("spec_version", "2.0")
-                .put("data", JSONObject()
-                    .put("name", name)
-                    .put("description", "")
-                    .put("first_mes", "")
-                    .put("tags", JSONArray())
-                    .put("alternate_greetings", JSONArray()))
-            file.writeText(json.toString(2))
+        mutationMutex.withLock {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val name = prefs.getString(KEY_DEFAULT_NAME, null)
+                ?: fallbackName.also { value -> prefs.edit { putString(KEY_DEFAULT_NAME, value) } }
+            val file = File(charsDir(context), "$name.json")
+            if (!file.exists()) {
+                val json = JSONObject()
+                    .put("spec", "chara_card_v2")
+                    .put("spec_version", "2.0")
+                    .put("data", JSONObject()
+                        .put("name", name)
+                        .put("description", "")
+                        .put("first_mes", "")
+                        .put("tags", JSONArray())
+                        .put("alternate_greetings", JSONArray()))
+                JsonFileDir.atomicWriteText(file, json.toString(2))
+            }
+            name
         }
-        name
     }
 
     /** 默认角色卡的文件名（首启初始化前为 null）；UI 据此隐藏"删除"入口 */
@@ -83,7 +89,7 @@ object CharacterRepository {
     /** 保存拖拽排序结果 */
     suspend fun saveOrder(context: Context, names: List<String>) = withContext(Dispatchers.IO) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_ORDER, JSONArray(names).toString()).apply()
+            .edit { putString(KEY_ORDER, JSONArray(names).toString()) }
     }
 
     /** 角色卡图片（与 JSON 同名的 .png）：导入 PNG 卡时保留原图，编辑器里可更换 */
@@ -126,27 +132,12 @@ object CharacterRepository {
     /** 在数据层原子更新角色卡 JSON；变换或写盘失败会抛错，原文件保持不变。 */
     suspend fun updateJson(context: Context, name: String, transform: (JSONObject) -> Unit) =
         withContext(Dispatchers.IO) {
-            val file = File(charsDir(context), "$name.json")
-            require(file.isFile) { "角色文件不存在: $name" }
-            val json = JSONObject(file.readText())
-            transform(json.optJSONObject("data") ?: json)
-
-            val temp = File.createTempFile("${file.nameWithoutExtension}_", ".tmp", file.parentFile)
-            try {
-                temp.outputStream().bufferedWriter().use { writer ->
-                    writer.write(json.toString(2))
-                }
-                try {
-                    Files.move(
-                        temp.toPath(), file.toPath(),
-                        StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING,
-                    )
-                } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
-                    Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                }
-            } finally {
-                temp.delete()
+            mutationMutex.withLock {
+                val file = File(charsDir(context), "$name.json")
+                require(file.isFile) { "角色文件不存在: $name" }
+                val json = JSONObject(file.readText())
+                transform(json.optJSONObject("data") ?: json)
+                JsonFileDir.atomicWriteText(file, json.toString(2))
             }
         }
 
@@ -165,47 +156,61 @@ object CharacterRepository {
             displayName?.substringBeforeLast('.')?.takeIf { it.isNotBlank() }
                 ?: "character_${System.currentTimeMillis()}"
         }
-        val name = uniqueFileName(context, requestedName)
+        mutationMutex.withLock {
+            val name = uniqueFileName(context, requestedName)
+            val cardFile = File(charsDir(context), "$name.json")
+            val pngFile = imageFile(context, name)
+            var createdImage = false
+            var createdWorldBook: File? = null
+            try {
+                // The card JSON is the commit marker. Side files are written first and cleaned up
+                // if anything fails before the final atomic JSON replacement.
+                if (rawBytes.size >= 8 && rawBytes[0] == 0x89.toByte()) {
+                    JsonFileDir.atomicWriteBytes(pngFile, rawBytes)
+                    createdImage = true
+                }
 
-        val file = File(charsDir(context), "$name.json")
-        file.writeText(jsonStr)
+                val charaBook = json.optJSONObject("data")?.optJSONObject("character_book")
+                    ?: json.optJSONObject("character_book")
+                if (charaBook != null) {
+                    val bookName = charaBook.optString("name", "").ifBlank { "$name 世界书" }
+                    val safeBookName = JsonFileDir.uniqueName(
+                        context,
+                        "worldbooks",
+                        bookName,
+                        "worldbook_${System.currentTimeMillis()}",
+                    )
+                    createdWorldBook = JsonFileDir.file(context, "worldbooks", safeBookName)
+                    JsonFileDir.atomicWriteText(createdWorldBook, charaBook.toString(2))
+                }
 
-        // PNG 卡：保留原图作为角色卡图片（编辑器展示/可更换，导出 PNG 时复用）
-        if (rawBytes.size >= 8 && rawBytes[0] == 0x89.toByte()) {
-            imageFile(context, name).writeBytes(rawBytes)
+                JsonFileDir.atomicWriteText(cardFile, jsonStr)
+                parsed
+            } catch (error: Exception) {
+                if (!cardFile.exists()) {
+                    if (createdImage) pngFile.delete()
+                    createdWorldBook?.delete()
+                }
+                throw error
+            }
         }
-
-        // 提取内嵌世界书，另存为独立的世界书文件
-        val charaBook = json.optJSONObject("data")?.optJSONObject("character_book")
-            ?: json.optJSONObject("character_book")
-        if (charaBook != null) {
-            val bookName = charaBook.optString("name", "").ifBlank { "$name 世界书" }
-            val safeBookName = JsonFileDir.uniqueName(
-                context,
-                "worldbooks",
-                bookName,
-                "worldbook_${System.currentTimeMillis()}",
-            )
-            JsonFileDir.atomicWriteText(
-                JsonFileDir.file(context, "worldbooks", safeBookName),
-                charaBook.toString(2),
-            )
-        }
-
-        parsed
     }
 
     suspend fun delete(context: Context, name: String) = withContext(Dispatchers.IO) {
-        File(charsDir(context), "$name.json").delete()
-        imageFile(context, name).delete()
-        Unit
+        mutationMutex.withLock {
+            File(charsDir(context), "$name.json").delete()
+            imageFile(context, name).delete()
+            Unit
+        }
     }
 
     /** 清空所有角色卡（内置默认角色卡除外——它是兜底卡，不可删除） */
     suspend fun clear(context: Context) = withContext(Dispatchers.IO) {
-        val keep = defaultCardName(context)
-        charsDir(context).listFiles()?.forEach { if (it.nameWithoutExtension != keep) it.delete() }
-        Unit
+        mutationMutex.withLock {
+            val keep = defaultCardName(context)
+            charsDir(context).listFiles()?.forEach { if (it.nameWithoutExtension != keep) it.delete() }
+            Unit
+        }
     }
 
     /** 导出角色卡原始 JSON 字节（与 SillyTavern 兼容，文件内容原样输出） */
@@ -229,7 +234,7 @@ object CharacterRepository {
                 (j.optJSONObject("data") ?: j).optString("name", "").ifBlank { name }
             } catch (_: Exception) { name }
             // 400×600 为 ST 卡面常规比例
-            val bmp = Bitmap.createBitmap(400, 600, Bitmap.Config.ARGB_8888)
+            val bmp = createBitmap(400, 600, Bitmap.Config.ARGB_8888)
             Canvas(bmp).apply {
                 drawColor(0xFF2E3440.toInt())
                 drawText(

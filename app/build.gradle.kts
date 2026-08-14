@@ -59,6 +59,7 @@ android {
             // 不至于在配置阶段抛 "SigningConfig not found" 把所有任务（含 assembleDebug）带崩
             signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

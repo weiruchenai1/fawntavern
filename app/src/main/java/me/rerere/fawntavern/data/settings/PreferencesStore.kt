@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+
 import android.content.Context
 
 /** 消息导航按钮（顶部/上一条/下一条/底部）的显示模式 */
@@ -128,8 +130,8 @@ object PreferencesStore {
     }
 
     fun set(context: Context, s: Preferences) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putBoolean(K_SOLID_BACKGROUND, s.solidBackground)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            putBoolean(K_SOLID_BACKGROUND, s.solidBackground)
             .putBoolean(K_SHOW_USER_AVATAR, s.showUserAvatar)
             .putBoolean(K_SHOW_USER_NAME, s.showUserName)
             .putBoolean(K_SHOW_USER_TIMESTAMP, s.showUserTimestamp)
@@ -159,7 +161,7 @@ object PreferencesStore {
             .putBoolean(K_SWITCH_HAPTIC, s.switchHaptic)
             .putBoolean(K_SIDEBAR_HAPTIC, s.sidebarHaptic)
             .putBoolean(K_LONG_PRESS_HAPTIC, s.longPressHaptic)
-            .apply()
+        }
     }
 
     /** 只改部分字段：复制当前值，套用 [transform] 后整体写回 */

@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -86,6 +87,19 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     val controller = remember(context) {
         CharacterLibraryController(AndroidCharacterLibraryDataSource(context))
     }
+    val orderSaveCoordinator = remember(controller, scope) {
+        CharacterOrderSaveCoordinator(
+            scope = scope,
+            save = controller::saveOrder,
+            onFailure = { error ->
+                Toast.makeText(
+                    context,
+                    resources.getString(R.string.char_order_save_failed_fmt, error.message.orEmpty()),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            },
+        )
+    }
     var names by remember { mutableStateOf<List<String>>(emptyList()) }
     var chars by remember { mutableStateOf<Map<String, CharacterCard>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
@@ -96,7 +110,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     // 长按导出时记录目标卡名，SAF 选好保存位置后在回调里取用
     var exportTarget by remember { mutableStateOf("") }
     // 图片版本号：编辑器改了角色卡图片后 +1，强制列表缩略图重新解码
-    var imageVersion by remember { mutableStateOf(0) }
+    var imageVersion by remember { mutableIntStateOf(0) }
     // 内置默认角色卡不可删除：它是角色选择面板与主界面的兜底
     val defaultCardName = remember(controller) { controller.defaultCardName() }
 
@@ -137,10 +151,10 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                     }
                 }
                 if (imported > 0) {
-                    Toast.makeText(context, resources.getString(R.string.toast_imported_files_fmt, imported), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getQuantityString(R.plurals.toast_imported_files_fmt, imported, imported), Toast.LENGTH_SHORT).show()
                 }
                 if (failed > 0) {
-                    Toast.makeText(context, resources.getString(R.string.toast_import_failed_count_fmt, failed), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getQuantityString(R.plurals.toast_import_failed_count_fmt, failed, failed), Toast.LENGTH_SHORT).show()
                 }
                 refresh()
             }
@@ -237,7 +251,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                 keyOf = { it },
             ) { list ->
                 names = list
-                scope.launch { controller.saveOrder(names) }
+                orderSaveCoordinator.request(list)
             }
 
             LazyColumn(
@@ -257,7 +271,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                                 onClick = { selectedChar = c; editingFileName = name },
                                 onLongPress = { longPressName = name },
                                 dragging = dragging,
-                                handleModifier = Modifier.longPressDraggableHandle(),
+                                modifier = Modifier.longPressDraggableHandle(),
                             )
                         DropdownMenu(
                             expanded = longPressName == name,
@@ -304,8 +318,8 @@ private fun CharCard(
     imageFile: java.io.File,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
+    modifier: Modifier = Modifier,
     dragging: Boolean = false,
-    handleModifier: Modifier = Modifier,
 ) {
     // imageKey 变化即重新解码（编辑器换图后刷新）；文件不存在则为 null，回退到笑脸占位
     val bitmap = remember(imageFile.path, imageKey) {
@@ -368,7 +382,7 @@ private fun CharCard(
         // 拖动手柄：长按后上下拖拽排序
         Icon(
             Lucide.GripVertical, stringResource(R.string.reorder),
-            Modifier.size(24.dp).then(handleModifier),
+            Modifier.size(24.dp).then(modifier),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

@@ -1,5 +1,8 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+import me.rerere.fawntavern.data.commitChanges
+
 import android.content.Context
 import me.rerere.fawntavern.data.security.SecurePreferences
 import me.rerere.fawntavern.data.search.SearchServiceOptions
@@ -26,14 +29,14 @@ object SearchStore {
         prefs(context).getBoolean(KEY_ENABLED, false)
 
     fun setEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_ENABLED, enabled).apply()
+        prefs(context).edit { putBoolean(KEY_ENABLED, enabled) }
     }
 
     fun getResultSize(context: Context): Int =
         prefs(context).getInt(KEY_RESULT_SIZE, 5)
 
     fun setResultSize(context: Context, size: Int) {
-        prefs(context).edit().putInt(KEY_RESULT_SIZE, size.coerceIn(3, 10)).apply()
+        prefs(context).edit { putInt(KEY_RESULT_SIZE, size.coerceIn(3, 10)) }
     }
 
     /** 已配置的提供商列表（有序）。 */
@@ -61,7 +64,7 @@ object SearchStore {
         val p = prefs(context)
         SecurePreferences.putString(context, p, KEY_SERVICES, arr.toString())
         val sel = p.getInt(KEY_SELECTED, 0)
-        if (sel >= services.size) p.edit().putInt(KEY_SELECTED, 0).apply()
+        if (sel >= services.size) p.edit { putInt(KEY_SELECTED, 0) }
     }
 
     fun addService(context: Context, options: SearchServiceOptions) {
@@ -85,7 +88,7 @@ object SearchStore {
     }
 
     fun setSelectedIndex(context: Context, index: Int) {
-        prefs(context).edit().putInt(KEY_SELECTED, index.coerceAtLeast(0)).apply()
+        prefs(context).edit { putInt(KEY_SELECTED, index.coerceAtLeast(0)) }
     }
 
     /** 当前选中提供商配置 */
@@ -95,7 +98,7 @@ object SearchStore {
     fun consumeCorruptionNotice(context: Context): Boolean {
         val p = prefs(context)
         if (!p.getBoolean(KEY_CORRUPTED, false)) return false
-        p.edit().putBoolean(KEY_CORRUPTED, false).apply()
+        p.edit { putBoolean(KEY_CORRUPTED, false) }
         return true
     }
 
@@ -124,11 +127,11 @@ object SearchStore {
         val p = prefs(context)
         SecurePreferences.putStringSync(context, p, KEY_SERVICES, services.toString())
         check(
-            p.edit()
-                .putInt(KEY_SELECTED, config.selected)
+            p.commitChanges {
+                putInt(KEY_SELECTED, config.selected)
                 .putInt(KEY_RESULT_SIZE, config.resultSize)
                 .putBoolean(KEY_ENABLED, config.enabled)
-                .commit()
+            }
         ) { "Unable to persist search configuration" }
     }
 
@@ -141,7 +144,7 @@ object SearchStore {
 
     private fun recoverDefaults(context: Context, p: android.content.SharedPreferences): List<SearchServiceOptions> {
         val defaults = createDefaults(context)
-        p.edit().putBoolean(KEY_CORRUPTED, true).apply()
+        p.edit { putBoolean(KEY_CORRUPTED, true) }
         return defaults
     }
 

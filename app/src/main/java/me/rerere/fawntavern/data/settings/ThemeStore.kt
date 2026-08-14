@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+
 import android.content.Context
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
@@ -17,6 +19,6 @@ object ThemeStore {
 
     fun setMode(context: Context, mode: ThemeMode) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_MODE, mode.name).apply()
+            .edit { putString(KEY_MODE, mode.name) }
     }
 }

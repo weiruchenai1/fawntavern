@@ -118,7 +118,7 @@ private fun BookCard(book: WorldBook, onClick: () -> Unit, onLongPress: () -> Un
             Text(book.name, style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(stringResource(R.string.entries_count_fmt, book.entries.size),
+            Text(androidx.compose.ui.res.pluralStringResource(R.plurals.entries_count_fmt, book.entries.size, book.entries.size),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

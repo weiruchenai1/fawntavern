@@ -1,5 +1,8 @@
 package me.rerere.fawntavern.data.security
 
+import androidx.core.content.edit
+import me.rerere.fawntavern.data.commitChanges
+
 import android.content.Context
 import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
@@ -32,17 +35,17 @@ object SecurePreferences {
     }
 
     fun putString(context: Context, prefs: SharedPreferences, key: String, value: String?) {
-        val editor = prefs.edit()
-        if (value == null) editor.remove(key)
-        else editor.putString(key, encrypt(context, value))
-        editor.apply()
+        prefs.edit {
+            if (value == null) remove(key)
+            else putString(key, encrypt(context, value))
+        }
     }
 
     fun putStringSync(context: Context, prefs: SharedPreferences, key: String, value: String?) {
-        val editor = prefs.edit()
-        if (value == null) editor.remove(key)
-        else editor.putString(key, encrypt(context, value))
-        check(editor.commit()) { "Unable to persist secure preferences" }
+        check(prefs.commitChanges {
+            if (value == null) remove(key)
+            else putString(key, encrypt(context, value))
+        }) { "Unable to persist secure preferences" }
     }
 
     private fun encrypt(context: Context, value: String): String {

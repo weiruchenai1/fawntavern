@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -397,7 +398,12 @@ private fun chatMarkdownTypography(textStyle: TextStyle): MarkdownTypography {
         code = code,
         inlineCode = code,
         quote = textStyle.copy(fontStyle = FontStyle.Italic),
-        link = textStyle.copy(fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline),
+        textLink = TextLinkStyles(
+            style = textStyle.copy(
+                fontWeight = FontWeight.Bold,
+                textDecoration = TextDecoration.Underline,
+            ).toSpanStyle(),
+        ),
     )
 }
 

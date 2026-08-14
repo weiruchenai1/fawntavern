@@ -3,7 +3,6 @@ package me.rerere.fawntavern.ui.chat
 import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
-import android.os.Build
 import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -26,6 +25,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
 import java.util.LinkedHashMap
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -168,13 +168,12 @@ private class MessageWebView(
         settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = false
-            databaseEnabled = false
             allowFileAccess = false
             allowContentAccess = false
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
             mediaPlaybackRequiresUserGesture = true
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) safeBrowsingEnabled = true
+            safeBrowsingEnabled = true
         }
         addJavascriptInterface(HeightBridge(::dispatchHeight), "FawnHeight")
         webViewClient = object : WebViewClient() {
@@ -192,7 +191,7 @@ private class MessageWebView(
 
             @Deprecated("Deprecated in Android")
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                if (url != null && isExternalUrl(Uri.parse(url))) onOpenLink(url)
+                if (url != null && isExternalUrl(url.toUri())) onOpenLink(url)
                 return true
             }
         }

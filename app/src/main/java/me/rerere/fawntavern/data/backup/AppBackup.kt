@@ -340,7 +340,12 @@ object AppBackup {
     }
 
     private suspend fun recoverInterruptedImportInternal(context: Context) {
-        val root = File(context.filesDir, RESTORE_TXN_DIR)
+        recoverTransactionRoot(context, File(context.noBackupFilesDir, RESTORE_TXN_DIR))
+        // Older builds stored journals under filesDir, where Android Backup could include secrets.
+        recoverTransactionRoot(context, File(context.filesDir, RESTORE_TXN_DIR))
+    }
+
+    private suspend fun recoverTransactionRoot(context: Context, root: File) {
         root.listFiles()?.filter { it.isDirectory }?.forEach { transactionDir ->
             val prepared = File(transactionDir, RESTORE_PREPARED)
             if (!prepared.isFile) {
@@ -392,7 +397,7 @@ object AppBackup {
         previousAvatarPath: String?,
     ): File {
         val transactionDir = File(
-            File(context.filesDir, RESTORE_TXN_DIR).also { it.mkdirs() },
+            File(context.noBackupFilesDir, RESTORE_TXN_DIR).also { it.mkdirs() },
             UUID.randomUUID().toString(),
         ).also { it.mkdirs() }
         try {

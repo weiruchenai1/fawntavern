@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+
 import android.content.Context
 import me.rerere.fawntavern.data.worldbook.WorldInfoSettings
 
@@ -40,8 +42,8 @@ object WorldInfoSettingsStore {
     }
 
     fun set(context: Context, s: WorldInfoSettings) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putInt(K_SCAN_DEPTH, s.scanDepth.coerceAtLeast(0))
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
+            putInt(K_SCAN_DEPTH, s.scanDepth.coerceAtLeast(0))
             .putInt(K_BUDGET_PCT, s.budgetPercent.coerceIn(0, 100))
             .putInt(K_BUDGET_CAP, s.budgetCap.coerceAtLeast(0))
             .putInt(K_MIN_ACT, s.minActivations.coerceAtLeast(0))
@@ -53,6 +55,6 @@ object WorldInfoSettingsStore {
             .putBoolean(K_WHOLE_WORDS, s.matchWholeWords)
             .putBoolean(K_GROUP_SCORING, s.useGroupScoring)
             .putBoolean(K_OVERFLOW_ALERT, s.overflowAlert)
-            .apply()
+        }
     }
 }

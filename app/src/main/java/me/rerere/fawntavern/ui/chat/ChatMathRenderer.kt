@@ -276,7 +276,7 @@ internal fun LatexFlowMarkdownText(
         }
     }
     if (formulas.isEmpty()) {
-        MarkdownText(styled, style = style)
+        MarkdownText(styled, node = child, style = style)
         return
     }
 
@@ -304,6 +304,7 @@ internal fun LatexFlowMarkdownText(
             if (item.range.start > cursor) {
                 MarkdownText(
                     styled.subSequence(cursor, item.range.start),
+                    node = child,
                     modifier = Modifier.alignByBaseline(),
                     style = style,
                 )
@@ -330,6 +331,7 @@ internal fun LatexFlowMarkdownText(
         if (cursor < styled.length) {
             MarkdownText(
                 styled.subSequence(cursor, styled.length),
+                node = child,
                 modifier = Modifier.alignByBaseline(),
                 style = style,
             )

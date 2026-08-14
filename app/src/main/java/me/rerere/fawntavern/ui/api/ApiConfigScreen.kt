@@ -156,7 +156,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
                             prov = prov,
                             onClick = { editingId = prov.id },
                             dragging = dragging,
-                            handleModifier = Modifier.longPressDraggableHandle(),
+                            modifier = Modifier.longPressDraggableHandle(),
                         )
                     }
                 }
@@ -172,8 +172,8 @@ fun ApiConfigScreen(onBack: () -> Unit) {
 private fun ProviderCard(
     prov: ApiProvider,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     dragging: Boolean = false,
-    handleModifier: Modifier = Modifier,
 ) {
     Row(
         Modifier.fillMaxWidth()
@@ -203,14 +203,14 @@ private fun ProviderCard(
                          else stringResource(R.string.disabled_label))
                 }
                 Tag(type = TagType.INFO) {
-                    Text(stringResource(R.string.models_count_fmt, prov.models.size))
+                    Text(androidx.compose.ui.res.pluralStringResource(R.plurals.models_count_fmt, prov.models.size, prov.models.size))
                 }
             }
         }
         // 拖动手柄：长按后上下拖拽排序
         Icon(
             Lucide.GripVertical, stringResource(R.string.reorder),
-            Modifier.size(24.dp).then(handleModifier),
+            Modifier.size(24.dp).then(modifier),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

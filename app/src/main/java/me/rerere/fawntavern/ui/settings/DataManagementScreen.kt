@@ -547,7 +547,7 @@ private fun OverviewCard(totalItems: Int, totalSize: String, apiCount: Int) {
             horizontalArrangement = Arrangement.spacedBy(Space12)) {
             Icon(Lucide.Database, null, Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(stringResource(R.string.total_items_fmt, totalItems),
+            Text(androidx.compose.ui.res.pluralStringResource(R.plurals.total_items_fmt, totalItems, totalItems),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface)
         }
@@ -603,7 +603,7 @@ private fun CategoryCard(
                 Text(label, style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface)
                 Text(if (enabled) buildString {
-                    append(stringResource(R.string.items_with_count_fmt, count))
+                    append(androidx.compose.ui.res.pluralStringResource(R.plurals.items_with_count_fmt, count, count))
                     if (fileCount > 0) append(" · $size")
                 } else stringResource(R.string.no_data),
                     style = MaterialTheme.typography.bodySmall,
@@ -646,7 +646,7 @@ private fun ApiConfigCard(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {
                 Text(stringResource(R.string.api_config), style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface)
-                Text(stringResource(R.string.providers_unit_fmt, providerCount),
+                Text(androidx.compose.ui.res.pluralStringResource(R.plurals.providers_unit_fmt, providerCount, providerCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

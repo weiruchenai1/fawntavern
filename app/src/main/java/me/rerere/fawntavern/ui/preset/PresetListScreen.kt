@@ -107,7 +107,7 @@ private fun PresetCard(
                     if (model.isNotBlank()) append(model)
                     if (promptCount > 0) {
                         if (model.isNotBlank()) append(" · ")
-                        append(stringResource(R.string.prompts_count_fmt, promptCount))
+                        append(androidx.compose.ui.res.pluralStringResource(R.plurals.prompts_count_fmt, promptCount, promptCount))
                     }
                 },
                 style = MaterialTheme.typography.bodySmall,

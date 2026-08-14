@@ -8,4 +8,5 @@
     <exclude domain="database" path="chats.db-shm" />
     <exclude domain="file" path="attachments/" />
     <exclude domain="file" path="avatars/" />
+    <exclude domain="file" path=".backup-restore/" />
 </full-backup-content>

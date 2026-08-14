@@ -49,4 +49,15 @@ class JsonFileDirTest {
         assertTrue(target.parentFile?.listFiles()?.none { it.extension == "tmp" } == true)
         assertFalse(File(context.filesDir, "outside.json").exists())
     }
+
+    @Test
+    fun atomicallyReplacesBinaryContent() {
+        val target = File(JsonFileDir.dir(context, "json-file-test"), "card.png")
+        target.writeBytes(byteArrayOf(1, 2))
+
+        JsonFileDir.atomicWriteBytes(target, byteArrayOf(3, 4, 5))
+
+        assertTrue(target.readBytes().contentEquals(byteArrayOf(3, 4, 5)))
+        assertTrue(target.parentFile?.listFiles()?.none { it.extension == "tmp" } == true)
+    }
 }

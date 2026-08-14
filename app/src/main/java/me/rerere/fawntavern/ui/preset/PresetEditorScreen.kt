@@ -299,7 +299,7 @@ private fun PromptsTab(
                     onEdit = { onEdit(item) },
                     onToggle = { onToggle(item.identifier) },
                     onDelete = { onDeleteRequest(item.identifier) },
-                    handleModifier = Modifier.longPressDraggableHandle(),
+                    modifier = Modifier.longPressDraggableHandle(),
                 )
             }
         }
@@ -325,8 +325,8 @@ private fun PromptRow(
     onEdit: () -> Unit,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
     dragging: Boolean = false,
-    handleModifier: Modifier = Modifier,
 ) {
     Row(
         Modifier.fillMaxWidth()
@@ -341,7 +341,7 @@ private fun PromptRow(
         // 拖动手柄：长按后上下拖拽排序
         Icon(
             Lucide.GripVertical, stringResource(R.string.reorder),
-            Modifier.size(20.dp).then(handleModifier),
+            Modifier.size(20.dp).then(modifier),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {

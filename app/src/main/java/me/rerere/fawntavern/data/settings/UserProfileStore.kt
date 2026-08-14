@@ -1,5 +1,8 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+import me.rerere.fawntavern.data.commitChanges
+
 import android.content.Context
 import androidx.compose.ui.graphics.Color
 
@@ -19,7 +22,7 @@ object UserProfileStore {
 
     fun setName(context: Context, name: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_NAME, name.trim()).apply()
+            .edit { putString(KEY_NAME, name.trim()) }
     }
 
     fun getAvatarColor(context: Context): Long =
@@ -28,7 +31,7 @@ object UserProfileStore {
 
     fun setAvatarColor(context: Context, color: Color) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putLong(KEY_AVATAR_COLOR, color.value.toLong()).apply()
+            .edit { putLong(KEY_AVATAR_COLOR, color.value.toLong()) }
     }
 
     fun getAvatarPath(context: Context): String? =
@@ -37,13 +40,13 @@ object UserProfileStore {
 
     fun setAvatarPath(context: Context, path: String?) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_AVATAR_PATH, path).apply()
+            .edit { putString(KEY_AVATAR_PATH, path) }
     }
 
     internal fun setAvatarPathSync(context: Context, path: String?) {
         check(
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit().putString(KEY_AVATAR_PATH, path).commit()
+                .commitChanges { putString(KEY_AVATAR_PATH, path) }
         ) { "Unable to persist avatar path" }
     }
 
@@ -53,6 +56,6 @@ object UserProfileStore {
 
     fun setDescription(context: Context, description: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_DESCRIPTION, description.trim()).apply()
+            .edit { putString(KEY_DESCRIPTION, description.trim()) }
     }
 }

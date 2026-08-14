@@ -4,6 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
 
@@ -66,4 +71,30 @@ internal class CharacterLibraryController(
     suspend fun exportPng(name: String): ByteArray = dataSource.exportPng(name)
     suspend fun exportJson(name: String): ByteArray = dataSource.exportJson(name)
     fun imageFile(name: String): File = dataSource.imageFile(name)
+}
+
+/** Serializes reorder writes and drops snapshots superseded before they reach storage. */
+internal class CharacterOrderSaveCoordinator(
+    private val scope: CoroutineScope,
+    private val save: suspend (List<String>) -> Unit,
+    private val onFailure: (Throwable) -> Unit = {},
+) {
+    private val mutex = Mutex()
+    private var revision = 0L
+
+    fun request(names: List<String>) {
+        val requestedRevision = ++revision
+        val snapshot = names.toList()
+        scope.launch {
+            try {
+                mutex.withLock {
+                    if (requestedRevision == revision) save(snapshot)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                onFailure(error)
+            }
+        }
+    }
 }

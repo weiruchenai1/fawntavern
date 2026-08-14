@@ -177,7 +177,7 @@ fun TtsConfigScreen(onBack: () -> Unit) {
                             },
                             canDelete = services.size > 1,
                             dragging = dragging,
-                            handleModifier = Modifier.longPressDraggableHandle(),
+                            modifier = Modifier.longPressDraggableHandle(),
                         )
                     }
                 }
@@ -197,7 +197,7 @@ private fun TtsProviderCard(
     onDelete: () -> Unit,
     canDelete: Boolean,
     dragging: Boolean,
-    handleModifier: Modifier,
+    modifier: Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
     Box {
@@ -230,7 +230,7 @@ private fun TtsProviderCard(
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Icon(Lucide.GripVertical, stringResource(R.string.reorder),
-                Modifier.size(24.dp).then(handleModifier),
+                Modifier.size(24.dp).then(modifier),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {

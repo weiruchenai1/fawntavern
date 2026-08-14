@@ -1,5 +1,8 @@
 package me.rerere.fawntavern.data.api
 
+import androidx.core.content.edit
+import me.rerere.fawntavern.data.commitChanges
+
 import android.content.Context
 import me.rerere.fawntavern.data.security.SecurePreferences
 import org.json.JSONArray
@@ -89,10 +92,10 @@ object ApiConfigStore {
         val stored = p.getString(KEY_PROVIDERS, null)
         val raw = SecurePreferences.getString(context, p, KEY_PROVIDERS, null)
         if (raw == null) {
-            if (stored != null) p.edit().putBoolean(KEY_CORRUPTED, true).apply()
+            if (stored != null) p.edit { putBoolean(KEY_CORRUPTED, true) }
             val config = ApiConfig(providers = defaultProviders())
             saveConfig(context, config)
-            if (stored != null) p.edit().putBoolean(KEY_CORRUPTED, true).apply()
+            if (stored != null) p.edit { putBoolean(KEY_CORRUPTED, true) }
             return config
         }
 
@@ -123,7 +126,7 @@ object ApiConfigStore {
         } catch (_: Exception) {
             val recovered = ApiConfig(providers = defaultProviders())
             saveConfig(context, recovered)
-            p.edit().putBoolean(KEY_CORRUPTED, true).apply()
+            p.edit { putBoolean(KEY_CORRUPTED, true) }
             return recovered
         }
 
@@ -135,27 +138,27 @@ object ApiConfigStore {
 
     /** 重置为预设提供商（清除所有用户配置，重新补种默认预设） */
     fun resetToDefaults(context: Context): ApiConfig {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { clear() }
         return loadConfig(context)
     }
 
     fun saveConfig(context: Context, config: ApiConfig) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         SecurePreferences.putString(context, prefs, KEY_PROVIDERS, providersToJson(config.providers).toString())
-        prefs.edit()
-            .putString(KEY_CURRENT, config.currentModel)
+        prefs.edit {
+            putString(KEY_CURRENT, config.currentModel)
             .putBoolean(KEY_CORRUPTED, false)
-            .apply()
+        }
     }
 
     internal fun saveConfigSync(context: Context, config: ApiConfig) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         SecurePreferences.putStringSync(context, prefs, KEY_PROVIDERS, providersToJson(config.providers).toString())
         check(
-            prefs.edit()
-                .putString(KEY_CURRENT, config.currentModel)
+            prefs.commitChanges {
+                putString(KEY_CURRENT, config.currentModel)
                 .putBoolean(KEY_CORRUPTED, false)
-                .commit()
+            }
         ) { "Unable to persist API configuration" }
     }
 
@@ -220,7 +223,7 @@ object ApiConfigStore {
     fun consumeCorruptionNotice(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_CORRUPTED, false)) return false
-        prefs.edit().putBoolean(KEY_CORRUPTED, false).apply()
+        prefs.edit { putBoolean(KEY_CORRUPTED, false) }
         return true
     }
 

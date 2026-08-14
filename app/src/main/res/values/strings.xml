@@ -21,6 +21,8 @@
     <string name="retry">重试</string>
     <string name="preset_save_failed_fmt">预设保存失败，编辑内容仍保留：%1$s</string>
     <string name="worldbook_save_failed_fmt">世界书保存失败，编辑内容仍保留：%1$s</string>
+    <string name="backup_recovery_in_progress">正在恢复未完成的备份，请稍候</string>
+    <string name="backup_recovery_failed_fmt">备份恢复失败，数据尚未打开：%1$s</string>
     <string name="prompt_context_load_failed_fmt">部分 Prompt 上下文加载失败：%1$s</string>
     <string name="list_load_failed_fmt">列表加载失败：%1$s</string>
     <string name="delete_failed_fmt">删除失败：%1$s</string>
@@ -34,8 +36,6 @@
     <string name="light">浅色</string>
     <string name="dark">深色</string>
     <string name="language">语言</string>
-    <string name="chinese_simplified">中文(简体中文)</string>
-    <string name="english">English</string>
     <string name="font_size">字体大小</string>
     <string name="workspace">工作空间</string>
     <string name="characters">角色</string>
@@ -45,12 +45,8 @@
     <string name="data_management">数据管理</string>
     <string name="about">关于</string>
     <string name="check_update">检查更新</string>
-    <string name="update_checking">正在检查更新…</string>
     <string name="update_latest_title">已是最新版本</string>
     <string name="update_latest_msg">当前版本 %1$s 已是最新，无需更新。</string>
-    <string name="update_available_title">发现新版本</string>
-    <string name="update_available_msg">新版本 %1$s 可用，当前版本 %2$s。请前往下载更新。</string>
-    <string name="update_go_download">前往下载</string>
     <string name="about_version">版本 %1$s</string>
     <string name="about_description">轻量 AI 角色扮演聊天客户端。\n\n支持导入 SillyTavern 兼容的角色卡、预设和世界书，可对接多种大模型 API，随时随地与喜欢的角色聊天。</string>
     <string name="about_tech">技术栈</string>
@@ -65,13 +61,13 @@
     <string name="debug_log_empty">暂无日志。启用后发送一条消息，即可在此查看本次组装的完整 prompt。</string>
     <string name="debug_log_clear">清空</string>
     <string name="debug_log_messages">最终消息</string>
-    <string name="debug_log_entry_count">共 %1$d 条记录</string>
+    <plurals name="debug_log_entry_count"><item quantity="other">共 %1$d 条记录</item></plurals>
     <string name="debug_log_no_preset">无预设</string>
-    <string name="debug_log_wi_count">世界书 %1$d 条</string>
-    <string name="debug_log_msg_count">消息 %1$d 条</string>
-    <string name="debug_log_tokens">≈%1$d tokens</string>
+    <plurals name="debug_log_wi_count"><item quantity="other">世界书 %1$d 条</item></plurals>
+    <plurals name="debug_log_msg_count"><item quantity="other">消息 %1$d 条</item></plurals>
+    <plurals name="debug_log_tokens"><item quantity="other">≈%1$d tokens</item></plurals>
     <string name="debug_log_reasoning">思考档位 %1$s</string>
-    <string name="debug_log_images">%1$d 张图片</string>
+    <plurals name="debug_log_images"><item quantity="other">%1$d 张图片</item></plurals>
 
     <!-- Chat -->
     <string name="new_chat">新聊天</string>
@@ -87,7 +83,6 @@
     <string name="persona_description_label">人设描述</string>
     <string name="pick_from_gallery">从相册选择图片</string>
     <string name="remove_avatar">移除自定义头像</string>
-    <string name="or_pick_color">或选择颜色</string>
     <string name="search_chats">搜索聊天</string>
     <string name="search_message_content">搜索消息内容</string>
     <string name="search_history">搜索历史</string>
@@ -106,7 +101,6 @@
     <string name="copy">复制</string>
     <string name="select_copy">选择复制</string>
     <string name="regenerate">重新生成</string>
-    <string name="translate">翻译</string>
     <string name="more">更多</string>
     <string name="take_photo">拍照</string>
     <string name="gallery">相册</string>
@@ -114,17 +108,17 @@
 
     <!-- Data Management -->
     <string name="storage_overview">存储概览</string>
-    <string name="total_items_fmt">总计 %d 个数据项</string>
+    <plurals name="total_items_fmt"><item quantity="other">总计 %1$d 个数据项</item></plurals>
     <string name="items_unit">文件</string>
     <string name="space_unit">空间</string>
     <string name="api_unit">API</string>
     <string name="items_count_fmt">%d 项</string>
     <string name="providers_count_fmt">%d 个</string>
     <string name="category_management">分类管理</string>
-    <string name="items_with_count_fmt">%d 个项目</string>
+    <plurals name="items_with_count_fmt"><item quantity="other">%1$d 个项目</item></plurals>
     <string name="no_data">暂无数据</string>
     <string name="clear_all_prefix">清除全部</string>
-    <string name="providers_unit_fmt">%d 个提供商</string>
+    <plurals name="providers_unit_fmt"><item quantity="other">%1$d 个提供商</item></plurals>
     <string name="reset_to_default">重置为默认</string>
     <string name="backup_restore">备份与恢复</string>
     <string name="import_backup">导入备份</string>
@@ -170,7 +164,6 @@
     <string name="delete_model_msg_fmt">确定要删除「%s」吗？</string>
 
     <!-- Toasts -->
-    <string name="toast_imported_fmt">已导入: %s</string>
     <string name="toast_import_failed_fmt">导入失败: %s</string>
     <string name="toast_deleted">已删除</string>
     <string name="toast_renamed">已重命名</string>
@@ -183,31 +176,28 @@
     <string name="toast_export_success">导出成功</string>
     <string name="toast_backup_content_imported">所选备份内容已导入</string>
     <string name="toast_export_failed_fmt">导出失败: %s</string>
-    <string name="toast_imported_files_fmt">已导入 %d 个文件</string>
+    <plurals name="toast_imported_files_fmt"><item quantity="other">已导入 %1$d 个文件</item></plurals>
     <plurals name="backup_files">
         <item quantity="other">已恢复 %d 个文件</item>
     </plurals>
     <plurals name="backup_sessions_suffix">
         <item quantity="other">和 %d 个会话</item>
     </plurals>
-    <string name="toast_import_failed_count_fmt">有 %d 个文件导入失败</string>
+    <plurals name="toast_import_failed_count_fmt"><item quantity="other">有 %1$d 个文件导入失败</item></plurals>
     <string name="file_too_large_to_send">文件过大（超过 20MB），无法发送</string>
     <string name="attachment_send_failed">附件处理失败，请重试</string>
     <string name="chat_send_failed_fmt">发送失败，输入内容已恢复：%1$s</string>
+    <string name="chat_send_rollback_failed_fmt">发送和回滚均失败，消息状态已重新读取。请检查记录，不要直接重发：%1$s</string>
     <string name="chat_generation_failed_fmt">生成失败：%1$s</string>
-    <string name="toast_no_export_data_fmt">没有可导出的%s</string>
-    <string name="toast_rename_title">重命名</string>
     <string name="toast_rename_name_label">名称</string>
     <string name="toast_rename_preset_label">预设名称</string>
 
     <!-- Font Size -->
-    <string name="select_font_size">选择字号</string>
     <string name="font_size_small">小</string>
     <string name="font_size_default">默认</string>
     <string name="font_size_large">大</string>
     <string name="font_size_xlarge">超大</string>
     <string name="preview_effect">预览效果</string>
-    <string name="current_scale_fmt">当前缩放: %s</string>
     <string name="preview_user_text">你好！今天天气真不错 ☀️</string>
     <string name="preview_ai_reasoning">用户跟我打了个招呼，还提到今天天气不错。我应该热情地回应问候，并主动问问有什么可以帮忙的。</string>
     <string name="preview_ai_text">你好！很高兴见到你 😊 有什么我可以帮你的吗？想聊聊天、问问题还是需要什么帮助，都可以跟我说～</string>
@@ -221,7 +211,6 @@
     <string name="add_button">添加</string>
     <string name="add_greeting">添加开场白</string>
     <string name="edit_greeting">编辑开场白</string>
-    <string name="greeting_content">开场白内容</string>
     <string name="delete_greeting">删除开场白</string>
     <string name="delete_greeting_msg">确定要删除这条开场白吗？</string>
     <string name="char_name_label">角色名</string>
@@ -247,15 +236,12 @@
     <string name="stream_output_desc">逐字实时显示回复；关闭则生成完成后一次性显示</string>
     <string name="new_character">新建角色</string>
     <string name="edit_character">编辑角色</string>
-    <string name="char_import_failed_fmt">无法解析角色卡，请确认是 PNG/JSON 格式的 SillyTavern 角色卡</string>
     <string name="char_save_failed_fmt">角色卡保存失败：%s</string>
-    <string name="char_file_not_found">角色文件不存在: %s</string>
+    <string name="char_order_save_failed_fmt">角色排序保存失败：%s</string>
 
     <!-- Presets -->
     <string name="no_presets_title">暂无预设</string>
     <string name="no_presets_desc">点击右下角导入 SillyTavern 预设</string>
-    <string name="preset_import_failed_fmt">无法读取文件</string>
-    <string name="preset_file_not_found">预设文件不存在: %s</string>
     <string name="basic_params">基础参数</string>
     <string name="prompts">提示词</string>
     <string name="regex_tab">正则</string>
@@ -282,17 +268,13 @@
     <string name="prompt_content">提示词内容</string>
     <string name="system_prompt_label">System Prompt</string>
     <string name="forbid_overrides_label">禁止覆盖</string>
-    <string name="prompts_count_fmt">%d条提示词</string>
-    <string name="regex_coming_soon">即将支持</string>
+    <plurals name="prompts_count_fmt"><item quantity="other">%1$d条提示词</item></plurals>
     <string name="unnamed_prompt">未命名</string>
-    <string name="move_up">上移</string>
-    <string name="move_down">下移</string>
     <string name="help_temperature">控制随机性。0=确定性强，1=较随机，>1=非常跳跃</string>
     <string name="help_top_p">核采样：只从累计概率到该值的词中选取。0.9=仅考虑前90%概率的词</string>
     <string name="help_top_k">只从概率最高的K个词中采样。0=不限，越小输出越保守</string>
     <string name="help_frequency_penalty">惩罚已出现过的词以降低重复。正值=减少重复</string>
     <string name="help_presence_penalty">惩罚出现过的词，鼓励引入新话题。正值=更多样</string>
-    <string name="help_repetition_penalty">直接惩罚重复。>1=减少重复，1.0=不施加</string>
     <string name="help_seed">随机种子，固定后相同输入尽量复现同一结果。-1=每次随机</string>
     <string name="help_max_context">发送给 AI 的最大上下文长度（token）</string>
     <string name="help_max_tokens">AI 回复的最大生成长度（token）</string>
@@ -301,12 +283,11 @@
     <string name="no_worldbooks_title">暂无世界书</string>
     <string name="no_worldbooks_desc">点击右下角导入世界书 JSON</string>
     <string name="no_entries">无条目</string>
-    <string name="entries_count_fmt">%d 个条目</string>
+    <plurals name="entries_count_fmt"><item quantity="other">%1$d 个条目</item></plurals>
     <string name="entry_name_label">名称</string>
     <string name="entry_keys_label">触发词 (逗号分隔)</string>
     <string name="entry_content_label">内容</string>
     <string name="entry_enabled">启用</string>
-    <string name="entry_constant">常驻（始终注入）</string>
     <string name="entry_position">位置</string>
     <string name="entry_order">顺序</string>
     <string name="entry_depth">深度</string>
@@ -315,7 +296,6 @@
     <string name="entry_selective_logic">次级逻辑</string>
     <string name="pos_before_char">角色定义之前</string>
     <string name="pos_after_char">角色定义之后</string>
-    <string name="pos_at_depth">按深度注入</string>
     <string name="pos_em_top">示例消息之前</string>
     <string name="pos_em_bottom">示例消息之后</string>
     <string name="pos_an_top">作者注释之前</string>
@@ -333,7 +313,6 @@
     <string name="edit_entry">编辑条目</string>
 
     <!-- World Info entry — 状态与高级字段 -->
-    <string name="entry_status">状态</string>
     <string name="status_constant">永久</string>
     <string name="status_keyword">关键词</string>
     <string name="status_vectorized">向量化</string>
@@ -388,7 +367,7 @@
     <string name="enabled_label">启用</string>
     <string name="disabled_label">禁用</string>
     <string name="is_enabled_label">是否启用</string>
-    <string name="models_count_fmt">%d 个模型</string>
+    <plurals name="models_count_fmt"><item quantity="other">%1$d 个模型</item></plurals>
     <string name="no_models">暂无模型</string>
     <string name="add_models_hint">点击下方按钮添加模型</string>
     <string name="provider_no_models_hint">暂无模型，请在 API 设置中添加</string>
@@ -406,14 +385,11 @@
     <string name="select_model_first">请先选择模型</string>
     <string name="copied">已复制</string>
     <string name="copy_all">复制全部</string>
-    <string name="edit_message">编辑消息</string>
     <string name="editing_in_progress">编辑中</string>
     <string name="input_content">输入内容</string>
-    <string name="thinking_label">思考过程</string>
-    <string name="thinking_running">思考中…</string>
     <string name="cot_deep_thinking">深度思考</string>
     <string name="cot_web_search_fmt">网络搜索：%1$s</string>
-    <string name="cot_citations_fmt">%1$d个引用</string>
+    <plurals name="cot_citations_fmt"><item quantity="other">%1$d个引用</item></plurals>
     <string name="cot_search_results">搜索结果</string>
     <string name="cot_search_detail_params">参数</string>
     <string name="cot_search_detail_results">结果</string>
@@ -434,7 +410,7 @@
     <string name="reasoning_medium">中</string>
     <string name="reasoning_high">高</string>
     <string name="reasoning_xhigh">极高</string>
-    <string name="reasoning_budget_fmt">约 %1$d tokens</string>
+    <plurals name="reasoning_budget_fmt"><item quantity="other">约 %1$d tokens</item></plurals>
     <string name="stop">停止</string>
     <string name="chat_error_fmt">请求出错：%s</string>
     <string name="delete_chat_title">删除聊天</string>
@@ -451,8 +427,6 @@
     <string name="filter_models">过滤模型</string>
     <string name="loading_models">正在获取模型…</string>
     <string name="models_load_failed">模型列表获取失败</string>
-    <string name="test_success_fmt">连接成功，获取到 %d 个模型</string>
-    <string name="test_failed_fmt">连接失败：%s</string>
     <string name="edit_model">编辑模型</string>
     <string name="model_id_label">模型 ID</string>
 
@@ -582,14 +556,13 @@
 
     <!-- 语音朗读 -->
     <string name="tts">语音服务</string>
-    <string name="tts_desc">点击 AI 消息上的朗读按钮即可让模型朗读回复内容</string>
     <string name="tts_provider">语音提供商</string>
     <string name="tts_add_provider">添加语音服务</string>
     <string name="tts_provider_config">提供商配置</string>
     <string name="tts_speech_rate">语速</string>
-    <string name="tts_speech_rate_desc">控制语音播放速度（0.1 - 3.0，1.0 为正常速度）</string>
+    <string name="tts_speech_rate_desc">控制语音播放速度（0.1 &#8211; 3.0，1.0 为正常速度）</string>
     <string name="tts_pitch">音调</string>
-    <string name="tts_pitch_desc">控制语音音调高低（0.1 - 2.0，1.0 为正常音调）</string>
+    <string name="tts_pitch_desc">控制语音音调高低（0.1 &#8211; 2.0，1.0 为正常音调）</string>
     <string name="tts_base_url">接口地址</string>
     <string name="tts_model">模型</string>
     <string name="tts_voice">音色</string>
@@ -634,7 +607,6 @@
     <string name="character_markdown">角色消息markdown渲染</string>
     <string name="auto_collapse_code">自动折叠代码块</string>
     <string name="auto_collapse_code_lines">超过多少行自动折叠</string>
-    <string name="unit_lines">行</string>
     <string name="behavior_startup">行为与启动</string>
     <string name="auto_collapse_thinking">自动折叠思考</string>
     <string name="confirm_regenerate">重新生成前弹出确认</string>
@@ -666,7 +638,6 @@
     <string name="total_duration">总用时</string>
     <string name="expand">展开</string>
     <string name="collapse">收起</string>
-    <string name="code_block_lines_fmt">%1$d 行</string>
     <string name="code_language_plain">代码</string>
     <string name="markdown_table">表格</string>
     <string name="download">下载</string>

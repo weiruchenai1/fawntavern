@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+
 import android.content.Context
 
 /** 聊天搜索历史 — SharedPreferences 持久化，最多保留 20 条 */
@@ -22,18 +24,18 @@ object SearchHistoryStore {
         list.add(0, trimmed)
         if (list.size > MAX) list.removeAt(list.lastIndex)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY, list.joinToString("|||")).apply()
+            .edit { putString(KEY, list.joinToString("|||")) }
     }
 
     fun remove(context: Context, query: String) {
         val list = getHistory(context).toMutableList()
         list.remove(query)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY, list.joinToString("|||")).apply()
+            .edit { putString(KEY, list.joinToString("|||")) }
     }
 
     fun clear(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(KEY).apply()
+            .edit { remove(KEY) }
     }
 }

@@ -173,10 +173,10 @@ fun <T : Any> ImportableListScreen(
                     }
                 }
                 if (imported > 0) {
-                    Toast.makeText(context, resources.getString(R.string.toast_imported_files_fmt, imported), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getQuantityString(R.plurals.toast_imported_files_fmt, imported, imported), Toast.LENGTH_SHORT).show()
                 }
                 if (failed > 0) {
-                    Toast.makeText(context, resources.getString(R.string.toast_import_failed_count_fmt, failed), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, resources.getQuantityString(R.plurals.toast_import_failed_count_fmt, failed, failed), Toast.LENGTH_SHORT).show()
                 }
                 refresh()
             }

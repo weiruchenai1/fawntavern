@@ -137,7 +137,7 @@ internal fun ReasoningLevel.label(): String = stringResource(
 private fun ReasoningLevel.description(): String = when (this) {
     ReasoningLevel.OFF -> stringResource(R.string.reasoning_off_desc)
     ReasoningLevel.AUTO -> stringResource(R.string.reasoning_auto_desc)
-    else -> stringResource(R.string.reasoning_budget_fmt, budgetTokens)
+    else -> androidx.compose.ui.res.pluralStringResource(R.plurals.reasoning_budget_fmt, budgetTokens, budgetTokens)
 }
 
 @Composable

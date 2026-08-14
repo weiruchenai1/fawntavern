@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+
 import android.content.Context
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import org.json.JSONObject
@@ -24,7 +26,7 @@ object ThinkingStore {
         val obj = read(context)
         if (level == ReasoningLevel.AUTO) obj.remove(modelKey) else obj.put(modelKey, level.name)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_LEVELS, obj.toString()).apply()
+            .edit { putString(KEY_LEVELS, obj.toString()) }
     }
 
     private fun read(context: Context): JSONObject {

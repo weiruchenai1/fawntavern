@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.data.settings
 
+import androidx.core.content.edit
+
 import android.content.Context
 
 /** 全局字体缩放 — SharedPreferences 持久化 */
@@ -12,6 +14,6 @@ object FontSizeStore {
 
     fun setScale(context: Context, scale: Float) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putFloat(KEY_SCALE, scale).apply()
+            .edit { putFloat(KEY_SCALE, scale) }
     }
 }

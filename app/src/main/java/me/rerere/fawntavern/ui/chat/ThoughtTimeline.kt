@@ -442,7 +442,7 @@ internal fun CitationsPill(
     ) {
         FaviconStack(items, scale)
         Text(
-            stringResource(R.string.cot_citations_fmt, items.size),
+            androidx.compose.ui.res.pluralStringResource(R.plurals.cot_citations_fmt, items.size, items.size),
             style = MaterialTheme.typography.labelMedium
                 .copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold).scaledBy(scale),
             color = MaterialTheme.colorScheme.onSurface,

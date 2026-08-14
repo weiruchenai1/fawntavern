@@ -27,7 +27,7 @@ import coil3.svg.css
  * 彩色图标路径自带 fill，不受 CSS 影响。无匹配图标时回退首字头像。
  */
 @Composable
-fun ProviderIcon(name: String, size: Dp = 40.dp, modifier: Modifier = Modifier) {
+fun ProviderIcon(name: String, modifier: Modifier = Modifier, size: Dp = 40.dp) {
     val slug = iconSlug(name)
     if (slug.isEmpty()) {
         LetterAvatar(name, size, modifier)
