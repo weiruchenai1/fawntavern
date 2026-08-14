@@ -41,6 +41,8 @@ import me.rerere.fawntavern.ui.components.Space12
 @Composable
 fun CrashReportScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val reportSubject = stringResource(R.string.crash_feedback_subject)
+    val shareLabel = stringResource(R.string.crash_feedback_share)
     val remoteAvailable = remember(context) { RemoteDiagnostics.isAvailable(context) }
     var remoteEnabled by remember(context) {
         mutableStateOf(RemoteDiagnostics.isEnabled(context))
@@ -114,16 +116,16 @@ fun CrashReportScreen(onBack: () -> Unit) {
                     onClick = {
                         val send = Intent(Intent.ACTION_SEND)
                             .setType("text/plain")
-                            .putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.crash_feedback_subject))
+                            .putExtra(Intent.EXTRA_SUBJECT, reportSubject)
                             .putExtra(Intent.EXTRA_TEXT, currentReport)
                         context.startActivity(
-                            Intent.createChooser(send, context.getString(R.string.crash_feedback_share)),
+                            Intent.createChooser(send, shareLabel),
                         )
                     },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Lucide.Share2, null)
-                    Text(stringResource(R.string.crash_feedback_share), Modifier.padding(start = Space8))
+                    Text(shareLabel, Modifier.padding(start = Space8))
                 }
                 OutlinedButton(
                     onClick = {
