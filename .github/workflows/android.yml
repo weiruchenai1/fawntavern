@@ -3,8 +3,16 @@ name: Android CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 concurrency:
@@ -34,6 +42,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # 仅允许 main 分支的推送写入新缓存；拉取请求和手动运行只读取已有缓存。
+          cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
       - name: Verify Android version calculation
         run: bash scripts/android-version-code.sh --self-test
@@ -98,6 +109,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # 模拟器任务只读取已有缓存，避免为该任务持续创建独立缓存。
+          cache-read-only: true
 
       - name: Enable KVM
         run: |
