@@ -653,8 +653,6 @@
 
     <string name="crash_feedback">崩溃报告</string>
     <string name="crash_feedback_remote_title">自动上传崩溃报告</string>
-    <string name="crash_feedback_remote_summary">将崩溃信息发送至 Firebase</string>
-    <string name="crash_feedback_remote_unavailable">当前版本不可用</string>
     <string name="crash_feedback_empty">暂无崩溃报告</string>
     <string name="crash_feedback_share">分享</string>
     <string name="crash_feedback_subject">FawnTavern 崩溃报告</string>

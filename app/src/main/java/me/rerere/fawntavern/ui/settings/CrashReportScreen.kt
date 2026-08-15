@@ -76,24 +76,12 @@ fun CrashReportScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(
+                Text(
+                    stringResource(R.string.crash_feedback_remote_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        stringResource(R.string.crash_feedback_remote_title),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        stringResource(
-                            if (remoteAvailable) R.string.crash_feedback_remote_summary
-                            else R.string.crash_feedback_remote_unavailable,
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                )
                 Switch(
                     checked = remoteEnabled,
                     enabled = remoteAvailable,

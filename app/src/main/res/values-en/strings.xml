@@ -655,8 +655,6 @@
 
     <string name="crash_feedback">Crash reports</string>
     <string name="crash_feedback_remote_title">Automatically upload crash reports</string>
-    <string name="crash_feedback_remote_summary">Send crash information to Firebase</string>
-    <string name="crash_feedback_remote_unavailable">Unavailable in this build</string>
     <string name="crash_feedback_empty">No crash reports</string>
     <string name="crash_feedback_share">Share</string>
     <string name="crash_feedback_subject">FawnTavern crash report</string>

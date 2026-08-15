@@ -26,6 +26,13 @@ val appVersionName = providers.gradleProperty("versionName")
     .orElse(providers.environmentVariable("VERSION_NAME"))
     .orElse("0.1.0")
     .get()
+val buglyAppId = providers.gradleProperty("buglyAppId")
+    .orElse(providers.environmentVariable("BUGLY_APP_ID"))
+    .orElse("")
+    .get()
+
+fun buildConfigString(value: String): String =
+    "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 android {
     namespace = "me.rerere.fawntavern"
@@ -37,12 +44,16 @@ android {
         targetSdk = 37
         versionCode = appVersionCode
         versionName = appVersionName
+        buildConfigField("String", "BUGLY_APP_ID", buildConfigString(buglyAppId))
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    bundle {
-        language {
-            enableSplit = false
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
         }
     }
 
@@ -67,12 +78,14 @@ android {
             applicationIdSuffix = ".debug"
             // Debug uses a different application ID and is intentionally excluded from Firebase.
             buildConfigField("boolean", "FIREBASE_ENABLED", "false")
+            buildConfigField("boolean", "BUGLY_ENABLED", "false")
         }
         release {
             // findByName 而非 getByName：没有 keystore.properties 时 release 保持未签名，
             // 不至于在配置阶段抛 "SigningConfig not found" 把所有任务（含 assembleDebug）带崩
             signingConfig = signingConfigs.findByName("release")
             buildConfigField("boolean", "FIREBASE_ENABLED", "true")
+            buildConfigField("boolean", "BUGLY_ENABLED", "true")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -101,6 +114,7 @@ android {
 
 dependencies {
     implementation(project(":core:diagnostics"))
+    implementation(files("libs/crashreport-4.1.9.3.aar"))
 
     val firebaseBom = platform(libs.firebase.bom)
     implementation(firebaseBom)

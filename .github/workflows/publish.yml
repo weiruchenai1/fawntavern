@@ -23,6 +23,7 @@ jobs:
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      BUGLY_APP_ID: ${{ secrets.BUGLY_APP_ID }}
 
     steps:
       - name: Check out source
@@ -105,6 +106,7 @@ jobs:
           test -n "$ANDROID_KEY_ALIAS"
           test -n "$ANDROID_KEY_PASSWORD"
           test -n "$GOOGLE_SERVICES_JSON"
+          test -n "$BUGLY_APP_ID"
 
       - name: Prepare signing key
         run: |
@@ -136,25 +138,35 @@ jobs:
           mkdir -p app/src/release
           printf '%s' "$GOOGLE_SERVICES_JSON" > app/src/release/google-services.json
 
-      - name: Build signed APK and App Bundle
+      - name: Build signed APK
         run: |
-          ./gradlew --no-daemon assembleRelease bundleRelease \
+          ./gradlew --no-daemon assembleRelease \
             -PversionCode="$VERSION_CODE" \
             -PversionName="$VERSION_NAME"
 
+          ARM64_SOURCE="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*arm64-v8a*.apk' -print -quit)"
+          X86_64_SOURCE="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*x86_64*.apk' -print -quit)"
+          test -n "$ARM64_SOURCE"
+          test -n "$X86_64_SOURCE"
+
+          ARM64_APK="app/build/outputs/apk/release/FawnTavern-${VERSION_NAME}-arm64-v8a.apk"
+          X86_64_APK="app/build/outputs/apk/release/FawnTavern-${VERSION_NAME}-x86_64.apk"
+          mv "$ARM64_SOURCE" "$ARM64_APK"
+          mv "$X86_64_SOURCE" "$X86_64_APK"
+          echo "ARM64_APK=$ARM64_APK" >> "$GITHUB_ENV"
+          echo "X86_64_APK=$X86_64_APK" >> "$GITHUB_ENV"
+
       - name: Generate checksums
         run: |
-          cd app/build/outputs
-          find apk/release bundle/release -type f \( -name '*.apk' -o -name '*.aab' \) \
-            -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          sha256sum "$ARM64_APK" "$X86_64_APK" > app/build/outputs/SHA256SUMS.txt
 
       - name: Upload build records
         uses: actions/upload-artifact@v7
         with:
           name: fawntavern-${{ github.ref_name }}-build-records
           path: |
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/bundle/release/*.aab
+            ${{ env.ARM64_APK }}
+            ${{ env.X86_64_APK }}
             app/build/outputs/SHA256SUMS.txt
             app/build/outputs/mapping/release/mapping.txt
           if-no-files-found: error
@@ -166,8 +178,8 @@ jobs:
         run: |
           RELEASE_ARGS=(
             "$GITHUB_REF_NAME"
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/bundle/release/*.aab
+            "$ARM64_APK"
+            "$X86_64_APK"
             app/build/outputs/SHA256SUMS.txt
             --generate-notes
             --title "FawnTavern $GITHUB_REF_NAME"

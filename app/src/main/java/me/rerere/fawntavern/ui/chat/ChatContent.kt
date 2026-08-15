@@ -601,12 +601,16 @@ internal fun ChatContent(
         TextCopySheet(
             title = panel.title,
             text = if (panel.editable) vm.inputText else panel.text,
-            onCopyAll = {
-                copyText(if (panel.editable) vm.inputText else panel.text)
+            onCopyAll = { currentText ->
+                if (panel.editable) vm.inputText = currentText
+                copyText(currentText)
                 copyPanel = null
             },
-            onDismiss = { copyPanel = null },
-            editState = if (panel.editable) vm.inputState else null,
+            onDismiss = { currentText ->
+                if (panel.editable) vm.inputText = currentText
+                copyPanel = null
+            },
+            editable = panel.editable,
         )
     }
 
