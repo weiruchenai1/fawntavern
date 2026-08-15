@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -32,12 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import com.mikepenz.markdown.annotator.annotatorSettings
 import com.mikepenz.markdown.annotator.buildMarkdownAnnotatedString
-import com.mikepenz.markdown.compose.LocalMarkdownInlineContent
 import com.mikepenz.markdown.compose.components.MarkdownComponent
 import com.mikepenz.markdown.compose.components.MarkdownComponentModel
 import com.mikepenz.markdown.compose.elements.MarkdownHeader
 import com.mikepenz.markdown.compose.elements.MarkdownText
-import com.mikepenz.markdown.model.DefaultMarkdownInlineContent
 import com.mikepenz.markdown.utils.MARKDOWN_TAG_IMAGE_URL
 import java.util.Base64
 import org.intellij.markdown.IElementType
@@ -319,7 +316,7 @@ internal fun LatexFlowMarkdownText(
 
     val displayFormulas = rendered.filter(FlowFormula::displayMode)
     if (displayFormulas.isEmpty()) {
-        InlineLatexText(styled, rendered, style, child)
+        InlineLatexText(styled, rendered, style)
         return
     }
 
@@ -334,7 +331,6 @@ internal fun LatexFlowMarkdownText(
                     content = styled.subSequence(cursor, display.range.start),
                     formulas = inlineItems.map { it.offsetBy(-cursor) },
                     style = style,
-                    node = child,
                 )
             }
             LatexFormulaBlock(display.formula, style, displayMode = true)
@@ -348,7 +344,6 @@ internal fun LatexFlowMarkdownText(
                 content = styled.subSequence(cursor, styled.length),
                 formulas = inlineItems.map { it.offsetBy(-cursor) },
                 style = style,
-                node = child,
             )
         }
     }
@@ -376,11 +371,12 @@ private fun InlineLatexText(
     content: AnnotatedString,
     formulas: List<FlowFormula>,
     style: TextStyle,
-    node: ASTNode,
 ) {
     if (content.isEmpty()) return
     if (formulas.isEmpty()) {
-        MarkdownText(content, node = node, style = style)
+        // content 可能是原段落的子区间，不能继续搭配原始 AST 交给 MarkdownText。
+        // Markdown 0.43 会按 AST 偏移再次处理图片，子区间会因此出现空白和异常换行。
+        Text(text = content, style = style)
         return
     }
 
@@ -419,10 +415,6 @@ private fun InlineLatexText(
             }
         }.toMap()
     }
-    val inheritedInlineContent = LocalMarkdownInlineContent.current
-    val mergedInlineContent = remember(inheritedInlineContent, inlineContent) {
-        DefaultMarkdownInlineContent(inheritedInlineContent.inlineContent + inlineContent)
-    }
     val text = remember(content, formulas) {
         buildAnnotatedString {
             var cursor = 0
@@ -438,9 +430,9 @@ private fun InlineLatexText(
             if (cursor < content.length) append(content.subSequence(cursor, content.length))
         }
     }
-    CompositionLocalProvider(LocalMarkdownInlineContent provides mergedInlineContent) {
-        MarkdownText(content = text, node = node, style = style)
-    }
+    // 公式占位已经在上面构造完成；直接交给 Compose，避免 MarkdownText 再按旧 AST
+    // 把这些占位符识别成普通 Markdown 图片并进行第二次布局。
+    Text(text = text, style = style, inlineContent = inlineContent)
 }
 
 private data class RenderedLatex(
