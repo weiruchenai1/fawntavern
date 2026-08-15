@@ -38,7 +38,6 @@ import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.parser.MarkdownParser
 import ru.noties.jlatexmath.JLatexMathDrawable
-import ru.noties.jlatexmath.JLatexMathSplitter
 
 private const val MAX_INLINE_MATH_LENGTH = 512
 private const val MAX_BLOCK_MATH_LENGTH = 4_096
@@ -286,16 +285,14 @@ internal fun LatexFlowMarkdownText(
         if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.dp.toPx()
     }
     val rendered = formulas.map { (range, encoded, _) ->
-        val drawables = remember(encoded, fontSizePx, color) {
+        val drawable = remember(encoded, fontSizePx, color) {
             if (encoded.displayMode || encoded.formula.length > MAX_INLINE_MATH_LENGTH) {
-                emptyList()
+                null
             } else {
-                runCatching {
-                    JLatexMathSplitter.split(encoded.formula, fontSizePx * 8f, fontSizePx, color)
-                }.getOrElse { emptyList() }
+                buildLatexDrawable(encoded.formula, fontSizePx, color)
             }
         }
-        FlowFormula(range, encoded.formula, encoded.displayMode, drawables)
+        FlowFormula(range, encoded.formula, encoded.displayMode, drawable)
     }
 
     FlowRow(modifier = Modifier.fillMaxWidth()) {
@@ -311,20 +308,18 @@ internal fun LatexFlowMarkdownText(
             }
             if (item.displayMode) {
                 LatexFormulaBlock(item.formula, style, displayMode = true)
-            } else if (item.drawables.isEmpty()) {
+            } else if (item.drawable == null) {
                 Text("\$${item.formula}\$", modifier = Modifier.alignByBaseline(), style = style)
             } else {
-                item.drawables.forEach { drawable ->
-                    LatexDrawableCanvas(
-                        drawable = drawable,
-                        modifier = Modifier.alignBy { measured ->
-                            // TeX Drawable 没有基线；预留约四分之一 em 的下行空间后居中对齐。
-                            (measured.measuredHeight / 2f + fontSizePx * 0.25f)
-                                .toInt()
-                                .coerceIn(0, measured.measuredHeight)
-                        },
-                    )
-                }
+                LatexDrawableCanvas(
+                    drawable = item.drawable,
+                    modifier = Modifier.alignBy { measured ->
+                        // TeX Drawable 没有基线；预留约四分之一 em 的下行空间后居中对齐。
+                        (measured.measuredHeight / 2f + fontSizePx * 0.25f)
+                            .toInt()
+                            .coerceIn(0, measured.measuredHeight)
+                    },
+                )
             }
             cursor = item.range.end
         }
@@ -343,8 +338,22 @@ private data class FlowFormula(
     val range: AnnotatedString.Range<String>,
     val formula: String,
     val displayMode: Boolean,
-    val drawables: List<JLatexMathDrawable>,
+    val drawable: JLatexMathDrawable?,
 )
+
+private fun buildLatexDrawable(
+    formula: String,
+    textSizePx: Float,
+    color: Int,
+    padding: Int = 0,
+): JLatexMathDrawable? = runCatching {
+    JLatexMathDrawable.builder(formula)
+        .textSize(textSizePx)
+        .color(color)
+        .padding(padding)
+        .align(JLatexMathDrawable.ALIGN_LEFT)
+        .build()
+}.getOrNull()
 
 @Composable
 private fun LatexDrawableCanvas(
@@ -352,8 +361,9 @@ private fun LatexDrawableCanvas(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    val width = with(density) { drawable.bounds.width().coerceIn(1, 8_192).toDp() }
-    val height = with(density) { drawable.bounds.height().coerceIn(1, 2_048).toDp() }
+    // Bounds are mutated on every draw; intrinsic dimensions are stable across recompositions.
+    val width = with(density) { drawable.intrinsicWidth.coerceIn(1, 8_192).toDp() }
+    val height = with(density) { drawable.intrinsicHeight.coerceIn(1, 2_048).toDp() }
     Canvas(modifier.size(width, height)) {
         runCatching {
             drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
@@ -375,17 +385,15 @@ internal fun LatexFormulaBlock(
         if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.dp.toPx()
     }
     val drawable = remember(formula, textSizePx, color, displayMode, compact) {
-        if (formula.length > MAX_BLOCK_MATH_LENGTH) null else runCatching {
-            JLatexMathDrawable.builder(formula)
-                .textSize(textSizePx)
-                .color(color)
-                .padding(if (displayMode && !compact) 2 else 0)
-                .align(JLatexMathDrawable.ALIGN_LEFT)
-                .build()
-        }.getOrNull()
+        if (formula.length > MAX_BLOCK_MATH_LENGTH) null else buildLatexDrawable(
+            formula = formula,
+            textSizePx = textSizePx,
+            color = color,
+            padding = if (displayMode && !compact) 2 else 0,
+        )
     }
     if (drawable == null) {
-        Text(formula, style = style)
+        Text(if (displayMode) "\$\$$formula\$\$" else "\$$formula\$", style = style)
         return
     }
     // 保持公式固有宽度以便横向滚动，上限用于约束异常或恶意模型输出。

@@ -64,4 +64,4 @@ The Git tag automatically supplies `versionName` and a monotonically increasing 
 - UI tests cover changed user-visible state transitions.
 - The Git tag follows the `vX.Y.Z` or `vX.Y.Z-beta.N` format.
 - The release notes describe user-facing changes and compatibility impact.
-- The beta build has verified local crash reports and the opt-in Firebase reporting flow under Settings > Crash reports.
+- The beta build has verified its startup event in Firebase Analytics and the default-on Crashlytics reporting flow; debug builds do not use Firebase.

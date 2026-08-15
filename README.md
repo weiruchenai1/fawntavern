@@ -64,4 +64,4 @@ API 提供商、搜索和 TTS 凭据使用 Android Keystore 中的 AES-GCM 密�
 - 用户可见的状态变化具备 UI 回归测试。
 - Git 标签符合 `vX.Y.Z` 或 `vX.Y.Z-beta.N` 格式。
 - 发布说明已经记录用户可见变化及兼容性影响。
-- beta 安装包已经通过设置中的“崩溃报告”页面验证本地报告，以及用户授权后的 Firebase 上报流程。
+- beta 安装包已经验证启动事件出现在 Firebase Analytics，并验证默认开启的 Crashlytics 上报流程；debug 包不接入 Firebase。

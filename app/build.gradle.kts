@@ -65,6 +65,7 @@ android {
             // manifest 的 FileProvider authority 用 ${applicationId}.fileprovider、代码里用
             // ctx.packageName，都会跟着后缀走，无需改动。
             applicationIdSuffix = ".debug"
+            // Debug uses a different application ID and is intentionally excluded from Firebase.
             buildConfigField("boolean", "FIREBASE_ENABLED", "false")
         }
         release {

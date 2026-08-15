@@ -29,4 +29,14 @@ class ChatMathRendererTest {
         assertTrue(prepared.startsWith("value ![latex](latex:i:"))
         assertTrue(prepared.endsWith(")"))
     }
+
+    @Test
+    fun supportsBracketDelimitersAndEscapedDollars() {
+        val source = "inline \\(x + 1\\), display \\[y^2\\], price \\$9"
+        val segments = splitMathSegments(source)
+
+        assertEquals(listOf("inline ", "x + 1", ", display ", "y^2", ", price \\$9"), segments.map { it.text })
+        assertEquals(listOf(false, true, false, true, false), segments.map { it.formula })
+        assertEquals(listOf(false, false, false, true, false), segments.map { it.displayMode })
+    }
 }
