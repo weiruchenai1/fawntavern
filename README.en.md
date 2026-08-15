@@ -1,67 +1,62 @@
 <div align="center">
+  <img src="./logo.svg" width="96" alt="FawnTavern" />
   <h1>FawnTavern</h1>
+  <p>A lightweight, modern AI role-playing chat client for Android</p>
 
   <p><a href="./README.md">简体中文</a> | <strong>English</strong></p>
 
   <p>
-    <a href="https://developer.android.com/"><img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+" /></a>
-    <a href="https://openjdk.org/"><img src="https://img.shields.io/badge/JDK-17-ED8B00?style=flat&amp;logo=openjdk&amp;logoColor=white" alt="JDK 17" /></a>
+    <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+" />
+    <img src="https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?style=flat&amp;logo=kotlin&amp;logoColor=white" alt="Kotlin + Jetpack Compose" />
   </p>
 </div>
 
-FawnTavern is a lightweight Android client for AI role-playing chat. It supports character cards, world books, presets, streamed multi-provider chat, web search, text-to-speech, attachments, and local backup/restore.
+FawnTavern is a lightweight AI role-playing chat client. It imports SillyTavern-compatible character cards, presets, and world books, connects to multiple LLM APIs, and lets you chat with your favorite characters anytime, anywhere.
+
+## Features
+
+- Import and manage SillyTavern-compatible character cards, presets, and world books
+- Connect to multiple model providers and OpenAI-compatible APIs
+- Stream responses, edit messages, regenerate replies, and switch response versions
+- Use web search, text-to-speech, image attachments, and file attachments
+- Configure prompts, quick replies, and chat interface preferences
+- Keep conversations, characters, and settings on the device
+- Back up and restore local data and check for updates in the app
+
+## Download
+
+Download the latest version from [GitHub Releases](https://github.com/weiruchenai1/fawntavern/releases).
+
+| Package | Intended devices |
+| --- | --- |
+| `FawnTavern-<version>-arm64-v8a.apk` | Most modern Android phones and tablets |
+| `FawnTavern-<version>-x86_64.apk` | x86_64 Android emulators and some Chromebooks |
+
+Most phones should use `arm64-v8a`. FawnTavern does not publish packages through third-party download sites. Verify downloads against the SHA-256 checksum file on the Release page.
+
+## Requirements
+
+- Android 8.0 (API 26) or newer
+- An `arm64-v8a` or `x86_64` device
+- A network connection for online models, web search, and update checks
+- Your own API service and quota; FawnTavern does not include model usage credits
+
+## Privacy and data
+
+- Conversations, character cards, presets, world books, and attachments are stored locally by default.
+- API, search, and TTS credentials are encrypted with an AES-GCM key protected by Android Keystore.
+- Model requests are sent to the API provider you configure. Review that provider's privacy policy as well.
+
+## Disclaimer
+
+This application is intended for learning and entertainment. AI-generated content does not represent the developer's views. Follow the terms of each model, search, or speech provider and the laws applicable in your location.
 
 ## Development
 
-Requirements: JDK 17 and an Android SDK compatible with `compileSdk 37`.
+Development requires JDK 17 and an Android SDK that supports `compileSdk 37`.
 
 ```powershell
-.\gradlew.bat testDebugUnitTest
-.\gradlew.bat lintDebug
+git clone https://github.com/weiruchenai1/fawntavern.git
+cd fawntavern
 .\gradlew.bat assembleDebug
 ```
-
-Pull requests must pass GitHub Actions verification. The workflow runs JVM unit tests, Android lint, Debug/Release builds, Room schema checks, and Compose UI tests on an Android emulator.
-
-## Data compatibility
-
-Chat history is stored with Room. Every database schema change must:
-
-1. Add an explicit `Migration` in `ChatDatabase`.
-2. Add a test that upgrades the preceding schema while preserving representative data.
-3. Commit the generated JSON schema in `app/schemas`.
-
-Never add destructive Room migrations for a release build. Backup imports are versioned and must remain backward compatible with supported archive versions.
-
-## Security
-
-Provider, search, and TTS credentials are encrypted with an Android Keystore AES-GCM key. Android system backup excludes credentials, chat databases, and attachments.
-
-Remote HTTP endpoints are blocked. HTTPS is required for custom providers; unencrypted HTTP is permitted only for `localhost`, `127.0.0.1`, and the Android emulator host `10.0.2.2`.
-
-## Release builds
-
-Pushing a tag such as `v0.2.0` starts `.github/workflows/publish.yml`, builds signed APK/AAB artifacts and checksums, and creates a public GitHub Release. The app checks GitHub Releases for stable updates.
-
-Pushing a tag such as `v0.2.0-beta.1` starts the same publish workflow, runs the same signed build, and creates a GitHub prerelease with the APK, AAB, and SHA-256 checksums.
-
-Release tags must point to a commit on `main` that has passed Android CI. Tag workflows reuse that verification result and run only one signed build instead of repeating tests and lint.
-
-Before the first tagged release, configure these repository secrets:
-
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
-- `GOOGLE_SERVICES_JSON` (the full contents of the file downloaded from Firebase Console)
-
-The Git tag automatically supplies `versionName` and a monotonically increasing Android `versionCode`; no repository version variable is required.
-
-## Release checklist
-
-- CI is green on the release commit.
-- Upgrade and backup/restore tests cover changed persistent data.
-- UI tests cover changed user-visible state transitions.
-- The Git tag follows the `vX.Y.Z` or `vX.Y.Z-beta.N` format.
-- The release notes describe user-facing changes and compatibility impact.
-- The beta build has verified its startup event in Firebase Analytics and the default-on Crashlytics reporting flow; debug builds do not use Firebase.

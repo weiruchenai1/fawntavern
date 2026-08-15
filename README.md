@@ -1,67 +1,62 @@
 <div align="center">
+  <img src="./logo.svg" width="96" alt="FawnTavern" />
   <h1>FawnTavern</h1>
+  <p>轻量、现代的 Android AI 角色扮演聊天客户端</p>
 
   <p><strong>简体中文</strong> | <a href="./README.en.md">English</a></p>
 
   <p>
-    <a href="https://developer.android.com/"><img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+" /></a>
-    <a href="https://openjdk.org/"><img src="https://img.shields.io/badge/JDK-17-ED8B00?style=flat&amp;logo=openjdk&amp;logoColor=white" alt="JDK 17" /></a>
+    <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat&amp;logo=android&amp;logoColor=white" alt="Android 8.0+" />
+    <img src="https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?style=flat&amp;logo=kotlin&amp;logoColor=white" alt="Kotlin + Jetpack Compose" />
   </p>
 </div>
 
-FawnTavern 是一款轻量 AI 角色扮演聊天的 Android 客户端，支持角色卡、世界书、预设、多提供商流式聊天、联网搜索、语音朗读、附件以及本地备份与恢复。
+FawnTavern 是一款轻量的 AI 角色扮演聊天客户端。支持导入 SillyTavern 兼容的角色卡、预设和世界书，可连接多种大模型 API，随时随地与喜欢的角色聊天。
 
-## 开发环境
+## 主要功能
 
-需要 JDK 17，以及兼容 `compileSdk 37` 的 Android SDK。
+- 导入和管理 SillyTavern 兼容的角色卡、预设与世界书
+- 对接多种大模型服务以及 OpenAI 兼容接口
+- 支持流式回复、消息编辑、重新生成和多版本切换
+- 支持联网搜索、文本朗读、图片与文件附件
+- 支持自定义提示词、快捷回复和聊天界面设置
+- 聊天记录、角色数据和配置保存在本地
+- 支持本地备份、恢复与应用内更新检查
+
+## 下载
+
+前往 [GitHub Releases](https://github.com/weiruchenai1/fawntavern/releases) 下载最新版本。
+
+| 安装包 | 适用设备 |
+| --- | --- |
+| `FawnTavern-<版本号>-arm64-v8a.apk` | 绝大多数现代 Android 手机和平板 |
+| `FawnTavern-<版本号>-x86_64.apk` | x86_64 Android 模拟器和部分 Chromebook |
+
+普通手机通常选择 `arm64-v8a`。应用不提供来自第三方下载站的安装包，请核对 Release 页面中的 SHA-256 校验文件。
+
+## 系统要求
+
+- Android 8.0（API 26）或更高版本
+- `arm64-v8a` 或 `x86_64` 设备
+- 使用在线模型、联网搜索和更新检查时需要网络连接
+- FawnTavern 本身不提供大模型额度，需要使用你自己的 API 服务
+
+## 隐私与数据
+
+- 聊天记录、角色卡、预设、世界书和附件默认保存在设备本地。
+- API、搜索和 TTS 凭据使用 Android Keystore 保护的 AES-GCM 密钥加密。
+- 模型请求会发送到你配置的 API 服务商，请同时阅读对应服务商的隐私政策。
+
+## 免责声明
+
+本应用仅供学习和娱乐用途。AI 生成的内容不代表开发者立场，请合理使用。使用第三方模型、搜索或语音服务时，应遵守相应服务商的使用条款以及所在地法律法规。
+
+## 开发
+
+开发环境需要 JDK 17，以及支持 `compileSdk 37` 的 Android SDK。
 
 ```powershell
-.\gradlew.bat testDebugUnitTest
-.\gradlew.bat lintDebug
+git clone https://github.com/weiruchenai1/fawntavern.git
+cd fawntavern
 .\gradlew.bat assembleDebug
 ```
-
-Pull Request 必须通过 GitHub Actions 验证。工作流会执行 JVM 单元测试、Android lint、Debug/Release 构建、Room Schema 校验，以及 Android 模拟器上的 Compose UI 测试。
-
-## 数据兼容
-
-聊天记录使用 Room 存储。每次修改数据库结构时必须：
-
-1. 在 `ChatDatabase` 中添加明确的 `Migration`。
-2. 增加从上一版本升级并保留代表性数据的测试。
-3. 提交 `app/schemas` 中生成的 JSON Schema。
-
-发布版本禁止使用破坏性数据库迁移。备份文件带有格式版本，并须保持对已支持旧版本的向后兼容。
-
-## 安全策略
-
-API 提供商、搜索和 TTS 凭据使用 Android Keystore 中的 AES-GCM 密钥加密。Android 系统备份会排除凭据、聊天数据库和附件。
-
-远程 HTTP 地址默认被阻止，自定义服务必须使用 HTTPS。未加密 HTTP 只允许访问 `localhost`、`127.0.0.1` 和 Android 模拟器宿主机 `10.0.2.2`。
-
-## 发布构建
-
-推送 `v0.2.0` 形式的标签会触发 `.github/workflows/publish.yml`，生成签名 APK、AAB 和校验文件，同时创建公开的 GitHub Release。应用通过 GitHub Releases 检查正式版更新。
-
-推送 `v0.2.0-beta.1` 形式的标签会触发同一个发布工作流，运行相同的签名构建并创建带 APK、AAB 和 SHA-256 校验文件的 GitHub Pre-release。
-
-发布标签必须指向 `main` 分支中已通过 Android CI 的提交。标签工作流会复用该验证结果，仅执行一次签名构建，不再重复运行测试和 Lint。
-
-首次发布前，需要配置以下仓库 Secrets：
-
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
-- `GOOGLE_SERVICES_JSON`（Firebase 控制台下载文件的完整内容）
-
-`versionName` 和递增的 Android `versionCode` 均由 Git 标签自动生成，无需维护仓库版本变量。
-
-## 发布检查清单
-
-- 发布提交的 CI 全部通过。
-- 持久化数据变更具备升级及备份恢复测试。
-- 用户可见的状态变化具备 UI 回归测试。
-- Git 标签符合 `vX.Y.Z` 或 `vX.Y.Z-beta.N` 格式。
-- 发布说明已经记录用户可见变化及兼容性影响。
-- beta 安装包已经验证启动事件出现在 Firebase Analytics，并验证默认开启的 Crashlytics 上报流程；debug 包不接入 Firebase。
