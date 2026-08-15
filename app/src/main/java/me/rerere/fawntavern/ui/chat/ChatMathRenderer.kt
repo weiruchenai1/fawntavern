@@ -1,33 +1,43 @@
 package me.rerere.fawntavern.ui.chat
 
-import androidx.compose.foundation.Canvas
+import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import com.mikepenz.markdown.annotator.annotatorSettings
 import com.mikepenz.markdown.annotator.buildMarkdownAnnotatedString
+import com.mikepenz.markdown.compose.LocalMarkdownInlineContent
 import com.mikepenz.markdown.compose.components.MarkdownComponent
 import com.mikepenz.markdown.compose.components.MarkdownComponentModel
 import com.mikepenz.markdown.compose.elements.MarkdownHeader
 import com.mikepenz.markdown.compose.elements.MarkdownText
+import com.mikepenz.markdown.model.DefaultMarkdownInlineContent
 import com.mikepenz.markdown.utils.MARKDOWN_TAG_IMAGE_URL
 import java.util.Base64
 import org.intellij.markdown.IElementType
@@ -249,7 +259,6 @@ internal fun latexFlowHeading(
     { model -> MarkdownHeader(model.content, model.node, style(model), contentChildType) }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun LatexFlowMarkdownText(
     model: MarkdownComponentModel,
@@ -284,50 +293,59 @@ internal fun LatexFlowMarkdownText(
     val fontSizePx = with(density) {
         if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.dp.toPx()
     }
-    val rendered = formulas.map { (range, encoded, _) ->
-        val drawable = remember(encoded, fontSizePx, color) {
+    val rendered = formulas.mapIndexed { index, (range, encoded, _) ->
+        val image = remember(encoded, fontSizePx, color) {
             if (encoded.displayMode || encoded.formula.length > MAX_INLINE_MATH_LENGTH) {
                 null
             } else {
-                buildLatexDrawable(encoded.formula, fontSizePx, color)
+                buildLatexImage(
+                    formula = encoded.formula,
+                    textSizePx = fontSizePx,
+                    color = color,
+                    maxWidthPx = 2_048,
+                    maxHeightPx = 512,
+                    maxPixels = 512 * 1_024,
+                )
             }
         }
-        FlowFormula(range, encoded.formula, encoded.displayMode, drawable)
+        FlowFormula(
+            id = "latex-${range.start}-$index",
+            range = range,
+            formula = encoded.formula,
+            displayMode = encoded.displayMode,
+            image = image,
+        )
     }
 
-    FlowRow(modifier = Modifier.fillMaxWidth()) {
+    val displayFormulas = rendered.filter(FlowFormula::displayMode)
+    if (displayFormulas.isEmpty()) {
+        InlineLatexText(styled, rendered, style)
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
         var cursor = 0
-        rendered.forEach { item ->
-            if (item.range.start > cursor) {
-                MarkdownText(
-                    styled.subSequence(cursor, item.range.start),
-                    node = child,
-                    modifier = Modifier.alignByBaseline(),
+        displayFormulas.forEach { display ->
+            if (display.range.start > cursor) {
+                val inlineItems = rendered.filter { item ->
+                    !item.displayMode && item.range.start >= cursor && item.range.end <= display.range.start
+                }
+                InlineLatexText(
+                    content = styled.subSequence(cursor, display.range.start),
+                    formulas = inlineItems.map { it.offsetBy(-cursor) },
                     style = style,
                 )
             }
-            if (item.displayMode) {
-                LatexFormulaBlock(item.formula, style, displayMode = true)
-            } else if (item.drawable == null) {
-                Text("\$${item.formula}\$", modifier = Modifier.alignByBaseline(), style = style)
-            } else {
-                LatexDrawableCanvas(
-                    drawable = item.drawable,
-                    modifier = Modifier.alignBy { measured ->
-                        // TeX Drawable 没有基线；预留约四分之一 em 的下行空间后居中对齐。
-                        (measured.measuredHeight / 2f + fontSizePx * 0.25f)
-                            .toInt()
-                            .coerceIn(0, measured.measuredHeight)
-                    },
-                )
-            }
-            cursor = item.range.end
+            LatexFormulaBlock(display.formula, style, displayMode = true)
+            cursor = display.range.end
         }
         if (cursor < styled.length) {
-            MarkdownText(
-                styled.subSequence(cursor, styled.length),
-                node = child,
-                modifier = Modifier.alignByBaseline(),
+            val inlineItems = rendered.filter { item ->
+                !item.displayMode && item.range.start >= cursor && item.range.end <= styled.length
+            }
+            InlineLatexText(
+                content = styled.subSequence(cursor, styled.length),
+                formulas = inlineItems.map { it.offsetBy(-cursor) },
                 style = style,
             )
         }
@@ -335,42 +353,132 @@ internal fun LatexFlowMarkdownText(
 }
 
 private data class FlowFormula(
+    val id: String,
     val range: AnnotatedString.Range<String>,
     val formula: String,
     val displayMode: Boolean,
-    val drawable: JLatexMathDrawable?,
+    val image: RenderedLatex?,
+) {
+    fun offsetBy(offset: Int): FlowFormula = copy(
+        range = AnnotatedString.Range(
+            item = range.item,
+            start = range.start + offset,
+            end = range.end + offset,
+            tag = range.tag,
+        ),
+    )
+}
+
+@Composable
+private fun InlineLatexText(
+    content: AnnotatedString,
+    formulas: List<FlowFormula>,
+    style: TextStyle,
+) {
+    if (content.isEmpty()) return
+    if (formulas.isEmpty()) {
+        MarkdownText(content, style = style)
+        return
+    }
+
+    val density = LocalDensity.current
+    val fontSizePx = with(density) {
+        if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.dp.toPx()
+    }
+    val lineHeightPx = with(density) {
+        if (style.lineHeight.isSpecified) style.lineHeight.toPx() else fontSizePx * 1.35f
+    }
+    val maxInlineWidthPx = fontSizePx * 12f
+    val inlineContent = remember(formulas, density, lineHeightPx, maxInlineWidthPx) {
+        formulas.mapNotNull { item ->
+            val image = item.image ?: return@mapNotNull null
+            val intrinsicWidth = image.widthPx.toFloat()
+            val intrinsicHeight = image.heightPx.toFloat()
+            val scale = minOf(
+                1f,
+                lineHeightPx / intrinsicHeight,
+                maxInlineWidthPx / intrinsicWidth,
+            )
+            val width = with(density) { (intrinsicWidth * scale).toDp().toSp() }
+            val height = with(density) { lineHeightPx.toDp().toSp() }
+            item.id to InlineTextContent(
+                placeholder = Placeholder(
+                    width = width,
+                    height = height,
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
+                ),
+            ) {
+                Image(
+                    bitmap = image.bitmap,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }.toMap()
+    }
+    val inheritedInlineContent = LocalMarkdownInlineContent.current
+    val mergedInlineContent = remember(inheritedInlineContent, inlineContent) {
+        DefaultMarkdownInlineContent(inheritedInlineContent.inlineContent + inlineContent)
+    }
+    val text = remember(content, formulas) {
+        buildAnnotatedString {
+            var cursor = 0
+            formulas.sortedBy { it.range.start }.forEach { item ->
+                if (item.range.start > cursor) append(content.subSequence(cursor, item.range.start))
+                if (item.image == null) {
+                    append("\$${item.formula}\$")
+                } else {
+                    appendInlineContent(item.id, "\uFFFC")
+                }
+                cursor = item.range.end
+            }
+            if (cursor < content.length) append(content.subSequence(cursor, content.length))
+        }
+    }
+    CompositionLocalProvider(LocalMarkdownInlineContent provides mergedInlineContent) {
+        MarkdownText(content = text, style = style)
+    }
+}
+
+private data class RenderedLatex(
+    val bitmap: ImageBitmap,
+    val widthPx: Int,
+    val heightPx: Int,
 )
 
-private fun buildLatexDrawable(
+private fun buildLatexImage(
     formula: String,
     textSizePx: Float,
     color: Int,
     padding: Int = 0,
-): JLatexMathDrawable? = runCatching {
-    JLatexMathDrawable.builder(formula)
+    maxWidthPx: Int = 4_096,
+    maxHeightPx: Int = 2_048,
+    maxPixels: Int = 2 * 1_024 * 1_024,
+): RenderedLatex? = runCatching {
+    val drawable = JLatexMathDrawable.builder(formula)
         .textSize(textSizePx)
         .color(color)
         .padding(padding)
         .align(JLatexMathDrawable.ALIGN_LEFT)
         .build()
+    val intrinsicWidth = drawable.intrinsicWidth.coerceAtLeast(1)
+    val intrinsicHeight = drawable.intrinsicHeight.coerceAtLeast(1)
+    val pixelScale = kotlin.math.sqrt(
+        maxPixels.toDouble() / (intrinsicWidth.toDouble() * intrinsicHeight.toDouble()),
+    ).toFloat()
+    val scale = minOf(
+        1f,
+        maxWidthPx.toFloat() / intrinsicWidth,
+        maxHeightPx.toFloat() / intrinsicHeight,
+        pixelScale,
+    )
+    val width = (intrinsicWidth * scale).toInt().coerceAtLeast(1)
+    val height = (intrinsicHeight * scale).toInt().coerceAtLeast(1)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    drawable.setBounds(0, 0, width, height)
+    drawable.draw(AndroidCanvas(bitmap))
+    RenderedLatex(bitmap.asImageBitmap(), width, height)
 }.getOrNull()
-
-@Composable
-private fun LatexDrawableCanvas(
-    drawable: JLatexMathDrawable,
-    modifier: Modifier = Modifier,
-) {
-    val density = LocalDensity.current
-    // Bounds are mutated on every draw; intrinsic dimensions are stable across recompositions.
-    val width = with(density) { drawable.intrinsicWidth.coerceIn(1, 8_192).toDp() }
-    val height = with(density) { drawable.intrinsicHeight.coerceIn(1, 2_048).toDp() }
-    Canvas(modifier.size(width, height)) {
-        runCatching {
-            drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
-            drawable.draw(drawContext.canvas.nativeCanvas)
-        }
-    }
-}
 
 @Composable
 internal fun LatexFormulaBlock(
@@ -384,21 +492,21 @@ internal fun LatexFormulaBlock(
     val textSizePx = with(density) {
         if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.dp.toPx()
     }
-    val drawable = remember(formula, textSizePx, color, displayMode, compact) {
-        if (formula.length > MAX_BLOCK_MATH_LENGTH) null else buildLatexDrawable(
+    val image = remember(formula, textSizePx, color, displayMode, compact) {
+        if (formula.length > MAX_BLOCK_MATH_LENGTH) null else buildLatexImage(
             formula = formula,
             textSizePx = textSizePx,
             color = color,
             padding = if (displayMode && !compact) 2 else 0,
         )
     }
-    if (drawable == null) {
+    if (image == null) {
         Text(if (displayMode) "\$\$$formula\$\$" else "\$$formula\$", style = style)
         return
     }
     // 保持公式固有宽度以便横向滚动，上限用于约束异常或恶意模型输出。
-    val width = with(density) { drawable.intrinsicWidth.coerceIn(1, 16_384).toDp() }
-    val height = with(density) { drawable.intrinsicHeight.coerceIn(1, 4_096).toDp() }
+    val width = with(density) { image.widthPx.toDp() }
+    val height = with(density) { image.heightPx.toDp() }
     Box(
         if (compact) {
             Modifier.fillMaxWidth()
@@ -411,11 +519,10 @@ internal fun LatexFormulaBlock(
                 .padding(horizontal = 2.dp, vertical = 2.dp)
         },
     ) {
-        Canvas(Modifier.size(width, height)) {
-            runCatching {
-                drawable.setBounds(0, 0, size.width.toInt(), size.height.toInt())
-                drawable.draw(drawContext.canvas.nativeCanvas)
-            }
-        }
+        Image(
+            bitmap = image.bitmap,
+            contentDescription = null,
+            modifier = Modifier.size(width, height),
+        )
     }
 }
