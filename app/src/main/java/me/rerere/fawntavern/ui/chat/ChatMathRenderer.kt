@@ -319,7 +319,7 @@ internal fun LatexFlowMarkdownText(
 
     val displayFormulas = rendered.filter(FlowFormula::displayMode)
     if (displayFormulas.isEmpty()) {
-        InlineLatexText(styled, rendered, style)
+        InlineLatexText(styled, rendered, style, child)
         return
     }
 
@@ -334,6 +334,7 @@ internal fun LatexFlowMarkdownText(
                     content = styled.subSequence(cursor, display.range.start),
                     formulas = inlineItems.map { it.offsetBy(-cursor) },
                     style = style,
+                    node = child,
                 )
             }
             LatexFormulaBlock(display.formula, style, displayMode = true)
@@ -347,6 +348,7 @@ internal fun LatexFlowMarkdownText(
                 content = styled.subSequence(cursor, styled.length),
                 formulas = inlineItems.map { it.offsetBy(-cursor) },
                 style = style,
+                node = child,
             )
         }
     }
@@ -374,10 +376,11 @@ private fun InlineLatexText(
     content: AnnotatedString,
     formulas: List<FlowFormula>,
     style: TextStyle,
+    node: ASTNode,
 ) {
     if (content.isEmpty()) return
     if (formulas.isEmpty()) {
-        MarkdownText(content, style = style)
+        MarkdownText(content, node = node, style = style)
         return
     }
 
@@ -436,7 +439,7 @@ private fun InlineLatexText(
         }
     }
     CompositionLocalProvider(LocalMarkdownInlineContent provides mergedInlineContent) {
-        MarkdownText(content = text, style = style)
+        MarkdownText(content = text, node = node, style = style)
     }
 }
 
