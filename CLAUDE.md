@@ -4,7 +4,7 @@
 
 ## 项目
 
-FawnTavern — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3），用于 SillyTavern 风格的 AI 角色扮演聊天。支持导入 SillyTavern 兼容的角色卡、预设和世界书，可对接 OpenAI 兼容 / Gemini / Claude API 进行流式聊天。包名：`me.rerere.fawntavern`。
+FawnTavern 是一款轻量 AI 角色扮演聊天的 Android 客户端（Kotlin + Jetpack Compose，Material 3）。支持导入 SillyTavern 兼容的角色卡、预设和世界书，可对接多种大模型API，随时随地与喜欢的角色进行聊天。包名：`me.rerere.fawntavern`。
 
 ## 常用命令
 
@@ -62,3 +62,23 @@ FawnTavern — 一个 Android 客户端（Kotlin + Jetpack Compose，Material 3�
 - **Markdown**：消息正文用 mikepenz `multiplatform-markdown-renderer-m3`（纯 Compose）渲染。**流式生成期间也实时走同一条 Markdown 管线**（`MessageContent` 不再区分流式/结束——都套正则+宏后同步解析渲染，正文尚空的纯思考阶段显示 `StreamingDots` 呼吸点），每 60ms 节流帧解析一次；同步解析保证内容一变即同帧成型到真实高度，流式增长平滑跟随、切分支/重试的同帧锚定不抖。
 - **主题**：浅色/深色模式通过 `data/settings/ThemeStore`（`ThemeMode`）实现，在 `ui/theme/Theme.kt` 中应用；全局字体缩放通过 `data/settings/FontSizeStore` 实现。
 - **提交消息**：描述当前代码实现了什么（最终状态，如「新增 X」「统一 Y」「升级 Z」），不要罗列开发过程中遇到的问题或修复的 bug。
+
+## 发布版本
+
+确认待发布代码已经提交并推送到 `main` 后，根据版本类型创建并推送标签。
+
+Beta 预发布版本：
+
+```bash
+git tag -a vX.Y.Z-beta.N -m "FawnTavern vX.Y.Z-beta.N"
+git push origin vX.Y.Z-beta.N
+```
+
+正式版本：
+
+```bash
+git tag -a vX.Y.Z -m "FawnTavern vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+其中 `X.Y.Z` 分别表示主版本号、次版本号和修订号，`N` 表示 Beta 序号。推送 `v*` 标签会触发 `.github/workflows/publish.yml`，自动构建签名 APK、AAB 并创建 GitHub Release；带 `-beta.N` 的标签会标记为预发布版本，不带后缀的标签会创建正式版本。
