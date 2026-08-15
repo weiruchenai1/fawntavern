@@ -28,8 +28,10 @@ object CrashReportStore {
         runCatching { cleanupDirectory(reportDirectory(appContext)) }
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            // 尽可能在处理器入口锁定崩溃瞬间，避免后续文件写入耗时影响报告时间。
+            val crashTimeMillis = System.currentTimeMillis()
             runCatching {
-                writeReport(appContext, formatReport(appVersion, thread, error))
+                writeReport(appContext, formatReport(appVersion, thread, error, crashTimeMillis))
             }
             previous?.uncaughtException(thread, error)
         }
@@ -46,9 +48,15 @@ object CrashReportStore {
         return !file.exists() || file.delete()
     }
 
-    internal fun formatReport(appVersion: String, thread: Thread, error: Throwable): String = buildString {
+    internal fun formatReport(
+        appVersion: String,
+        thread: Thread,
+        error: Throwable,
+        crashTimeMillis: Long = System.currentTimeMillis(),
+    ): String = buildString {
         appendLine("FawnTavern crash report")
-        appendLine("Time (UTC): ${utcTimestamp()}")
+        appendLine("Time (device): ${deviceTimestamp(crashTimeMillis)}")
+        appendLine("Time (UTC): ${utcTimestamp(crashTimeMillis)}")
         appendLine("App version: $appVersion")
         appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
         appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
@@ -118,9 +126,18 @@ object CrashReportStore {
         }
     }
 
-    private fun utcTimestamp(): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+    private fun deviceTimestamp(timestampMillis: Long): String {
+        val timeZone = TimeZone.getDefault()
+        val timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
+            .apply { this.timeZone = timeZone }
+            .format(Date(timestampMillis))
+        return "$timestamp (${timeZone.id})"
+    }
+
+    private fun utcTimestamp(timestampMillis: Long): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
         .apply { timeZone = TimeZone.getTimeZone("UTC") }
-        .format(Date())
+        .format(Date(timestampMillis))
 
     private fun safeThreadName(value: String): String = value
         .filter { it.isLetterOrDigit() || it in " ._-" }

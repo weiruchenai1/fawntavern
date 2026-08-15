@@ -658,5 +658,8 @@
     <string name="crash_feedback_empty">暂无崩溃报告</string>
     <string name="crash_feedback_share">分享</string>
     <string name="crash_feedback_subject">FawnTavern 崩溃报告</string>
+    <string name="crash_feedback_clear_title">清除崩溃报告</string>
+    <string name="crash_feedback_clear_message">确定要清除当前崩溃报告吗？此操作不可撤销。</string>
+    <string name="crash_feedback_share_failed">无法创建崩溃报告文件</string>
 
 </resources>

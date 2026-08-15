@@ -660,5 +660,8 @@
     <string name="crash_feedback_empty">No crash reports</string>
     <string name="crash_feedback_share">Share</string>
     <string name="crash_feedback_subject">FawnTavern crash report</string>
+    <string name="crash_feedback_clear_title">Clear crash report</string>
+    <string name="crash_feedback_clear_message">Clear the current crash report? This action cannot be undone.</string>
+    <string name="crash_feedback_share_failed">Unable to create the crash report file</string>
 
 </resources>

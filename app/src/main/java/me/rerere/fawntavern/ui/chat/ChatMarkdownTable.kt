@@ -17,24 +17,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -50,6 +47,7 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -57,7 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.times
+import androidx.compose.ui.unit.isSpecified
 import androidx.core.content.ContextCompat
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Download
@@ -74,7 +72,6 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.ui.components.noRippleClickable
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.ast.ASTNode
-import org.intellij.markdown.ast.findChildOfType
 import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 
@@ -92,10 +89,40 @@ internal fun ChatMarkdownTable(
     val scope = rememberCoroutineScope()
     val graphicsLayer = rememberGraphicsLayer()
     var isSaving by remember { mutableStateOf(false) }
-    val columns = remember(node) {
-        node.findChildOfType(GFMElementTypes.HEADER)?.children?.count { it.type == GFMTokenTypes.CELL } ?: 0
+    val tableRows = remember(node) {
+        node.children.filter { child ->
+            child.type == GFMElementTypes.HEADER || child.type == GFMElementTypes.ROW
+        }
     }
-    val tableWidth = columns.coerceAtLeast(1) * 148.dp
+    val columns = remember(tableRows) {
+        tableRows.maxOfOrNull { row -> row.children.count { it.type == GFMTokenTypes.CELL } } ?: 0
+    }
+    val density = LocalDensity.current
+    val formulaTextSizePx = with(density) {
+        if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.dp.toPx()
+    }
+    val columnWidths = remember(content, tableRows, columns, renderMath, formulaTextSizePx, density) {
+        MutableList(columns.coerceAtLeast(1)) { 148.dp }.also { widths ->
+            if (renderMath) {
+                tableRows.forEach { row ->
+                    row.children.filter { it.type == GFMTokenTypes.CELL }
+                        .forEachIndexed { index, cell ->
+                            val source = content.substring(cell.startOffset, cell.endOffset).trim()
+                            val formulaWidthPx = splitMathSegments(source)
+                                .filter(MathRenderSegment::formula)
+                                .maxOfOrNull { segment ->
+                                    measureLatexWidthPx(segment.text, formulaTextSizePx) ?: 0
+                                } ?: 0
+                            if (formulaWidthPx > 0) {
+                                val requiredWidth = with(density) { formulaWidthPx.toDp() } + 24.dp
+                                widths[index] = maxOf(widths[index], requiredWidth.coerceAtMost(560.dp))
+                            }
+                        }
+                }
+            }
+        }
+    }
+    val tableWidth = columnWidths.fold(0.dp) { total, width -> total + width }
     val tableSource = remember(content, node) { content.substring(node.startOffset, node.endOffset) }
     val saveImage: () -> Unit = {
         if (!isSaving) scope.launch {
@@ -180,21 +207,20 @@ internal fun ChatMarkdownTable(
                 },
             ) {
                 var renderedRows = 0
-                node.children.forEach { child ->
+                tableRows.forEach { child ->
                     val isHeader = child.type == GFMElementTypes.HEADER
-                    if (isHeader || child.type == GFMElementTypes.ROW) {
-                        if (renderedRows > 0) HorizontalDivider(color = outline)
-                        ChatMarkdownTableRow(
-                            content = content,
-                            row = child,
-                            tableWidth = tableWidth,
-                            style = style,
-                            header = isHeader,
-                            renderMath = renderMath,
-                            dividerColor = outline,
-                        )
-                        renderedRows++
-                    }
+                    if (renderedRows > 0) HorizontalDivider(color = outline)
+                    ChatMarkdownTableRow(
+                        content = content,
+                        row = child,
+                        tableWidth = tableWidth,
+                        columnWidths = columnWidths,
+                        style = style,
+                        header = isHeader,
+                        renderMath = renderMath,
+                        dividerColor = outline,
+                    )
+                    renderedRows++
                 }
             }
         }
@@ -206,6 +232,7 @@ private fun ChatMarkdownTableRow(
     content: String,
     row: ASTNode,
     tableWidth: Dp,
+    columnWidths: List<Dp>,
     style: TextStyle,
     header: Boolean,
     renderMath: Boolean,
@@ -214,10 +241,20 @@ private fun ChatMarkdownTableRow(
     val markdownComponents = LocalMarkdownComponents.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.widthIn(tableWidth).height(IntrinsicSize.Max),
+        modifier = Modifier.requiredWidth(tableWidth).drawBehind {
+            var dividerX = 0f
+            columnWidths.dropLast(1).forEach { columnWidth ->
+                dividerX += columnWidth.toPx()
+                drawLine(
+                    color = dividerColor,
+                    start = androidx.compose.ui.geometry.Offset(dividerX, 0f),
+                    end = androidx.compose.ui.geometry.Offset(dividerX, size.height),
+                    strokeWidth = 1.dp.toPx(),
+                )
+            }
+        },
     ) {
         row.children.filter { it.type == GFMTokenTypes.CELL }.forEachIndexed { index, cell ->
-            if (index > 0) VerticalDivider(color = dividerColor)
             val cellSource = remember(content, cell) {
                 content.substring(cell.startOffset, cell.endOffset).trim()
             }
@@ -225,7 +262,10 @@ private fun ChatMarkdownTableRow(
                 if (renderMath) splitMathSegments(cellSource) else emptyList()
             }
             val cellStyle = if (header) style.copy(fontWeight = FontWeight.Bold) else style
-            Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp).weight(1f)) {
+            Column(
+                Modifier.width(columnWidths.getOrElse(index) { 148.dp })
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            ) {
                 if (segments.isEmpty() && cell.children.any { it.type == MarkdownElementTypes.IMAGE }) {
                     MarkdownElement(
                         node = cell,
@@ -242,26 +282,15 @@ private fun ChatMarkdownTableRow(
                         overflow = TextOverflow.Clip,
                     )
                 } else {
-                    segments.forEachIndexed { segmentIndex, segment ->
-                        key(segmentIndex, segment.text.hashCode(), segment.formula, segment.displayMode) {
-                            if (segment.formula) {
-                                LatexFormulaBlock(
-                                    formula = segment.text,
-                                    style = cellStyle,
-                                    displayMode = segment.displayMode,
-                                    compact = true,
-                                )
-                            } else {
-                                ComposeMarkdownBlock(
-                                    content = segment.text,
-                                    textStyle = cellStyle,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    renderPrefs = RenderPrefs(math = false),
-                                    fillWidth = false,
-                                )
-                            }
-                        }
-                    }
+                    // 整个单元格一次渲染，让文字和行内公式共享同一个文本布局；
+                    // 只有块公式或超过列宽的公式才由公式渲染器另起一行并横向滚动。
+                    ComposeMarkdownBlock(
+                        content = cellSource,
+                        textStyle = cellStyle,
+                        modifier = Modifier.fillMaxWidth(),
+                        renderPrefs = RenderPrefs(math = true),
+                        fillWidth = false,
+                    )
                 }
             }
         }
