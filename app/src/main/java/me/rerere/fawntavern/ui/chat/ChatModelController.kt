@@ -3,9 +3,11 @@ package me.rerere.fawntavern.ui.chat
 import android.content.Context
 import me.rerere.fawntavern.data.api.ApiConfig
 import me.rerere.fawntavern.data.api.ApiProvider
+import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.settings.CharacterModelStore
 import me.rerere.fawntavern.data.settings.DefaultModelStore
+import me.rerere.fawntavern.data.settings.ImageGenerationStore
 import me.rerere.fawntavern.data.settings.ThinkingStore
 
 internal interface ChatModelDataSource {
@@ -15,6 +17,8 @@ internal interface ChatModelDataSource {
     fun saveDefaultChatModel(modelSpec: String)
     fun reasoning(modelSpec: String): ReasoningLevel
     fun saveReasoning(modelSpec: String, level: ReasoningLevel)
+    fun imageGeneration(modelSpec: String): ImageGenerationSettings
+    fun saveImageGeneration(modelSpec: String, settings: ImageGenerationSettings)
 }
 
 internal class AndroidChatModelDataSource(
@@ -29,6 +33,9 @@ internal class AndroidChatModelDataSource(
         DefaultModelStore.setModel(context, DefaultModelStore.ROLE_CHAT, modelSpec)
     override fun reasoning(modelSpec: String): ReasoningLevel = ThinkingStore.get(context, modelSpec)
     override fun saveReasoning(modelSpec: String, level: ReasoningLevel) = ThinkingStore.set(context, modelSpec, level)
+    override fun imageGeneration(modelSpec: String): ImageGenerationSettings = ImageGenerationStore.get(context, modelSpec)
+    override fun saveImageGeneration(modelSpec: String, settings: ImageGenerationSettings) =
+        ImageGenerationStore.set(context, modelSpec, settings)
 }
 
 internal class ChatModelController(
@@ -54,6 +61,12 @@ internal class ChatModelController(
 
     fun saveReasoning(modelSpec: String, level: ReasoningLevel) {
         dataSource.saveReasoning(modelSpec, level)
+    }
+
+    fun imageGeneration(modelSpec: String): ImageGenerationSettings = dataSource.imageGeneration(modelSpec)
+
+    fun saveImageGeneration(modelSpec: String, settings: ImageGenerationSettings) {
+        dataSource.saveImageGeneration(modelSpec, settings)
     }
 
     fun resolveProvider(

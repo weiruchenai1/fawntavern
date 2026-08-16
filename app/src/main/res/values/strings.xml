@@ -65,6 +65,8 @@
     <string name="system_log">系统日志</string>
     <string name="system_log_empty">暂无系统日志</string>
     <plurals name="system_log_entry_count"><item quantity="other">共 %1$d 条记录</item></plurals>
+    <string name="system_log_share_subject">FawnTavern 安全系统日志</string>
+    <string name="system_log_share_failed">无法创建系统日志文件</string>
     <string name="log_level_error">错误</string>
     <string name="log_level_warning">警告</string>
     <string name="debug_log">Prompt 日志</string>
@@ -112,6 +114,7 @@
     <string name="yesterday">昨天</string>
     <string name="date_header_fmt">%1$d月%2$d日</string>
     <string name="copy">复制</string>
+    <string name="share">分享</string>
     <string name="select_copy">选择复制</string>
     <string name="regenerate">重新生成</string>
     <string name="more">更多</string>
@@ -158,7 +161,7 @@
     <string name="clear_category_msg_fmt">确定要删除全部 %1$d 个%2$s数据吗？此操作不可撤销。</string>
     <string name="clear_category_btn">确定清除</string>
     <string name="clear_all_title">清除全部数据</string>
-    <string name="clear_all_msg">确定要删除所有角色、预设、世界书和聊天记录吗？\n\n此操作不可撤销。</string>
+    <string name="clear_all_msg">确定要删除所有角色、预设、世界书、聊天记录和系统日志吗？\n\n此操作不可撤销。</string>
     <string name="clear_all_btn">全部清除</string>
     <string name="reset_api_title">重置 API 配置</string>
     <string name="reset_api_msg">确定要重置 API 配置为默认值吗？所有自定义提供商和 API Key 将被清除。</string>
@@ -219,7 +222,6 @@
     <string name="char_loading">加载中…</string>
     <string name="add_character">添加角色</string>
     <string name="import_character_card">导入 SillyTavern 角色卡</string>
-    <string name="selected_file_fmt">已选文件：%1$s</string>
     <string name="character_created">角色已创建</string>
     <string name="character_imported">角色卡已导入</string>
     <string name="no_characters_desc">点击右下角添加角色或导入 PNG/JSON 角色卡</string>
@@ -419,6 +421,11 @@
     <string name="cot_search_view_detail">详情</string>
     <string name="cot_search_view_json">JSON</string>
     <string name="thinking_budget">思考预算</string>
+    <string name="image_generation_settings">图片生成设置</string>
+    <string name="image_generation_count_value">生成数量：%1$d</string>
+    <string name="image_generation_aspect_ratio">图片尺寸</string>
+    <string name="image_generation_resolution">分辨率</string>
+    <string name="image_generation_auto">自动</string>
     <string name="thinking_budget_hint">按模型分别记忆。仅推理模型支持，对普通模型调档可能导致请求失败。</string>
     <string name="reasoning_off">关闭</string>
     <string name="reasoning_off_desc">显式要求模型不思考</string>
@@ -485,7 +492,7 @@
     <string name="config_tab">配置</string>
     <string name="models_tab">模型</string>
     <string name="response_api_label">Response API</string>
-    <string name="response_api_warning">OpenAI 新一代 /responses 接口，大部分兼容提供商不支持；仅在服务明确支持时开启。</string>
+    <string name="response_api_warning">OpenAI /responses 接口</string>
     <string name="balance_label">获取账户余额</string>
     <string name="balance_api_path">余额 API 路径</string>
     <string name="balance_json_key">结果 JSON 键</string>
@@ -682,5 +689,6 @@
     <string name="crash_feedback_clear_title">清除崩溃报告</string>
     <string name="crash_feedback_clear_message">确定要清除当前崩溃报告吗？此操作不可撤销。</string>
     <string name="crash_feedback_share_failed">无法创建崩溃报告文件</string>
+    <string name="crash_feedback_include_safe_logs">附带安全系统日志（%1$d 条）</string>
 
 </resources>

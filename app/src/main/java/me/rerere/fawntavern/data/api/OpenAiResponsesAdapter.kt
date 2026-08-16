@@ -129,6 +129,9 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
 
     internal fun endpoint(provider: ApiProvider): String {
         val base = provider.baseUrl.trimEnd('/')
+        if (provider.apiPath.isNotBlank()) {
+            return provider.apiEndpoint("/responses")
+        }
         if (base.endsWith("/responses")) return base
         val uri = runCatching { URI(base) }.getOrNull()
         if (uri?.host?.lowercase()?.endsWith("dashscope.aliyuncs.com") == true &&

@@ -112,6 +112,7 @@ object RemoteDiagnostics {
         }
     }
 
+    @Suppress("DEPRECATION") // Bugly provides no replacement for explicitly disabling device ID collection.
     private fun applyBuglyCollectionState(context: Context, enabled: Boolean) {
         if (!BuildConfig.BUGLY_ENABLED || BuildConfig.BUGLY_APP_ID.isBlank()) return
 
@@ -167,7 +168,7 @@ object RemoteDiagnostics {
                 .url(IP_COUNTRY_URL)
                 .build(),
         ).enqueue(object : Callback {
-            override fun onFailure(call: Call, error: IOException) {
+            override fun onFailure(call: Call, e: IOException) {
                 ipLookupInFlight.set(false)
             }
 

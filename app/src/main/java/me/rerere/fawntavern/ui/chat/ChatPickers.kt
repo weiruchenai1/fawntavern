@@ -1,11 +1,15 @@
 package me.rerere.fawntavern.ui.chat
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -15,6 +19,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
@@ -25,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -38,7 +46,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ReasoningLevel
+import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.character.CharacterRepository
+import me.rerere.fawntavern.data.settings.ImageGenerationStore
 import me.rerere.fawntavern.ui.components.PickerRow
 import me.rerere.fawntavern.ui.components.reasoningIcon
 
@@ -116,6 +126,104 @@ internal fun ReasoningPickerSheet(
                     if (sel) Icon(Lucide.Check, null, Modifier.size(18.dp), tint = fg)
                 },
             )
+        }
+    }
+}
+
+/** 图片生成控制面板，仅在当前模型声明图片输出能力时由输入区入口打开。 */
+@Composable
+internal fun ImageGenerationSettingsSheet(
+    current: ImageGenerationSettings,
+    onChange: (ImageGenerationSettings) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    PickerSheet(
+        title = stringResource(R.string.image_generation_settings),
+        onDismiss = onDismiss,
+        fillHeight = false,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                stringResource(R.string.image_generation_count_value, current.count),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+            ) {
+                Slider(
+                    value = current.count.toFloat(),
+                    onValueChange = { onChange(current.copy(count = it.toInt())) },
+                    valueRange = 1f..5f,
+                    steps = 3,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    ),
+                )
+            }
+        }
+        ImageGenerationOptionFlow(
+            label = stringResource(R.string.image_generation_aspect_ratio),
+            value = current.aspectRatio,
+            options = ImageGenerationStore.ASPECT_RATIOS,
+            onSelect = { onChange(current.copy(aspectRatio = it)) },
+        )
+        ImageGenerationOptionFlow(
+            label = stringResource(R.string.image_generation_resolution),
+            value = current.resolution,
+            options = ImageGenerationStore.RESOLUTIONS,
+            onSelect = { onChange(current.copy(resolution = it)) },
+        )
+    }
+}
+
+@Composable
+private fun ImageGenerationOptionFlow(
+    label: String,
+    value: String,
+    options: List<String>,
+    onSelect: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            FlowRow(
+                Modifier.fillMaxWidth().padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                options.forEach { option ->
+                    val selected = option == value
+                    Row(
+                        Modifier.clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surface
+                            )
+                            .clickable { onSelect(option) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            if (option == "auto") stringResource(R.string.image_generation_auto) else option,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
         }
     }
 }

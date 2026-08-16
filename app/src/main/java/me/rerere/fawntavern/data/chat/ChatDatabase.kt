@@ -57,6 +57,7 @@ internal data class MessageEntity(
     val altIdx: Int,
     val altsJson: String,  // List<MsgAlt> 的 kotlinx.serialization JSON，空串 = 无多版本
     @ColumnInfo(defaultValue = "") val imagesJson: String = "",  // List<String> JSON，空串 = 无图片附件
+    @ColumnInfo(defaultValue = "'2:3'") val imageAspectRatio: String = "2:3",
     @ColumnInfo(defaultValue = "") val filesJson: String = "",   // List<MsgFile> JSON，空串 = 无文件附件
     @ColumnInfo(defaultValue = "") val searchJson: String = "",  // List<MsgSearch> JSON，空串 = 无联网搜索
     @ColumnInfo(defaultValue = "0") val promptTokens: Int = 0,
@@ -247,7 +248,7 @@ internal interface ChatDao {
     suspend fun updatePinned(id: String, pinned: Boolean)
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 10, exportSchema = true)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 11, exportSchema = true)
 internal abstract class ChatDatabase : RoomDatabase() {
 
     abstract fun dao(): ChatDao
@@ -260,7 +261,13 @@ internal abstract class ChatDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) = Unit
         }
 
-        private val ALL_MIGRATIONS = arrayOf(MIGRATION_9_10)
+        internal val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN imageAspectRatio TEXT NOT NULL DEFAULT '2:3'")
+            }
+        }
+
+        private val ALL_MIGRATIONS = arrayOf(MIGRATION_9_10, MIGRATION_10_11)
 
         @Volatile private var instance: ChatDatabase? = null
 

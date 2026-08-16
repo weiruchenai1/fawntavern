@@ -26,6 +26,8 @@ import me.rerere.fawntavern.data.PromptContextLoader
 import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.BuiltInTool
+import me.rerere.fawntavern.data.api.ImageGenerationSettings
+import me.rerere.fawntavern.data.api.Modality
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.api.supportsBuiltInTool
 import me.rerere.fawntavern.data.character.CharRegex
@@ -74,6 +76,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     var uiSettings by mutableStateOf(uiSettingsController.load()); private set
     /** 当前模型的思考预算档位（按模型记忆，随选模型切换）；AUTO = 不下发任何思考字段 */
     var reasoning by mutableStateOf(modelController.reasoning(apiConfig.currentModel)); private set
+    /** 当前模型的图片生成控制项（按模型记忆）。 */
+    var imageGeneration by mutableStateOf(modelController.imageGeneration(apiConfig.currentModel)); private set
     var sessions by mutableStateOf<List<ChatSession>>(emptyList()); private set
     var session by mutableStateOf<ChatSession?>(null); private set
     var currentCard by mutableStateOf<CharacterCard?>(null); private set
@@ -137,6 +141,12 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             modelRevision
             val (provider, modelId) = currentProviderAndModel() ?: return false
             return BuiltInTool.SEARCH in (provider.model(modelId)?.tools ?: emptySet())
+        }
+    val imageGenerationAvailable: Boolean
+        get() {
+            modelRevision
+            val (provider, modelId) = currentProviderAndModel() ?: return false
+            return Modality.IMAGE in (provider.model(modelId)?.outputModalities ?: emptyList())
         }
     /** 正在朗读的 AI 消息 ts（点击朗读图标后置位，读完/停止时清空） */
     var speakingTs by mutableStateOf<Long?>(null); private set
@@ -237,6 +247,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 // 恢复该角色的模型：角色记忆 > 默认模型聊天卡片
                 val spec = modelController.effectiveModelSpec(currentCard?.name, apiConfig).orEmpty()
                 reasoning = modelController.reasoning(spec)
+                imageGeneration = modelController.imageGeneration(spec)
             }
         }
         // 切换会话即清空 overlay：overlay 按 ts 索引，而 ts 仅在会话内唯一，跨会话残留会误覆盖
@@ -262,6 +273,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         apiConfig = ApiConfigStore.loadConfig(ctx)
         // displayModelSpec 负责角色记忆 > ROLE_CHAT > apiConfig.currentModel 的完整回退
         reasoning = modelController.reasoning(displayModelSpec() ?: apiConfig.currentModel)
+        imageGeneration = modelController.imageGeneration(displayModelSpec() ?: apiConfig.currentModel)
     }
 
     /** 从偏好或字号页面返回时刷新聊天页使用的设置快照。 */
@@ -272,6 +284,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun selectModel(providerId: String, modelId: String) {
         val spec = "$providerId::$modelId"
         reasoning = modelController.select(currentCard?.name, spec)
+        imageGeneration = modelController.imageGeneration(spec)
         modelRevision++
     }
 
@@ -279,6 +292,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         reasoning = level
         // 思考档位按当前实际生效的模型记忆，而非可能已过期的 apiConfig.currentModel
         modelController.saveReasoning(displayModelSpec() ?: apiConfig.currentModel, level)
+    }
+
+    fun updateImageGeneration(settings: ImageGenerationSettings) {
+        imageGeneration = settings
+        modelController.saveImageGeneration(displayModelSpec() ?: apiConfig.currentModel, settings)
     }
 
     /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
@@ -738,6 +756,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 preset = activePreset,
                 promptRegex = (currentCard?.regexScripts ?: emptyList()) + presetRegex,
                 reasoning = reasoning,
+                imageGeneration = imageGeneration,
                 searchEnabled = searchEnabled,
             ),
             onStarted = { base, message ->
@@ -815,7 +834,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         overlays = overlays + (ts to optimistic)
         viewModelScope.launch {
             messageCoordinator.switchAlt(s, ts, dir)?.let { fresh ->
-                reconcileMessageMutation(s.id, ts, fresh)
+                reconcileMessageMutation(s.id, ts, fresh, expectedOverlay = optimistic)
             }
         }
     }
@@ -862,9 +881,16 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 单条 DB 变更后把 overlay 校准到 DB 权威结果并同步内存会话（陈旧乐观值在此被纠正） */
-    private fun reconcileMessageMutation(sid: String, ts: Long, fresh: ChatSession) {
+    private fun reconcileMessageMutation(
+        sid: String,
+        ts: Long,
+        fresh: ChatSession,
+        expectedOverlay: ChatMessage? = null,
+    ) {
         if (session?.id != sid) return
+        val currentOverlay = overlays[ts]
         session = fresh
+        if (expectedOverlay != null && currentOverlay != expectedOverlay) return
         val row = fresh.messages.firstOrNull { it.ts == ts }
         overlays = if (row != null) overlays + (ts to row) else overlays - ts
     }

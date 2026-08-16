@@ -81,7 +81,7 @@ internal object ClaudeAdapter : ProviderAdapter {
         var promptTokens = 0
         var completionTokens = 0
         SseClient.post(
-            url = "${provider.baseUrl.trimEnd('/')}/messages",
+            url = provider.apiEndpoint("/messages"),
             headers = model.applyHeaders(mapOf(
                 "x-api-key" to provider.apiKey,
                 "anthropic-version" to "2023-06-01",

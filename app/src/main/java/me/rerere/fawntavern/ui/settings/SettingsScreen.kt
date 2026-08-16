@@ -273,6 +273,11 @@ fun SettingsScreen(
                 stringResource(R.string.crash_feedback),
                 onClick = onNavigateToCrashReport)
             SettingsRow(
+                { Icon(Lucide.ScrollText, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.logs),
+                onClick = onNavigateToLogs)
+            SettingsRow(
                 { Icon(Lucide.Info, null, Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 stringResource(R.string.check_update), versionName,
@@ -284,11 +289,6 @@ fun SettingsScreen(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 stringResource(R.string.about),
                 onClick = onNavigateToAbout)
-            SettingsRow(
-                { Icon(Lucide.ScrollText, null, Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                stringResource(R.string.logs),
-                onClick = onNavigateToLogs)
         }
     }
 }

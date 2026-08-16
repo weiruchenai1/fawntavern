@@ -46,6 +46,39 @@ class ChatMessageWindowTest {
         )
     }
 
+    @Test
+    fun doesNotSettleImageBranchUntilPagingContainsTheSameImage() {
+        val persisted = message(1, "").copy(
+            images = listOf("attachments/old.png"),
+            imageAspectRatio = "2:3",
+            altIdx = 0,
+        )
+        val overlay = persisted.copy(
+            images = listOf("attachments/new.png"),
+            imageAspectRatio = "16:9",
+            altIdx = 1,
+        )
+
+        assertEquals(
+            emptyList<Long>(),
+            settledOverlayTimestamps(
+                base = listOf(persisted),
+                overlays = mapOf(overlay.ts to overlay),
+                generating = false,
+                generationTargetTs = null,
+            ),
+        )
+        assertEquals(
+            listOf(overlay.ts),
+            settledOverlayTimestamps(
+                base = listOf(overlay),
+                overlays = mapOf(overlay.ts to overlay),
+                generating = false,
+                generationTargetTs = null,
+            ),
+        )
+    }
+
     private fun message(ts: Long, content: String) =
         ChatMessage(role = "assistant", ts = ts, content = content)
 }

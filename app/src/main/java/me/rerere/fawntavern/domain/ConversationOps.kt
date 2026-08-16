@@ -71,12 +71,13 @@ internal object ConversationOps {
         newAlts[m.altIdx] = newAlts[m.altIdx].copy(
             content = m.content, reasoning = m.reasoning, model = m.model,
             reasoningMs = m.reasoningMs, searches = m.searches, images = m.images,
+            imageAspectRatio = m.imageAspectRatio,
             promptTokens = m.promptTokens, completionTokens = m.completionTokens,
             generationMs = m.generationMs)
         val target = newAlts[ni]
         return m.copy(content = target.content, reasoning = target.reasoning,
             model = target.model, reasoningMs = target.reasoningMs, searches = target.searches,
-            images = target.images,
+            images = target.images, imageAspectRatio = target.imageAspectRatio,
             promptTokens = target.promptTokens, completionTokens = target.completionTokens,
             generationMs = target.generationMs,
             alts = newAlts, altIdx = ni)
@@ -94,7 +95,7 @@ internal object ConversationOps {
         return m.copy(
             content = cur.content, reasoning = cur.reasoning,
             model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
-            images = cur.images,
+            images = cur.images, imageAspectRatio = cur.imageAspectRatio,
             promptTokens = cur.promptTokens, completionTokens = cur.completionTokens,
             generationMs = cur.generationMs,
             alts = if (single) emptyList() else newAlts,
@@ -108,6 +109,7 @@ internal object ConversationOps {
         val ai = m.altIdx.coerceIn(0, alts.lastIndex)
         alts[ai] = alts[ai].copy(content = m.content, reasoning = m.reasoning,
             model = m.model, reasoningMs = m.reasoningMs, searches = m.searches, images = m.images,
+            imageAspectRatio = m.imageAspectRatio,
             promptTokens = m.promptTokens, completionTokens = m.completionTokens,
             generationMs = m.generationMs)
         alts += MsgAlt(model = modelId)

@@ -117,6 +117,7 @@ object ApiConfigStore {
                     name = obj.optString("name", ""),
                     type = obj.optString("type", "openai"),
                     baseUrl = obj.optString("baseUrl", ""),
+                    apiPath = obj.optString("apiPath", ""),
                     apiKey = obj.optString("apiKey", ""),
                     enabled = obj.optBoolean("enabled", true),
                     useResponseApi = obj.optBoolean("useResponseApi", false),
@@ -196,6 +197,7 @@ object ApiConfigStore {
             obj.put("name", p.name)
             obj.put("type", p.type)
             obj.put("baseUrl", p.baseUrl)
+            obj.put("apiPath", p.apiPath)
             obj.put("apiKey", p.apiKey)
             obj.put("enabled", p.enabled)
             obj.put("useResponseApi", p.useResponseApi)
@@ -221,6 +223,7 @@ object ApiConfigStore {
                 name = obj.optString("name", ""),
                 type = obj.optString("type", "openai"),
                 baseUrl = obj.optString("baseUrl", ""),
+                apiPath = obj.optString("apiPath", ""),
                 apiKey = obj.optString("apiKey", ""),
                 enabled = obj.optBoolean("enabled", true),
                 useResponseApi = obj.optBoolean("useResponseApi", false),

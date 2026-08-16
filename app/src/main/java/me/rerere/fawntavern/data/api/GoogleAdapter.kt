@@ -81,7 +81,10 @@ internal object GoogleAdapter : ProviderAdapter {
         var promptTokens = 0
         var completionTokens = 0
         SseClient.post(
-            url = "${provider.baseUrl.trimEnd('/')}/models/${model.id}:streamGenerateContent?alt=sse",
+            url = provider.apiEndpoint(
+                "/models/{model}:streamGenerateContent?alt=sse",
+                model.id,
+            ),
             // 密钥走 x-goog-api-key 请求头，不再拼进 URL
             headers = model.applyHeaders(mapOf("x-goog-api-key" to provider.apiKey)),
             body = body,

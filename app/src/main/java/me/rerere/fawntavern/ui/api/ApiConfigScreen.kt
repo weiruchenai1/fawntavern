@@ -33,7 +33,6 @@ import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ConnectionTester
 import me.rerere.fawntavern.data.api.ModelApi
 import me.rerere.fawntavern.data.api.ModelInfo
-import me.rerere.fawntavern.data.api.OpenAiResponsesAdapter
 import me.rerere.fawntavern.data.api.modelInfoOf
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -294,6 +293,7 @@ private fun ProviderConfigTab(
     var keyVisible by remember { mutableStateOf(false) }
     var name by remember(prov) { mutableStateOf(prov.name) }
     var baseUrl by remember(prov) { mutableStateOf(prov.baseUrl) }
+    var customApiPath by remember(prov) { mutableStateOf(prov.apiPath) }
     var apiKey by remember(prov) { mutableStateOf(prov.apiKey) }
     var enabledValue by remember(prov) { mutableStateOf(prov.enabled) }
     var responseApi by remember(prov) { mutableStateOf(prov.useResponseApi) }
@@ -304,23 +304,25 @@ private fun ProviderConfigTab(
     var showTestDialog by remember { mutableStateOf(false) }
 
     val currentProv = prov.copy(
-        name = name, baseUrl = baseUrl, apiKey = apiKey, enabled = enabledValue,
+        name = name, baseUrl = baseUrl, apiPath = customApiPath,
+        apiKey = apiKey, enabled = enabledValue,
         useResponseApi = responseApi,
         balanceEnabled = balanceEnabled, balancePath = balancePath, balanceJsonKey = balanceJsonKey,
     )
     val apiPath = when (prov.type) {
-        "google" -> "/models/{model}:streamGenerateContent"
-        "claude" -> "/messages"
-        else -> if (responseApi) {
-            runCatching { java.net.URI(OpenAiResponsesAdapter.endpoint(currentProv)).path }
-                .getOrNull()
-                .orEmpty()
-                .ifBlank { "/responses" }
-        } else "/chat/completions"
+        "google" -> customApiPath.ifBlank {
+            "/models/{model}:streamGenerateContent?alt=sse"
+        }
+        "claude" -> customApiPath.ifBlank { "/messages" }
+        else -> customApiPath.ifBlank {
+            if (responseApi) "/responses" else "/chat/completions"
+        }
     }
 
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        modifier.fillMaxSize()
+            .imePadding()
+            .verticalScroll(rememberScrollState())
             .padding(Space16),
         verticalArrangement = Arrangement.spacedBy(Space16),
     ) {
@@ -335,8 +337,10 @@ private fun ProviderConfigTab(
                     onClick = {
                         selectedTypeIdx = idx
                         if (key != "openai") responseApi = false
+                        customApiPath = ""
                         update(currentProv.copy(
                             type = key,
+                            apiPath = "",
                             useResponseApi = key == "openai" && responseApi,
                         ))
                     },
@@ -362,10 +366,12 @@ private fun ProviderConfigTab(
 
         OutlinedTextField(
             value = apiPath,
-            onValueChange = {},
+            onValueChange = {
+                customApiPath = it
+                update(currentProv.copy(apiPath = it))
+            },
             label = { Text(stringResource(R.string.api_path_label)) },
             singleLine = true,
-            readOnly = true,
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -384,7 +390,8 @@ private fun ProviderConfigTab(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Switch(responseApi, {
                         responseApi = it
-                        update(currentProv.copy(useResponseApi = it))
+                        customApiPath = ""
+                        update(currentProv.copy(useResponseApi = it, apiPath = ""))
                     })
                 }
                 Text(
@@ -881,7 +888,7 @@ private fun TestResultRow(
             .clip(RoundedCornerShape(8.dp))
             .clickable(enabled = state !is TestState.Idle, onClick = onClick)
             .padding(vertical = Space4),
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Space8),
     ) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp))

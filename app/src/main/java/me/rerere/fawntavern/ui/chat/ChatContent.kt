@@ -86,6 +86,7 @@ internal fun ChatContent(
     var showAttachment by rememberSaveable { mutableStateOf(false) }
     val modelSelector = rememberModelSelectorState(vm.displayModelSpec() ?: "", vm.apiConfig.providers)
     var showReasoningPicker by rememberSaveable { mutableStateOf(false) }
+    var showImageGenerationSettings by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var showCharPicker by rememberSaveable { mutableStateOf(false) }
     var cameraImageUri by rememberSaveable { mutableStateOf<String?>(null) }
@@ -324,6 +325,7 @@ internal fun ChatContent(
                         },
                         currentModelId = displayModelId,
                         reasoning = vm.reasoning,
+                        imageGenerationEnabled = vm.imageGenerationAvailable,
                         generating = vm.generating,
                         searchEnabled = vm.searchEnabled,
                         searchProvider = vm.searchProviderName,
@@ -338,6 +340,7 @@ internal fun ChatContent(
                         },
                         onSelectModel = { modelSelector.open() },
                         onSelectReasoning = { showReasoningPicker = true },
+                        onOpenImageGenerationSettings = { showImageGenerationSettings = true },
                         onOpenSearch = { showSearch = true },
                         onCamera = {
                             val uri = mediaInput.createCameraUri()
@@ -676,6 +679,14 @@ internal fun ChatContent(
                 showReasoningPicker = false
             },
             onDismiss = { showReasoningPicker = false },
+        )
+    }
+
+    if (showImageGenerationSettings) {
+        ImageGenerationSettingsSheet(
+            current = vm.imageGeneration,
+            onChange = vm::updateImageGeneration,
+            onDismiss = { showImageGenerationSettings = false },
         )
     }
 

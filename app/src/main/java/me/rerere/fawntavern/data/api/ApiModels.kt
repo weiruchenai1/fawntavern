@@ -49,6 +49,13 @@ data class GeneratedImage(
     val mimeType: String = "image/png",
 )
 
+/** xAI Imagine 图片生成控制项，按模型保存并在生成请求中下发。 */
+data class ImageGenerationSettings(
+    val count: Int = 1,
+    val aspectRatio: String = "2:3",
+    val resolution: String = "1k",
+)
+
 /** 采样参数（来自关联预设）；null 字段 = 不下发，使用服务端默认值 */
 data class GenParams(
     val temperature: Float? = null,
@@ -60,6 +67,7 @@ data class GenParams(
     val seed: Int? = null,
     /** 思考预算档位（来自 ThinkingStore，按模型记忆）；AUTO = 不下发任何思考字段 */
     val reasoning: ReasoningLevel = ReasoningLevel.AUTO,
+    val imageGeneration: ImageGenerationSettings? = null,
 )
 
 /** 合并相邻同角色消息（Claude/Gemini 要求 user/assistant 交替出现）。

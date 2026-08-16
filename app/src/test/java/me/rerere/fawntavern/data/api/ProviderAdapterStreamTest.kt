@@ -57,6 +57,24 @@ class ProviderAdapterStreamTest {
     }
 
     @Test
+    fun openAiCompatibleProviderUsesCustomApiPath() {
+        enqueueSse("[DONE]")
+
+        OpenAiAdapter.stream(
+            provider = provider("openai").copy(apiPath = "/custom/chat"),
+            model = ModelInfo("model"),
+            messages = listOf(ApiMessage("user", "hello")),
+            params = null,
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        assertTrue(server.takeRequest().requestLine.startsWith("POST /v1/custom/chat "))
+    }
+
+    @Test
     fun responsesApiParsesTextReasoningToolsRawBlocksAndUsage() {
         enqueueSse(
             """{"type":"response.reasoning_summary_text.delta","delta":"think"}""",
@@ -80,7 +98,7 @@ class ProviderAdapterStreamTest {
         )
 
         val request = server.takeRequest()
-        val requestBody = JSONObject(request.body.utf8())
+        val requestBody = JSONObject(requireNotNull(request.body).utf8())
         assertTrue(request.requestLine.startsWith("POST /v1/responses "))
         assertEquals("system", requestBody.getString("instructions"))
         assertEquals(listOf("" to "think", "answer" to ""), deltas)
@@ -127,6 +145,36 @@ class ProviderAdapterStreamTest {
     }
 
     @Test
+    fun responsesApiUsesCustomPathForCompatibleProvider() {
+        val provider = ApiProvider(
+            type = "openai",
+            baseUrl = "https://gateway.example.com/v1",
+            apiPath = "/custom/responses",
+            useResponseApi = true,
+        )
+
+        assertEquals(
+            "https://gateway.example.com/v1/custom/responses",
+            OpenAiResponsesAdapter.endpoint(provider),
+        )
+    }
+
+    @Test
+    fun officialOpenAiAlsoUsesEditableCustomPath() {
+        val provider = ApiProvider(
+            type = "openai",
+            baseUrl = "https://api.openai.com/v1",
+            apiPath = "/custom/responses",
+            useResponseApi = true,
+        )
+
+        assertEquals(
+            "https://api.openai.com/v1/custom/responses",
+            OpenAiResponsesAdapter.endpoint(provider),
+        )
+    }
+
+    @Test
     fun openAiRoutesImageOutputModelToImageGenerationEndpoint() {
         val pngHeader = byteArrayOf(
             0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -159,12 +207,156 @@ class ProviderAdapterStreamTest {
         )
 
         val request = server.takeRequest()
-        val requestBody = JSONObject(request.body.utf8())
+        val requestBody = JSONObject(requireNotNull(request.body).utf8())
         assertTrue(request.requestLine.startsWith("POST /v1/images/generations "))
         assertEquals("image-model", requestBody.getString("model"))
         assertEquals("draw a fawn", requestBody.getString("prompt"))
         assertTrue(end.generatedImages.single().bytes.contentEquals(pngHeader))
         assertEquals("image/png", end.generatedImages.single().mimeType)
+    }
+
+    @Test
+    fun xaiImageRequestUsesCountAspectRatioAndResolutionFromSettings() {
+        val pngHeader = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        )
+        val encoded = Base64.getEncoder().encodeToString(pngHeader)
+        server.enqueue(
+            MockResponse.Builder()
+                .addHeader("Content-Type", "application/json")
+                .body(JSONObject().put("data", JSONArray()
+                    .put(JSONObject().put("b64_json", encoded))
+                    .put(JSONObject().put("b64_json", encoded))).toString())
+                .build(),
+        )
+
+        val end = OpenAiAdapter.stream(
+            provider = provider("openai"),
+            model = ModelInfo(
+                "grok-imagine-image-2.0",
+                outputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+            ),
+            messages = listOf(ApiMessage("user", "请画两张 2:3 2k 的鹿")),
+            params = GenParams(
+                imageGeneration = ImageGenerationSettings(
+                    count = 2,
+                    aspectRatio = "2:3",
+                    resolution = "2k",
+                ),
+            ),
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val requestBody = JSONObject(requireNotNull(server.takeRequest().body).utf8())
+        assertEquals(2, requestBody.getInt("n"))
+        assertEquals("2:3", requestBody.getString("aspect_ratio"))
+        assertEquals("2k", requestBody.getString("resolution"))
+        assertEquals("b64_json", requestBody.getString("response_format"))
+        assertEquals("请画两张 2:3 2k 的鹿", requestBody.getString("prompt"))
+        assertEquals(2, end.generatedImages.size)
+    }
+
+    @Test
+    fun xaiImageRequestOmitsAutomaticAspectRatio() {
+        enqueueGeneratedImage()
+
+        OpenAiAdapter.stream(
+            provider = provider("openai"),
+            model = xaiImageModel(),
+            messages = listOf(ApiMessage("user", "Draw a fawn")),
+            params = GenParams(
+                imageGeneration = ImageGenerationSettings(aspectRatio = "auto"),
+            ),
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val requestBody = JSONObject(requireNotNull(server.takeRequest().body).utf8())
+        assertTrue(!requestBody.has("aspect_ratio"))
+    }
+
+    @Test
+    fun xaiImageEditSendsSingleAttachmentAsJsonDataUri() {
+        enqueueGeneratedImage()
+        val source = ApiImage("image/jpeg", "single-base64")
+
+        OpenAiAdapter.stream(
+            provider = provider("openai"),
+            model = xaiImageModel(),
+            messages = listOf(ApiMessage("user", "Turn this into a sketch", images = listOf(source))),
+            params = null,
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val request = server.takeRequest()
+        val requestBody = JSONObject(requireNotNull(request.body).utf8())
+        assertTrue(request.requestLine.startsWith("POST /v1/images/edits "))
+        val image = requestBody.getJSONObject("image")
+        assertEquals("image_url", image.getString("type"))
+        assertEquals("data:image/jpeg;base64,single-base64", image.getString("url"))
+    }
+
+    @Test
+    fun xaiMultiImageEditSendsAttachmentsInOrder() {
+        enqueueGeneratedImage()
+        val sources = listOf(
+            ApiImage("image/png", "first"),
+            ApiImage("image/webp", "second"),
+            ApiImage("image/jpeg", "third"),
+        )
+
+        OpenAiAdapter.stream(
+            provider = provider("openai"),
+            model = xaiImageModel(),
+            messages = listOf(ApiMessage("user", "Combine these", images = sources)),
+            params = GenParams(imageGeneration = ImageGenerationSettings(aspectRatio = "16:9")),
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val requestBody = JSONObject(requireNotNull(server.takeRequest().body).utf8())
+        val images = requestBody.getJSONArray("images")
+        assertEquals(3, images.length())
+        assertEquals("data:image/png;base64,first", images.getJSONObject(0).getString("url"))
+        assertEquals("data:image/webp;base64,second", images.getJSONObject(1).getString("url"))
+        assertEquals("data:image/jpeg;base64,third", images.getJSONObject(2).getString("url"))
+        assertEquals("16:9", requestBody.getString("aspect_ratio"))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun xaiImageEditRejectsMoreThanThreeAttachments() {
+        OpenAiAdapter.stream(
+            provider = provider("openai"),
+            model = xaiImageModel(),
+            messages = listOf(ApiMessage(
+                "user",
+                "Combine these",
+                images = List(4) { ApiImage("image/jpeg", "image-$it") },
+            )),
+            params = null,
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+    }
+
+    @Test
+    fun xaiImagineModelSupportsImageInputAndOutput() {
+        val capabilities = ModelRegistry.infer("grok-imagine-image-2.0")
+
+        assertTrue(Modality.IMAGE in capabilities.input)
+        assertTrue(Modality.IMAGE in capabilities.output)
     }
 
     @Test
@@ -192,7 +384,9 @@ class ProviderAdapterStreamTest {
         val deltas = mutableListOf<Pair<String, String>>()
 
         val end = GoogleAdapter.stream(
-            provider = provider("google"),
+            provider = provider("google").copy(
+                apiPath = "/custom/models/{model}:streamGenerateContent?alt=sse",
+            ),
             model = ModelInfo("gemini-test"),
             messages = listOf(ApiMessage("user", "hello")),
             params = null,
@@ -207,6 +401,10 @@ class ProviderAdapterStreamTest {
         assertEquals("sig", end.toolCalls.single().extra)
         assertEquals(8, end.promptTokens)
         assertEquals(5, end.completionTokens)
+        assertTrue(
+            server.takeRequest().requestLine
+                .startsWith("POST /v1/custom/models/gemini-test:streamGenerateContent?alt=sse "),
+        )
     }
 
     @Test
@@ -225,7 +423,7 @@ class ProviderAdapterStreamTest {
         val deltas = mutableListOf<Pair<String, String>>()
 
         val end = ClaudeAdapter.stream(
-            provider = provider("claude"),
+            provider = provider("claude").copy(apiPath = "/custom/messages"),
             model = ModelInfo("claude-test"),
             messages = listOf(ApiMessage("user", "hello")),
             params = null,
@@ -242,6 +440,7 @@ class ProviderAdapterStreamTest {
         val raw = JSONArray(end.rawBlocks)
         assertEquals("sig", raw.getJSONObject(0).getString("signature"))
         assertTrue(raw.toString().contains("tool_use"))
+        assertTrue(server.takeRequest().requestLine.startsWith("POST /v1/custom/messages "))
     }
 
     private fun provider(type: String) = ApiProvider(
@@ -249,6 +448,26 @@ class ProviderAdapterStreamTest {
         baseUrl = server.url("/v1").toString().trimEnd('/'),
         apiKey = "test-key",
     )
+
+    private fun xaiImageModel() = ModelInfo(
+        "grok-imagine-image-2.0",
+        inputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+        outputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+    )
+
+    private fun enqueueGeneratedImage() {
+        val encoded = Base64.getEncoder().encodeToString(byteArrayOf(
+            0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        ))
+        server.enqueue(
+            MockResponse.Builder()
+                .addHeader("Content-Type", "application/json")
+                .body(JSONObject().put("data", JSONArray().put(
+                    JSONObject().put("b64_json", encoded),
+                )).toString())
+                .build(),
+        )
+    }
 
     private fun enqueueSse(vararg events: String) {
         val body = events.joinToString("\n\n") { "data: $it" } + "\n\n"

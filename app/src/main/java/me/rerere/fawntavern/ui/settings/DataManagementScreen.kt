@@ -52,6 +52,7 @@ import com.composables.icons.lucide.Database
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircle
 import com.composables.icons.lucide.Package
+import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.SlidersHorizontal
 import com.composables.icons.lucide.Smile
 import com.composables.icons.lucide.Trash2
@@ -156,6 +157,14 @@ fun DataManagementScreen(
                 labelResId = R.string.chat_history,
                 icon = {
                     Icon(Lucide.MessageCircle, null, Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                },
+            ),
+            DataCategory(
+                key = DataCategoryKey.SYSTEM_LOGS,
+                labelResId = R.string.system_log,
+                icon = {
+                    Icon(Lucide.ScrollText, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
             ),

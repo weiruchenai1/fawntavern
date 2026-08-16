@@ -1,7 +1,5 @@
 package me.rerere.fawntavern.ui.settings
 
-import android.content.ClipData
-import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -15,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -34,7 +33,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Lucide
@@ -42,11 +40,11 @@ import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.Trash2
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.core.diagnostics.CrashReportStore
+import me.rerere.fawntavern.core.diagnostics.SafeLog
 import me.rerere.fawntavern.data.diagnostics.RemoteDiagnostics
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
-import java.io.File
 
 @Composable
 fun CrashReportScreen(onBack: () -> Unit) {
@@ -62,6 +60,8 @@ fun CrashReportScreen(onBack: () -> Unit) {
     }
     var reportExpanded by remember { mutableStateOf(false) }
     var showClearConfirmation by remember { mutableStateOf(false) }
+    val safeLogCount = remember { SafeLog.snapshot().size }
+    var includeSafeLogs by remember { mutableStateOf(safeLogCount > 0) }
     BackHandler(onBack = onBack)
 
     SettingsSubPage(stringResource(R.string.crash_feedback), onBack) {
@@ -146,29 +146,50 @@ fun CrashReportScreen(onBack: () -> Unit) {
                 }
             }
             Row(
+                modifier = Modifier.fillMaxWidth()
+                    .clickable(enabled = safeLogCount > 0) {
+                        includeSafeLogs = !includeSafeLogs
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = includeSafeLogs,
+                    enabled = safeLogCount > 0,
+                    onCheckedChange = { includeSafeLogs = it },
+                )
+                Text(
+                    stringResource(R.string.crash_feedback_include_safe_logs, safeLogCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (safeLogCount > 0) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Space8),
             ) {
                 Button(
                     onClick = {
                         runCatching {
-                            val shareDirectory = File(context.cacheDir, "shared-diagnostics").apply { mkdirs() }
-                            val reportFile = File(shareDirectory, "FawnTavern-crash-report.txt").apply {
-                                writeText(currentReport)
+                            val safeLogs = if (includeSafeLogs) SafeLog.snapshot() else emptyList()
+                            val shareContent = buildString {
+                                append(currentReport.trimEnd())
+                                if (safeLogs.isNotEmpty()) {
+                                    appendLine()
+                                    appendLine()
+                                    append(SafeLog.format(safeLogs))
+                                }
                             }
-                            val uri = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                reportFile,
+                            shareDiagnosticsText(
+                                context = context,
+                                fileName = "FawnTavern-crash-report.txt",
+                                content = shareContent,
+                                subject = reportSubject,
+                                chooserTitle = shareLabel,
                             )
-                            val send = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_SUBJECT, reportSubject)
-                                putExtra(Intent.EXTRA_STREAM, uri)
-                                clipData = ClipData.newUri(context.contentResolver, reportSubject, uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            context.startActivity(Intent.createChooser(send, shareLabel))
                         }.onFailure {
                             Toast.makeText(
                                 context,

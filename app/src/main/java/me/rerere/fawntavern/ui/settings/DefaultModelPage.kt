@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -282,7 +283,10 @@ private fun PromptSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = Space16).padding(bottom = Space16),
+            Modifier.fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = Space16)
+                .padding(bottom = Space16),
             verticalArrangement = Arrangement.spacedBy(Space12),
         ) {
             Text(title, style = MaterialTheme.typography.titleSmall,

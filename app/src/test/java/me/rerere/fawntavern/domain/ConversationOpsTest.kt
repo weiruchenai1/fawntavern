@@ -43,10 +43,11 @@ class ConversationOpsTest {
         val message = ChatMessage(
             role = "assistant",
             images = listOf("attachments/first.png"),
+            imageAspectRatio = "16:9",
             altIdx = 0,
             alts = listOf(
-                MsgAlt(images = listOf("attachments/stale.png")),
-                MsgAlt(images = listOf("attachments/second.png")),
+                MsgAlt(images = listOf("attachments/stale.png"), imageAspectRatio = "1:1"),
+                MsgAlt(images = listOf("attachments/second.png"), imageAspectRatio = "9:16"),
             ),
         )
 
@@ -54,7 +55,9 @@ class ConversationOpsTest {
 
         requireNotNull(switched)
         assertEquals(listOf("attachments/first.png"), switched.alts[0].images)
+        assertEquals("16:9", switched.alts[0].imageAspectRatio)
         assertEquals(listOf("attachments/second.png"), switched.images)
+        assertEquals("9:16", switched.imageAspectRatio)
     }
 
     @Test

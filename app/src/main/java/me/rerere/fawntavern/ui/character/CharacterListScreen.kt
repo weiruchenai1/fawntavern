@@ -57,7 +57,6 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.FilePlus
 import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.GripVertical
@@ -114,8 +113,6 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     var selectedChar by remember { mutableStateOf<CharacterCard?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }
     var newCharacterName by remember { mutableStateOf("") }
-    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingImportName by remember { mutableStateOf("") }
 
     var longPressName by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
@@ -147,31 +144,18 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
 
     LaunchedEffect(Unit) { refresh() }
 
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        pendingImportUri = uri
-        pendingImportName = uri?.lastPathSegment?.substringAfterLast('/') ?: uri?.toString().orEmpty()
-    }
-
     fun dismissAddSheet() {
         showAddSheet = false
         newCharacterName = ""
-        pendingImportUri = null
-        pendingImportName = ""
     }
 
     fun saveNewCharacter() {
-        val uri = pendingImportUri
         val name = newCharacterName.trim()
-        if (uri == null && name.isBlank()) return
+        if (name.isBlank()) return
         scope.launch {
             try {
-                if (uri != null) {
-                    controller.import(uri)
-                    Toast.makeText(context, resources.getString(R.string.character_imported), Toast.LENGTH_SHORT).show()
-                } else {
-                    controller.create(name)
-                    Toast.makeText(context, resources.getString(R.string.character_created), Toast.LENGTH_SHORT).show()
-                }
+                controller.create(name)
+                Toast.makeText(context, resources.getString(R.string.character_created), Toast.LENGTH_SHORT).show()
                 dismissAddSheet()
                 refresh()
             } catch (error: Exception) {
@@ -180,10 +164,30 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
         }
     }
 
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            try {
+                controller.import(uri)
+                Toast.makeText(context, resources.getString(R.string.character_imported), Toast.LENGTH_SHORT).show()
+                dismissAddSheet()
+                refresh()
+            } catch (error: Exception) {
+                Toast.makeText(
+                    context,
+                    resources.getString(R.string.char_save_failed_fmt, error.message.orEmpty()),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+
     if (showAddSheet) {
         ModalBottomSheet(onDismissRequest = ::dismissAddSheet) {
             Column(
-                Modifier.fillMaxWidth().imePadding().padding(horizontal = Space16, bottom = Space16),
+                Modifier.fillMaxWidth().imePadding()
+                    .padding(horizontal = Space16)
+                    .padding(bottom = Space16),
                 verticalArrangement = Arrangement.spacedBy(Space12),
             ) {
                 Text(stringResource(R.string.add_character), style = MaterialTheme.typography.titleMedium)
@@ -202,13 +206,6 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                     Spacer(Modifier.width(Space8))
                     Text(stringResource(R.string.import_character_card))
                 }
-                if (pendingImportUri != null) {
-                    Text(
-                        stringResource(R.string.selected_file_fmt, pendingImportName),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Space8),
@@ -219,7 +216,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                     }
                     Button(
                         onClick = ::saveNewCharacter,
-                        enabled = pendingImportUri != null || newCharacterName.isNotBlank(),
+                        enabled = newCharacterName.isNotBlank(),
                         modifier = Modifier.weight(1f),
                     ) {
                         Text(stringResource(R.string.save))

@@ -91,6 +91,14 @@ private fun PresetCard(
     onClick: () -> Unit,
     onLongPress: () -> Unit,
 ) {
+    val summary = buildString {
+        if (model.isNotBlank()) append(model)
+        if (promptCount > 0) {
+            if (model.isNotBlank()) append(" · ")
+            append(androidx.compose.ui.res.pluralStringResource(R.plurals.prompts_count_fmt, promptCount, promptCount))
+        }
+    }
+
     Row(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
@@ -103,18 +111,14 @@ private fun PresetCard(
             Text(name, style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                text = buildString {
-                    if (model.isNotBlank()) append(model)
-                    if (promptCount > 0) {
-                        if (model.isNotBlank()) append(" · ")
-                        append(androidx.compose.ui.res.pluralStringResource(R.plurals.prompts_count_fmt, promptCount, promptCount))
-                    }
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+            if (summary.isNotBlank()) {
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         Icon(Lucide.ChevronRight, null, Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant)

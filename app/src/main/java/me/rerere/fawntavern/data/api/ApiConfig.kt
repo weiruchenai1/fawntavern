@@ -5,6 +5,7 @@ data class ApiProvider(
     val name: String = "",
     val type: String = "openai",  // openai, google, claude
     val baseUrl: String = "",
+    val apiPath: String = "",
     val apiKey: String = "",
     val enabled: Boolean = true,
     val useResponseApi: Boolean = false,    // OpenAI Responses API (/responses)

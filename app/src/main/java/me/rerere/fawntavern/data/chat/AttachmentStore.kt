@@ -12,6 +12,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.api.GeneratedImage
 
+data class PersistedGeneratedImage(
+    val path: String,
+    val aspectRatio: String?,
+)
+
 /**
  * 附件落盘：发送时把 content URI 指向的内容拷入 filesDir/attachments/，
  * 返回 filesDir 相对路径存进 [ChatMessage] —— URI 的读权限是临时的，重启后失效，
@@ -63,7 +68,7 @@ object AttachmentStore {
     }
 
     /** 将图片生成接口返回的内容保存为聊天图片附件。 */
-    suspend fun persistGeneratedImage(context: Context, image: GeneratedImage): String? =
+    suspend fun persistGeneratedImage(context: Context, image: GeneratedImage): PersistedGeneratedImage? =
         withContext(Dispatchers.IO) {
             if (image.bytes.isEmpty()) return@withContext null
             val extension = when (image.mimeType.lowercase().substringBefore(';')) {
@@ -76,12 +81,36 @@ object AttachmentStore {
             val out = File(dir(context), name)
             try {
                 out.writeBytes(image.bytes)
-                "$DIR/$name"
+                PersistedGeneratedImage(
+                    path = "$DIR/$name",
+                    aspectRatio = generatedImageAspectRatio(image.bytes),
+                )
             } catch (_: Exception) {
                 out.delete()
                 null
             }
         }
+
+    private fun generatedImageAspectRatio(bytes: ByteArray): String? {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        val width = options.outWidth
+        val height = options.outHeight
+        if (width <= 0 || height <= 0) return null
+        val divisor = greatestCommonDivisor(width, height)
+        return "${width / divisor}:${height / divisor}"
+    }
+
+    private fun greatestCommonDivisor(a: Int, b: Int): Int {
+        var left = a
+        var right = b
+        while (right != 0) {
+            val remainder = left % right
+            left = right
+            right = remainder
+        }
+        return left.coerceAtLeast(1)
+    }
 
     /** 其它文件：原样拷贝，返回 (原始文件名, filesDir 相对路径)；过大或读取失败返回 null */
     suspend fun persistFile(context: Context, uri: Uri): MsgFile? = withContext(Dispatchers.IO) {

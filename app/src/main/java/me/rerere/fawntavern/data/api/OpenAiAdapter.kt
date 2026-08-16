@@ -16,7 +16,7 @@ internal object OpenAiAdapter : ProviderAdapter {
         stopped: () -> Unit, onCall: (okhttp3.Call) -> Unit,
     ): StreamEnd {
         if (isImageGenerationModel(model)) {
-            return generateImages(provider, model, messages, stopped, onCall)
+            return generateImages(provider, model, messages, params, stopped, onCall)
         }
         if (provider.useResponseApi) {
             return OpenAiResponsesAdapter.stream(
@@ -55,7 +55,7 @@ internal object OpenAiAdapter : ProviderAdapter {
         var promptTokens = 0
         var completionTokens = 0
         SseClient.post(
-            url = "${provider.baseUrl.trimEnd('/')}/chat/completions",
+            url = provider.apiEndpoint("/chat/completions"),
             headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
             body = body,
             stopped = stopped,
@@ -100,17 +100,43 @@ internal object OpenAiAdapter : ProviderAdapter {
         provider: ApiProvider,
         model: ModelInfo,
         messages: List<ApiMessage>,
+        params: GenParams?,
         stopped: () -> Unit,
         onCall: (okhttp3.Call) -> Unit,
     ): StreamEnd {
         val prompt = imageGenerationPrompt(messages)
         require(prompt.isNotBlank()) { "Image generation requires a text prompt" }
-        val body = JSONObject()
-            .put("model", model.id)
-            .put("prompt", prompt)
-            .apply { applyCustomBodies(model) }
+        val xaiImageModel = isXaiImageModel(provider, model)
+        val sourceImages = imageEditSources(messages)
+        require(!xaiImageModel || sourceImages.size <= MAX_XAI_EDIT_IMAGES) {
+            "xAI image editing supports at most $MAX_XAI_EDIT_IMAGES source images"
+        }
+        val body = JSONObject().apply {
+            put("model", model.id)
+            put("prompt", prompt)
+            if (xaiImageModel) {
+                val settings = params?.imageGeneration
+                settings?.count?.let { put("n", it) }
+                settings?.aspectRatio
+                    ?.takeUnless { it.equals("auto", ignoreCase = true) }
+                    ?.let { put("aspect_ratio", it) }
+                settings?.resolution?.let { put("resolution", it) }
+                if (sourceImages.isNotEmpty()) {
+                    val encoded = sourceImages.map(::encodeXaiEditImage)
+                    if (encoded.size == 1) put("image", encoded.single())
+                    else put("images", JSONArray(encoded))
+                }
+            }
+            // Per-model custom fields intentionally win over values inferred from the prompt.
+            applyCustomBodies(model)
+            // xAI 的临时图片 URL 可能被资源服务器拒绝；直接返回 base64，避免二次下载。
+            if (xaiImageModel) put("response_format", "b64_json")
+        }
         val response = SseClient.postJson(
-            url = "${provider.baseUrl.trimEnd('/')}/images/generations",
+            url = provider.apiEndpoint(
+                if (xaiImageModel && sourceImages.isNotEmpty()) "/images/edits"
+                else "/images/generations",
+            ),
             headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
             body = body,
             stopped = stopped,
@@ -153,9 +179,22 @@ internal object OpenAiAdapter : ProviderAdapter {
     internal fun isImageGenerationModel(model: ModelInfo): Boolean =
         Modality.IMAGE in model.outputModalities
 
+    /** 图片生成提示词保持用户原文；数量、比例和分辨率仅由设置面板控制。 */
     internal fun imageGenerationPrompt(messages: List<ApiMessage>): String =
         messages.lastOrNull { it.role == "user" && it.content.isNotBlank() }?.content
             ?: messages.lastOrNull { it.content.isNotBlank() }?.content.orEmpty()
+
+    internal fun imageEditSources(messages: List<ApiMessage>): List<ApiImage> =
+        messages.lastOrNull { it.role == "user" }?.images.orEmpty()
+
+    private fun encodeXaiEditImage(image: ApiImage): JSONObject = JSONObject()
+        .put("url", "data:${image.mimeType};base64,${image.base64}")
+        .put("type", "image_url")
+
+    private fun isXaiImageModel(provider: ApiProvider, model: ModelInfo): Boolean =
+        model.id.startsWith("grok-imagine-image", ignoreCase = true) ||
+            runCatching { java.net.URI(provider.baseUrl).host?.endsWith("x.ai", ignoreCase = true) == true }
+                .getOrDefault(false)
 
     internal fun parseGeneratedImages(
         response: JSONObject,
@@ -201,6 +240,7 @@ internal object OpenAiAdapter : ProviderAdapter {
     private const val MAX_GENERATED_IMAGE_BYTES = 25 * 1024 * 1024
     private const val MAX_GENERATED_IMAGE_BASE64_CHARS =
         ((MAX_GENERATED_IMAGE_BYTES + 2) / 3) * 4
+    private const val MAX_XAI_EDIT_IMAGES = 3
 
     /**
      * 思考预算：OpenAI 兼容阵营各家字段互不相同（无统一标准），按 baseUrl 主机名分流；

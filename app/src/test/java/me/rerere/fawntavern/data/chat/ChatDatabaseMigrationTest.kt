@@ -35,7 +35,7 @@ class ChatDatabaseMigrationTest {
     }
 
     @Test
-    fun migration9To10PreservesSessionsAndMessages() {
+    fun migration9To11PreservesSessionsAndMessages() {
         createVersion9Database().use { helper ->
             helper.writableDatabase.apply {
                 execSQL(
@@ -52,13 +52,14 @@ class ChatDatabaseMigrationTest {
         }
 
         val migrated = Room.databaseBuilder(context, ChatDatabase::class.java, TEST_DATABASE)
-            .addMigrations(ChatDatabase.MIGRATION_9_10)
+            .addMigrations(ChatDatabase.MIGRATION_9_10, ChatDatabase.MIGRATION_10_11)
             .allowMainThreadQueries()
             .build()
         try {
             val session = runBlocking { migrated.dao().getSession("session-1") }
             assertEquals("Existing chat", session?.session?.title)
             assertEquals(listOf("Keep me"), session?.messages?.map(MessageEntity::content))
+            assertEquals(listOf("2:3"), session?.messages?.map(MessageEntity::imageAspectRatio))
         } finally {
             migrated.close()
         }

@@ -13,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,15 +37,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
@@ -72,6 +76,8 @@ internal fun ImagePreviewDialog(model: Any, onDismiss: () -> Unit) {
     var isSaving by remember(model) { mutableStateOf(false) }
     var scale by remember(model) { mutableFloatStateOf(1f) }
     var offset by remember(model) { mutableStateOf(Offset.Zero) }
+    var viewportSize by remember(model) { mutableStateOf(IntSize.Zero) }
+    var imageAspectRatio by remember(model) { mutableFloatStateOf(1f) }
 
     val saveImage = {
         if (!isSaving) scope.launch {
@@ -107,26 +113,59 @@ internal fun ImagePreviewDialog(model: Any, onDismiss: () -> Unit) {
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            AsyncImage(
-                model = model,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = 88.dp)
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        translationX = offset.x
-                        translationY = offset.y
-                    }
-                    .pointerInput(model) {
-                        detectTransformGestures { _, pan, zoom, _ ->
-                            val newScale = (scale * zoom).coerceIn(1f, 5f)
-                            scale = newScale
-                            offset = if (newScale == 1f) Offset.Zero else offset + pan
+            Box(
+                Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 88.dp)
+                    .clipToBounds()
+                    .onSizeChanged { size ->
+                        viewportSize = size
+                        offset = clampImageOffset(offset, scale, size, imageAspectRatio)
+                    },
+            ) {
+                AsyncImage(
+                    model = model,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    onSuccess = { state ->
+                        val image = state.result.image
+                        if (image.width > 0 && image.height > 0) {
+                            imageAspectRatio = image.width.toFloat() / image.height
+                            offset = clampImageOffset(offset, scale, viewportSize, imageAspectRatio)
                         }
                     },
-            )
+                    modifier = Modifier.fillMaxSize()
+                        .pointerInput(model) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    val targetScale = if (scale > 1f) 1f else 2.5f
+                                    scale = targetScale
+                                    offset = if (targetScale == 1f) {
+                                        Offset.Zero
+                                    } else {
+                                        clampImageOffset(offset, targetScale, viewportSize, imageAspectRatio)
+                                    }
+                                },
+                            )
+                        }
+                        .pointerInput(model) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                val newScale = (scale * zoom).coerceIn(1f, 5f)
+                                scale = newScale
+                                offset = clampImageOffset(
+                                    offset = if (newScale == 1f) Offset.Zero else offset + pan,
+                                    scale = newScale,
+                                    viewportSize = viewportSize,
+                                    imageAspectRatio = imageAspectRatio,
+                                )
+                            }
+                        }
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offset.x
+                            translationY = offset.y
+                        },
+                )
+            }
 
             IconButton(
                 onClick = onDismiss,
@@ -162,6 +201,35 @@ internal fun ImagePreviewDialog(model: Any, onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+private fun clampImageOffset(
+    offset: Offset,
+    scale: Float,
+    viewportSize: IntSize,
+    imageAspectRatio: Float,
+): Offset {
+    if (scale <= 1f || viewportSize.width <= 0 || viewportSize.height <= 0 || imageAspectRatio <= 0f) {
+        return Offset.Zero
+    }
+    val viewportWidth = viewportSize.width.toFloat()
+    val viewportHeight = viewportSize.height.toFloat()
+    val viewportAspectRatio = viewportWidth / viewportHeight
+    val imageWidth: Float
+    val imageHeight: Float
+    if (imageAspectRatio >= viewportAspectRatio) {
+        imageWidth = viewportWidth
+        imageHeight = viewportWidth / imageAspectRatio
+    } else {
+        imageWidth = viewportHeight * imageAspectRatio
+        imageHeight = viewportHeight
+    }
+    val maxOffsetX = ((imageWidth * scale - viewportWidth) / 2f).coerceAtLeast(0f)
+    val maxOffsetY = ((imageHeight * scale - viewportHeight) / 2f).coerceAtLeast(0f)
+    return Offset(
+        x = offset.x.coerceIn(-maxOffsetX, maxOffsetX),
+        y = offset.y.coerceIn(-maxOffsetY, maxOffsetY),
+    )
 }
 
 private suspend fun downloadPreviewImage(context: Context, model: Any): Boolean {

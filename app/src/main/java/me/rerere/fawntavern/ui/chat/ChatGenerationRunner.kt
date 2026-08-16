@@ -7,6 +7,7 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.BuiltInTool
+import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
@@ -37,6 +38,7 @@ internal class ChatGenerationRunner(
         val preset: StPreset?,
         val promptRegex: List<CharRegex>,
         val reasoning: ReasoningLevel,
+        val imageGeneration: ImageGenerationSettings,
         val searchEnabled: Boolean,
     )
 
@@ -62,7 +64,7 @@ internal class ChatGenerationRunner(
             plan.message.copy(searches = emptyList())
         } else {
             plan.message
-        }
+        }.copy(imageAspectRatio = request.imageGeneration.aspectRatio)
         onStarted(base, generationMessage)
 
         val builtInSearch = request.provider.model(request.modelId)
@@ -87,6 +89,10 @@ internal class ChatGenerationRunner(
                 generationMessage = plan.message,
                 commitVariables = commitVariables,
             )
+        )
+        val built = assembled.built.copy(
+            genParams = assembled.built.genParams?.copy(imageGeneration = request.imageGeneration)
+                ?: me.rerere.fawntavern.data.api.GenParams(imageGeneration = request.imageGeneration),
         )
         val variableState = assembled.variableState
         val localChanged = commitVariables && variableState.localChanged()
@@ -115,7 +121,7 @@ internal class ChatGenerationRunner(
                 genMessage = generationMessage,
                 provider = request.provider,
                 modelId = request.modelId,
-                built = assembled.built,
+                built = built,
                 streaming = request.card?.streaming ?: true,
                 tools = if (useSearchTool) listOf(searchTool.spec()) else emptyList(),
                 toolExecutor = if (useSearchTool) searchTool.executor() else null,

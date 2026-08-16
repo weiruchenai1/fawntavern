@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.ui.settings
 
+import android.content.ClipData
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -28,23 +29,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.Bug
 import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.RefreshCw
+import com.composables.icons.lucide.ScrollText
+import com.composables.icons.lucide.Share2
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -58,6 +65,7 @@ import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
+import kotlinx.coroutines.launch
 
 @Composable
 fun LogsScreen(
@@ -72,11 +80,10 @@ fun LogsScreen(
                 .background(MaterialTheme.colorScheme.surfaceContainer),
         ) {
             LogNavigationRow(
-                icon = Lucide.Bug,
+                icon = Lucide.ScrollText,
                 label = stringResource(R.string.system_log),
                 onClick = onOpenSystemLog,
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             LogNavigationRow(
                 icon = Lucide.FileText,
                 label = stringResource(R.string.debug_log),
@@ -89,11 +96,12 @@ fun LogsScreen(
 @Composable
 private fun LogNavigationRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(Space12),
+        Modifier.fillMaxWidth().clickable(onClick = onClick)
+            .padding(horizontal = Space12, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.width(Space16))
+        Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(Space12))
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium,
@@ -103,7 +111,7 @@ private fun LogNavigationRow(icon: ImageVector, label: String, onClick: () -> Un
         Icon(
             Lucide.ChevronRight,
             null,
-            Modifier.size(24.dp),
+            Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -111,6 +119,11 @@ private fun LogNavigationRow(icon: ImageVector, label: String, onClick: () -> Un
 
 @Composable
 fun SystemLogScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val shareTitle = stringResource(R.string.share)
+    val shareSubject = stringResource(R.string.system_log_share_subject)
     var revision by remember { mutableIntStateOf(0) }
     val entries = remember(revision) { SafeLog.snapshot() }
     BackHandler(onBack = onBack)
@@ -142,6 +155,43 @@ fun SystemLogScreen(onBack: () -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 if (entries.isNotEmpty()) {
+                    AppIconButton(
+                        icon = Lucide.Copy,
+                        contentDescription = stringResource(R.string.copy),
+                        onClick = {
+                            scope.launch {
+                                clipboard.setClipEntry(
+                                    ClipEntry(ClipData.newPlainText("system log", SafeLog.format(entries))),
+                                )
+                            }
+                            Toast.makeText(context, R.string.copied, Toast.LENGTH_SHORT).show()
+                        },
+                        size = 32.dp,
+                        iconSize = 20.dp,
+                    )
+                    AppIconButton(
+                        icon = Lucide.Share2,
+                        contentDescription = shareTitle,
+                        onClick = {
+                            runCatching {
+                                shareDiagnosticsText(
+                                    context = context,
+                                    fileName = "FawnTavern-system-log.txt",
+                                    content = SafeLog.format(entries),
+                                    subject = shareSubject,
+                                    chooserTitle = shareTitle,
+                                )
+                            }.onFailure {
+                                Toast.makeText(
+                                    context,
+                                    R.string.system_log_share_failed,
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        },
+                        size = 32.dp,
+                        iconSize = 20.dp,
+                    )
                     TextButton(
                         onClick = {
                             SafeLog.clear()

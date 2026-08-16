@@ -1,10 +1,20 @@
 package me.rerere.fawntavern.data.api
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ApiConfigStoreTest {
+    @Test
+    fun portableConfigPreservesCustomApiPath() {
+        val config = ApiConfigStore.parsePortable(
+            """{"formatVersion":1,"providers":[{"id":"provider","name":"Gateway","type":"openai","baseUrl":"https://example.com/v1","apiPath":"/custom/chat","enabled":true,"models":[]}],"currentModel":""}""",
+        )
+
+        assertEquals("/custom/chat", config.providers.single().apiPath)
+    }
+
     @Test
     fun portableConfigPreservesResponsesApiSetting() {
         val config = ApiConfigStore.parsePortable(

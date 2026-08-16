@@ -9,7 +9,9 @@ import me.rerere.fawntavern.data.api.GeneratedImage
 import me.rerere.fawntavern.data.api.StreamEnd
 import me.rerere.fawntavern.data.api.ToolSpec
 import me.rerere.fawntavern.data.chat.ChatMessage
+import me.rerere.fawntavern.data.chat.MsgAlt
 import me.rerere.fawntavern.data.chat.MsgSearch
+import me.rerere.fawntavern.data.chat.PersistedGeneratedImage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -90,16 +92,49 @@ class GenerationControllerTest {
 
         val result = GenerationController(client).run(
             apiMessages = listOf(ApiMessage("user", "draw")),
-            genMessage = ChatMessage(role = "assistant"),
+            genMessage = ChatMessage(
+                role = "assistant",
+                imageAspectRatio = "16:9",
+                alts = listOf(MsgAlt()),
+            ),
             provider = ApiProvider(id = "provider"),
             modelId = "image-model",
             built = PromptBuilder.Built(),
             streaming = false,
-            persistGeneratedImage = { "attachments/generated.png" },
+            persistGeneratedImage = { PersistedGeneratedImage("attachments/generated.png", "4:3") },
             errorText = { it.message.orEmpty() },
             onUpdate = {},
         )
 
         assertEquals(listOf("attachments/generated.png"), result.images)
+        assertEquals(listOf("attachments/generated.png"), result.alts.single().images)
+        assertEquals("16:9", result.alts.single().imageAspectRatio)
+    }
+
+    @Test
+    fun automaticImageSizeUsesPersistedImageAspectRatio() = runBlocking {
+        val image = GeneratedImage(byteArrayOf(1, 2, 3), "image/png")
+        val client = GenerationStreamClient { _, _, _, _, _, _, _ ->
+            StreamEnd(generatedImages = listOf(image))
+        }
+
+        val result = GenerationController(client).run(
+            apiMessages = listOf(ApiMessage("user", "draw")),
+            genMessage = ChatMessage(
+                role = "assistant",
+                imageAspectRatio = "auto",
+                alts = listOf(MsgAlt()),
+            ),
+            provider = ApiProvider(id = "provider"),
+            modelId = "image-model",
+            built = PromptBuilder.Built(),
+            streaming = false,
+            persistGeneratedImage = { PersistedGeneratedImage("attachments/generated.png", "3:2") },
+            errorText = { it.message.orEmpty() },
+            onUpdate = {},
+        )
+
+        assertEquals("3:2", result.imageAspectRatio)
+        assertEquals("3:2", result.alts.single().imageAspectRatio)
     }
 }

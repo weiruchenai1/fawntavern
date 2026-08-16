@@ -6,6 +6,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.api.SseClient.strOr
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -74,7 +75,7 @@ object ConnectionTester {
             }
             applyCustomBodies(model)
         }
-        val resp = post("${provider.baseUrl.trimEnd('/')}/chat/completions",
+        val resp = post(provider.apiEndpoint("/chat/completions"),
             model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")), body)
         val msg = resp.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")
         val fn = msg?.optJSONArray("tool_calls")?.optJSONObject(0)?.optJSONObject("function")
@@ -139,7 +140,13 @@ object ConnectionTester {
             applyCustomBodies(model)
         }
         val resp = post(
-            "${provider.baseUrl.trimEnd('/')}/models/${model.id}:generateContent",
+            provider.apiEndpoint("/models/{model}:generateContent", model.id)
+                .replace(":streamGenerateContent", ":generateContent")
+                .toHttpUrl()
+                .newBuilder()
+                .removeAllQueryParameters("alt")
+                .build()
+                .toString(),
             model.applyHeaders(mapOf("x-goog-api-key" to provider.apiKey)),
             body,
         )
@@ -175,7 +182,7 @@ object ConnectionTester {
             }
             applyCustomBodies(model)
         }
-        val resp = post("${provider.baseUrl.trimEnd('/')}/messages",
+        val resp = post(provider.apiEndpoint("/messages"),
             model.applyHeaders(mapOf(
                 "x-api-key" to provider.apiKey,
                 "anthropic-version" to "2023-06-01",

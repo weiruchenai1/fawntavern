@@ -3,6 +3,7 @@ package me.rerere.fawntavern.ui.chat
 import me.rerere.fawntavern.data.api.ApiConfig
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ModelInfo
+import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -63,6 +64,7 @@ class ChatModelControllerTest {
         val characterModels = mutableMapOf<String, String>()
         var defaultModel = ""
         val reasoningByModel = mutableMapOf<String, ReasoningLevel>()
+        val imageGenerationByModel = mutableMapOf<String, ImageGenerationSettings>()
 
         override fun characterModel(characterName: String): String = characterModels[characterName].orEmpty()
         override fun saveCharacterModel(characterName: String, modelSpec: String) {
@@ -74,6 +76,11 @@ class ChatModelControllerTest {
             reasoningByModel[modelSpec] ?: ReasoningLevel.AUTO
         override fun saveReasoning(modelSpec: String, level: ReasoningLevel) {
             reasoningByModel[modelSpec] = level
+        }
+        override fun imageGeneration(modelSpec: String): ImageGenerationSettings =
+            imageGenerationByModel[modelSpec] ?: ImageGenerationSettings()
+        override fun saveImageGeneration(modelSpec: String, settings: ImageGenerationSettings) {
+            imageGenerationByModel[modelSpec] = settings
         }
     }
 

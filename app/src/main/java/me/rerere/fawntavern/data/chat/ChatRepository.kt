@@ -272,6 +272,7 @@ object ChatRepository {
         altIdx = altIdx,
         images = if (imagesJson.isBlank()) emptyList()
                  else try { json.decodeFromString<List<String>>(imagesJson) } catch (_: Exception) { emptyList() },
+        imageAspectRatio = imageAspectRatio,
         files = if (filesJson.isBlank()) emptyList()
                 else try { json.decodeFromString<List<MsgFile>>(filesJson) } catch (_: Exception) { emptyList() },
         // 列格式为 List<MsgSearch> JSON；早期开发版存过单对象，解码失败时按单对象兜底
@@ -295,6 +296,7 @@ object ChatRepository {
         altIdx = altIdx,
         altsJson = if (alts.isEmpty()) "" else json.encodeToString(alts),
         imagesJson = if (images.isEmpty()) "" else json.encodeToString(images),
+        imageAspectRatio = imageAspectRatio,
         filesJson = if (files.isEmpty()) "" else json.encodeToString(files),
         searchJson = if (searches.isEmpty()) "" else json.encodeToString(searches),
         promptTokens = promptTokens,

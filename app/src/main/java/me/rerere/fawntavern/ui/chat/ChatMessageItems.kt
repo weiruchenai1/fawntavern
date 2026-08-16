@@ -225,16 +225,22 @@ internal fun AIMsg(
             markdown = thinkingMarkdown,
             renderPrefs = renderPrefs,
         )
-        MessageContent(
-            content = msg.content,
-            isStreaming = isStreaming,
-            textStyle = textStyle,
-            regexScripts = regexScripts,
-            depth = depth,
-            userName = userName,
-            charName = charName,
-            renderPrefs = renderPrefs,
-        )
+        GeneratedImageRow(images = msg.images, aspectRatio = msg.imageAspectRatio)
+        if (msg.files.isNotEmpty()) {
+            MessageAttachmentRow(images = emptyList(), files = msg.files)
+        }
+        if (msg.images.isEmpty()) {
+            MessageContent(
+                content = msg.content,
+                isStreaming = isStreaming,
+                textStyle = textStyle,
+                regexScripts = regexScripts,
+                depth = depth,
+                userName = userName,
+                charName = charName,
+                renderPrefs = renderPrefs,
+            )
+        }
         // 引用胶囊卡：流式结束后显示在正文之后，点击弹出来源列表。
         // 聚合本条消息全部搜索调用的结果，按 URL 去重（多次搜索可能命中同一页面）
         val citations = remember(msg.searches) {

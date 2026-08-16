@@ -13,6 +13,7 @@ import me.rerere.fawntavern.data.api.GeneratedImage
 import me.rerere.fawntavern.data.api.StreamEnd
 import me.rerere.fawntavern.data.api.ToolSpec
 import me.rerere.fawntavern.data.chat.ChatMessage
+import me.rerere.fawntavern.data.chat.PersistedGeneratedImage
 import me.rerere.fawntavern.data.chat.MsgSearch
 
 /**
@@ -73,7 +74,7 @@ internal class GenerationController(
         streaming: Boolean,
         tools: List<ToolSpec> = emptyList(),
         toolExecutor: ToolExecutor? = null,
-        persistGeneratedImage: suspend (GeneratedImage) -> String? = { null },
+        persistGeneratedImage: suspend (GeneratedImage) -> PersistedGeneratedImage? = { null },
         errorText: (Exception) -> String,
         onUpdate: (ChatMessage) -> Unit,
     ): ChatMessage = coroutineScope {
@@ -170,10 +171,17 @@ internal class GenerationController(
                     PromptBuilder.estTokens(roundReasoning)
                 completionTokens += end.completionTokens.takeIf { it > 0 } ?: estimatedOutput
                 end.generatedImages.forEach { image ->
-                    val path = persistGeneratedImage(image)
+                    val persisted = persistGeneratedImage(image)
                         ?: throw IllegalStateException("Failed to save generated image")
-                    generatedImages = generatedImages + path
-                    cur = cur.copy(images = generatedImages)
+                    generatedImages = generatedImages + persisted.path
+                    cur = cur.copy(
+                        images = generatedImages,
+                        imageAspectRatio = if (cur.imageAspectRatio.equals("auto", ignoreCase = true)) {
+                            persisted.aspectRatio ?: cur.imageAspectRatio
+                        } else {
+                            cur.imageAspectRatio
+                        },
+                    )
                     onUpdate(cur)
                 }
                 countedContentChars = synchronized(lock) { buf.length }
@@ -261,7 +269,7 @@ internal class GenerationController(
             alts[cur.altIdx] = alts[cur.altIdx].copy(
                 content = cur.content, reasoning = cur.reasoning,
                 model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
-                images = cur.images,
+                images = cur.images, imageAspectRatio = cur.imageAspectRatio,
                 promptTokens = cur.promptTokens, completionTokens = cur.completionTokens,
                 generationMs = cur.generationMs)
             cur = cur.copy(alts = alts)

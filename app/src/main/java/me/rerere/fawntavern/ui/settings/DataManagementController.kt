@@ -7,12 +7,13 @@ import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
+import me.rerere.fawntavern.core.diagnostics.SafeLog
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.Locale
 
-internal enum class DataCategoryKey { CHARACTERS, PRESETS, WORLDBOOKS, CHATS }
+internal enum class DataCategoryKey { CHARACTERS, PRESETS, WORLDBOOKS, CHATS, SYSTEM_LOGS }
 
 internal data class DataCategoryInfo(
     val key: DataCategoryKey,
@@ -51,11 +52,20 @@ internal class AndroidDataManagementDataSource(
     override suspend fun snapshot(): DataManagementSnapshot = DataManagementSnapshot(
         categories = DataCategoryKey.entries.map { key ->
             val dir = directory(key)
+            val sizeBytes = if (key == DataCategoryKey.SYSTEM_LOGS) {
+                SafeLog.storageSizeBytes()
+            } else {
+                dir?.let(::directorySize) ?: 0L
+            }
             DataCategoryInfo(
                 key = key,
                 itemCount = itemCount(key),
-                sizeBytes = dir?.let(::directorySize) ?: 0L,
-                fileCount = dir?.listFiles()?.size ?: 0,
+                sizeBytes = sizeBytes,
+                fileCount = if (key == DataCategoryKey.SYSTEM_LOGS) {
+                    if (sizeBytes > 0) 1 else 0
+                } else {
+                    dir?.listFiles()?.size ?: 0
+                },
             )
         },
         apiCount = ApiConfigStore.loadConfig(context).providers.size,
@@ -67,6 +77,7 @@ internal class AndroidDataManagementDataSource(
             DataCategoryKey.PRESETS -> PresetRepository.clear(context)
             DataCategoryKey.WORLDBOOKS -> WorldBookRepository.clear(context)
             DataCategoryKey.CHATS -> ChatRepository.clear(context)
+            DataCategoryKey.SYSTEM_LOGS -> SafeLog.clear()
         }
     }
 
@@ -109,6 +120,7 @@ internal class AndroidDataManagementDataSource(
         DataCategoryKey.PRESETS -> PresetRepository.listNames(context).size
         DataCategoryKey.WORLDBOOKS -> WorldBookRepository.listNames(context).size
         DataCategoryKey.CHATS -> ChatRepository.count(context)
+        DataCategoryKey.SYSTEM_LOGS -> SafeLog.snapshot().size
     }
 
     private fun directory(key: DataCategoryKey): File? = when (key) {
@@ -116,6 +128,7 @@ internal class AndroidDataManagementDataSource(
         DataCategoryKey.PRESETS -> PresetRepository.presetsDir(context)
         DataCategoryKey.WORLDBOOKS -> WorldBookRepository.worldDir(context)
         DataCategoryKey.CHATS -> ChatRepository.storageDir(context)
+        DataCategoryKey.SYSTEM_LOGS -> null
     }
 }
 

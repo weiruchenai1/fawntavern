@@ -21,8 +21,6 @@ internal fun settledOverlayTimestamps(
     generationTargetTs: Long?,
 ): List<Long> = overlays.values.filter { overlay ->
     !(generating && overlay.ts == generationTargetTs) && base.any { persisted ->
-        persisted.ts == overlay.ts &&
-            persisted.content == overlay.content &&
-            persisted.reasoning == overlay.reasoning
+        persisted == overlay
     }
 }.map { it.ts }

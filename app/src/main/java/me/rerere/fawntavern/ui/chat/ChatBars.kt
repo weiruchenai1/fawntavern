@@ -114,6 +114,7 @@ internal fun ChatBottomArea(
     onSend: () -> Unit,
     currentModelId: String = "",
     reasoning: ReasoningLevel = ReasoningLevel.AUTO,
+    imageGenerationEnabled: Boolean = false,
     generating: Boolean = false,
     searchEnabled: Boolean = false,
     searchProvider: String = "",
@@ -121,6 +122,7 @@ internal fun ChatBottomArea(
     onStop: () -> Unit = {},
     onSelectModel: () -> Unit = {},
     onSelectReasoning: () -> Unit = {},
+    onOpenImageGenerationSettings: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onCamera: () -> Unit = {},
     onGallery: () -> Unit = {},
@@ -279,6 +281,15 @@ internal fun ChatBottomArea(
                         size = 36.dp,
                         iconSize = 24.dp,
                     )
+                    if (imageGenerationEnabled) {
+                        AppIconButton(
+                            icon = Lucide.Image,
+                            contentDescription = stringResource(R.string.image_generation_settings),
+                            onClick = onOpenImageGenerationSettings,
+                            size = 36.dp,
+                            iconSize = 24.dp,
+                        )
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Space8), verticalAlignment = Alignment.CenterVertically) {
                     // 附件展开/折叠（Plus ↔ X）

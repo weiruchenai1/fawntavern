@@ -141,6 +141,7 @@ object ModelRegistry {
         Rule("grok", tool = true),
         Rule("grok 3", tool = true, reasoning = true),
         Rule("grok 4", vision = true, tool = true, reasoning = true),
+        Rule("grok imagine image", vision = true, imageOut = true),
         // MiniMax / 阶跃 / 小米 / 零一
         Rule("minimax", tool = true),
         Rule("minimax m 1|2|3", tool = true, reasoning = true),

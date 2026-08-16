@@ -47,6 +47,7 @@ import me.rerere.fawntavern.data.chat.MsgFile
 
 private val AttachmentShape = RoundedCornerShape(8.dp)
 private val AttachmentHeight = 56.dp
+private val GeneratedImagePreviewHeight = 280.dp
 
 /** 附件按类型分行展示：第一行图片、第二行其它文件，各自横向滚动 */
 @Composable
@@ -119,6 +120,28 @@ internal fun MessageAttachmentRow(
     }
 }
 
+/** 模型生成的图片是回复正文的一部分，使用较大的左对齐预览。 */
+@Composable
+internal fun GeneratedImageRow(
+    images: List<String>,
+    aspectRatio: String,
+    modifier: Modifier = Modifier,
+) {
+    if (images.isEmpty()) return
+    val context = LocalContext.current
+    LazyRow(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        itemsIndexed(images, key = { index, path -> "generated-image:$index:$path" }) { _, path ->
+            GeneratedImageTile(
+                model = java.io.File(context.filesDir, path),
+                aspectRatio = selectedImageAspectRatio(aspectRatio),
+            )
+        }
+    }
+}
+
 @Composable
 private fun ImageAttachmentTile(
     model: Any,
@@ -143,6 +166,39 @@ private fun ImageAttachmentTile(
     if (showPreview) {
         ImagePreviewDialog(model = model, onDismiss = { showPreview = false })
     }
+}
+
+@Composable
+private fun GeneratedImageTile(model: Any, aspectRatio: Float) {
+    var showPreview by remember(model) { mutableStateOf(false) }
+    val previewWidth = GeneratedImagePreviewHeight * aspectRatio
+    Box(
+        Modifier.width(previewWidth)
+            .height(GeneratedImagePreviewHeight)
+            .clip(AttachmentShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable { showPreview = true },
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = model,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit,
+            error = androidx.compose.ui.graphics.vector.rememberVectorPainter(Lucide.ImageOff),
+        )
+    }
+    if (showPreview) {
+        ImagePreviewDialog(model = model, onDismiss = { showPreview = false })
+    }
+}
+
+private fun selectedImageAspectRatio(value: String): Float {
+    val parts = value.split(':')
+    if (parts.size != 2) return 1f
+    val width = parts[0].toFloatOrNull() ?: return 1f
+    val height = parts[1].toFloatOrNull() ?: return 1f
+    return (width / height).takeIf { it > 0f } ?: 1f
 }
 
 @Composable
