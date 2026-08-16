@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -36,6 +37,7 @@ import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.data.settings.ThemeStore
 import me.rerere.fawntavern.ui.chat.ChatScreen
 import me.rerere.fawntavern.ui.components.HapticGate
+import me.rerere.fawntavern.ui.components.clearFocusOnTap
 import me.rerere.fawntavern.ui.theme.FawnTavernTheme
 import java.util.Locale
 
@@ -82,25 +84,27 @@ class MainActivity : ComponentActivity() {
             FawnTavernTheme(themeMode = themeMode, solidBackground = solidBackground) {
                 // 长按触觉闸门：按"长按触觉反馈"偏好过滤系统 LongPress 触觉（角色卡片/会话长按等）
                 HapticGate {
-                    when (val state = recoveryState) {
-                        FawnTavernApplication.RecoveryState.Recovering -> RecoveryLoading()
-                        FawnTavernApplication.RecoveryState.Ready -> ChatScreen(
-                            themeMode = themeMode,
-                            onThemeModeChange = { mode ->
-                                themeMode = mode
-                                ThemeStore.setMode(this@MainActivity, mode)
-                            },
-                            solidBackground = solidBackground,
-                            onSolidBackgroundChange = { value ->
-                                solidBackground = value
-                                PreferencesStore.update(this@MainActivity) { it.copy(solidBackground = value) }
-                            },
-                            startAtSettings = startAtSettings,
-                        )
-                        is FawnTavernApplication.RecoveryState.Failed -> RecoveryFailure(
-                            message = state.error.message.orEmpty(),
-                            onRetry = app::retryRecovery,
-                        )
+                    Box(Modifier.fillMaxSize().clearFocusOnTap()) {
+                        when (val state = recoveryState) {
+                            FawnTavernApplication.RecoveryState.Recovering -> RecoveryLoading()
+                            FawnTavernApplication.RecoveryState.Ready -> ChatScreen(
+                                themeMode = themeMode,
+                                onThemeModeChange = { mode ->
+                                    themeMode = mode
+                                    ThemeStore.setMode(this@MainActivity, mode)
+                                },
+                                solidBackground = solidBackground,
+                                onSolidBackgroundChange = { value ->
+                                    solidBackground = value
+                                    PreferencesStore.update(this@MainActivity) { it.copy(solidBackground = value) }
+                                },
+                                startAtSettings = startAtSettings,
+                            )
+                            is FawnTavernApplication.RecoveryState.Failed -> RecoveryFailure(
+                                message = state.error.message.orEmpty(),
+                                onRetry = app::retryRecovery,
+                            )
+                        }
                     }
                 }
             }

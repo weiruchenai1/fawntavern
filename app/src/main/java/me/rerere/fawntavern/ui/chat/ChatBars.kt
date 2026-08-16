@@ -38,16 +38,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.AlignLeft
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.Earth
@@ -75,16 +74,25 @@ import me.rerere.fawntavern.ui.components.noRippleClickable
 internal data class Attachment(val uri: Uri, val isImage: Boolean)
 
 @Composable
+private fun KelivoDrawerIcon(modifier: Modifier = Modifier) {
+    Icon(
+        painter = painterResource(R.drawable.list),
+        contentDescription = "Menu",
+        modifier = modifier,
+        tint = MaterialTheme.colorScheme.primary,
+    )
+}
+
+@Composable
 internal fun ChatTopBar(title: String, subtitle: String, onDrawer: () -> Unit, onNewChat: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).statusBarsPadding().padding(vertical = Space8),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            Lucide.AlignLeft, "Menu",
+        KelivoDrawerIcon(
             Modifier.noRippleClickable { onDrawer() }
-                .padding(start = Space16, top = Space12, bottom = Space12, end = Space12).size(24.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                .padding(start = Space16, top = Space12, bottom = Space12, end = Space12)
+                .size(24.dp),
         )
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface,

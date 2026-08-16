@@ -19,6 +19,7 @@ object DefaultModelStore {
     const val ROLE_CHAT = "chat"
     const val ROLE_TITLE = "title"
     const val ROLE_SUMMARY = "summary"
+    const val ROLE_TRANSLATION = "translation"
 
     // ── 内建默认提示词（用户未自定义时生效） ──
 
@@ -41,6 +42,11 @@ object DefaultModelStore {
         "conversation into a single, updated summary. Preserve key facts, character state, relationships, ongoing " +
         "goals and unresolved threads; drop small talk. Write in the same language as the conversation. Aim for " +
         "about {target} tokens. Output only the summary text, with no preamble."
+
+    /** 翻译模型默认提示词；{language} 会在翻译请求时替换为当前目标语言。 */
+    const val DEFAULT_TRANSLATION_PROMPT =
+        "Translate the user's text into {language}. Preserve meaning, names, tone, paragraphs, and formatting. " +
+        "Output only the translation without commentary."
 
     data class Entry(val model: String = "", val prompt: String = "")
 
@@ -84,7 +90,7 @@ object DefaultModelStore {
     fun removeProvider(context: Context, providerId: String) {
         val root = read(context)
         var changed = false
-        for (role in listOf(ROLE_CHAT, ROLE_TITLE, ROLE_SUMMARY)) {
+        for (role in listOf(ROLE_CHAT, ROLE_TITLE, ROLE_SUMMARY, ROLE_TRANSLATION)) {
             val o = root.optJSONObject(role) ?: continue
             val m = o.optString("model", "")
             if (m.startsWith("$providerId::")) {

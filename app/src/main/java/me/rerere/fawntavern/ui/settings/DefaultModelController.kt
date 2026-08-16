@@ -9,6 +9,7 @@ internal enum class DefaultModelRole(val storageKey: String) {
     CHAT(DefaultModelStore.ROLE_CHAT),
     TITLE(DefaultModelStore.ROLE_TITLE),
     SUMMARY(DefaultModelStore.ROLE_SUMMARY),
+    TRANSLATION(DefaultModelStore.ROLE_TRANSLATION),
 }
 
 internal data class DefaultModelEntry(
@@ -70,6 +71,7 @@ internal class DefaultModelController(
     fun defaultPrompt(role: DefaultModelRole): String = when (role) {
         DefaultModelRole.TITLE -> DefaultModelStore.DEFAULT_TITLE_PROMPT
         DefaultModelRole.SUMMARY -> DefaultModelStore.DEFAULT_SUMMARY_PROMPT
+        DefaultModelRole.TRANSLATION -> DefaultModelStore.DEFAULT_TRANSLATION_PROMPT
         DefaultModelRole.CHAT -> ""
     }
 

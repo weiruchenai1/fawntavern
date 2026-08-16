@@ -536,14 +536,18 @@
     <string name="default_model_title_desc">首轮对话后自动生成会话标题，显示在抽屉中</string>
     <string name="default_model_summary">摘要模型</string>
     <string name="default_model_summary_desc">对话摘要扩展使用的模型，长对话超出上下文时自动压缩</string>
+    <string name="default_model_translation">翻译模型</string>
+    <string name="default_model_translation_desc">翻译页面使用的模型，未设置时使用当前对话模型</string>
     <string name="default_model_use_global">使用当前对话模型</string>
     <string name="default_model_prompt_config">提示词</string>
     <string name="default_model_reset_model">重置模型</string>
     <string name="default_model_reset_prompt">重置为默认</string>
     <string name="default_model_prompt_title">标题模型 · 自定义提示词</string>
     <string name="default_model_prompt_summary">摘要模型 · 自定义提示词</string>
+    <string name="default_model_prompt_translation">翻译模型 · 自定义提示词</string>
     <string name="default_model_prompt_title_hint">生成标题的提示词。可用 {{charName}}、{{userName}} 及 {{history}}（前几轮对话）。</string>
     <string name="default_model_prompt_summary_hint">摘要压缩的提示词。可用 {{charName}}、{{userName}}。</string>
+    <string name="default_model_prompt_translation_hint">翻译文本的系统提示词，可使用 {language} 表示当前选择的目标语言。</string>
     <!-- 角色卡默认模型 -->
     <string name="char_default_model">聊天模型</string>
     <string name="char_default_model_desc">为该角色卡设置默认聊天模型（未设置时使用全局默认）</string>
@@ -691,4 +695,38 @@
     <string name="crash_feedback_share_failed">无法创建崩溃报告文件</string>
     <string name="crash_feedback_include_safe_logs">附带安全系统日志（%1$d 条）</string>
 
+    <!-- Translator -->
+    <string name="translator_title">翻译</string>
+    <string name="translate">翻译</string>
+    <string name="translator_input_placeholder">输入要翻译的内容</string>
+    <string name="translator_result_placeholder">翻译结果将显示在这里</string>
+    <string name="paste_text">粘贴文本</string>
+    <string name="copy_translation">复制翻译结果</string>
+    <string name="select_translation_language">选择翻译语言</string>
+    <string name="translator_input_required">请先输入要翻译的内容</string>
+    <string name="translator_failed">翻译失败：%1$s</string>
+    <string name="language_simplified_chinese">🇨🇳 简体中文</string>
+    <string name="language_english">🇺🇸 English</string>
+    <string name="language_traditional_chinese">🇨🇳 繁體中文</string>
+    <string name="language_japanese">🇯🇵 日本語</string>
+    <string name="language_korean">🇰🇷 한국어</string>
+    <string name="language_french">🇫🇷 Français</string>
+    <string name="language_german">🇩🇪 Deutsch</string>
+    <string name="language_italian">🇮🇹 Italiano</string>
+    <string name="language_spanish">🇪🇸 Español</string>
+
+    <!-- Statistics -->
+    <string name="statistics_title">统计</string>
+    <string name="stats_heatmap">聊天热力图</string>
+    <string name="stats_heatmap_less">少</string>
+    <string name="stats_heatmap_more">多</string>
+    <string name="stats_dow_mon">一</string>
+    <string name="stats_dow_wed">三</string>
+    <string name="stats_dow_fri">五</string>
+    <string name="stats_total_conversations">总对话数</string>
+    <string name="stats_total_messages">总消息数</string>
+    <string name="stats_input_tokens">输入 Token</string>
+    <string name="stats_output_tokens">输出 Token</string>
+    <string name="stats_cached_tokens">缓存节省 Token</string>
+    <string name="stats_launch_count">应用启动次数</string>
 </resources>

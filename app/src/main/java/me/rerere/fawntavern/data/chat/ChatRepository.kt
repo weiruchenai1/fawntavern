@@ -16,6 +16,15 @@ import me.rerere.fawntavern.domain.ConversationOps
 /** 聊天会话存储：Room 数据库（sessions + messages 两张表），写入后 Flow 自动重发 */
 object ChatRepository {
 
+    data class Statistics(
+        val totalConversations: Int,
+        val totalMessages: Int,
+        val promptTokens: Long,
+        val completionTokens: Long,
+        val cachedTokens: Long,
+        val messagesPerDay: Map<String, Int>,
+    )
+
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun dao(context: Context): ChatDao = ChatDatabase.get(context).dao()
@@ -29,6 +38,19 @@ object ChatRepository {
         dao(context).listSummaries().map { it.toModel() }
 
     suspend fun count(context: Context): Int = dao(context).countSessions()
+
+    suspend fun statistics(context: Context, startMillis: Long): Statistics {
+        val d = dao(context)
+        val tokens = d.tokenStats()
+        return Statistics(
+            totalConversations = d.countSessions(),
+            totalMessages = tokens.totalMessages,
+            promptTokens = tokens.promptTokens,
+            completionTokens = tokens.completionTokens,
+            cachedTokens = tokens.cachedTokens,
+            messagesPerDay = d.messageCountPerDay(startMillis).associate { it.day to it.count },
+        )
+    }
 
     data class SearchResult(val sessionId: String, val title: String, val content: String)
 
@@ -282,6 +304,7 @@ object ChatRepository {
                    },
         promptTokens = promptTokens,
         completionTokens = completionTokens,
+        cachedTokens = cachedTokens,
         generationMs = generationMs,
     )
 
@@ -301,6 +324,7 @@ object ChatRepository {
         searchJson = if (searches.isEmpty()) "" else json.encodeToString(searches),
         promptTokens = promptTokens,
         completionTokens = completionTokens,
+        cachedTokens = cachedTokens,
         generationMs = generationMs,
     )
 }

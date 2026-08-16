@@ -3,10 +3,22 @@ package me.rerere.fawntavern.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+
+/** Clears text-field focus when an otherwise unhandled page area is tapped. */
+@Composable
+fun Modifier.clearFocusOnTap(
+    focusManager: FocusManager = LocalFocusManager.current,
+): Modifier = pointerInput(focusManager) {
+    detectTapGestures { focusManager.clearFocus() }
+}
 
 /**
  * 标准可点击：单击带 Material 波纹；传入 [onLongClick] 时额外支持长按，

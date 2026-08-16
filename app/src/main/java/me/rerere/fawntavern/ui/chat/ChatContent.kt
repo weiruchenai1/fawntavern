@@ -274,6 +274,8 @@ internal fun ChatContent(
                     onClose = { scope.launch { drawerState.close() } },
                     // 从抽屉进入的页面/弹层不关抽屉：返回（或收起面板）后仍停在抽屉
                     onSettings = { nav.add(Screen.Settings) },
+                    onTranslator = { nav.add(Screen.Translator) },
+                    onStatistics = { nav.add(Screen.Statistics) },
                     onCharSelect = { showCharPicker = true },
                     onCharList = { nav.add(Screen.Characters) },
                     onSearch = { nav.add(Screen.Search) },

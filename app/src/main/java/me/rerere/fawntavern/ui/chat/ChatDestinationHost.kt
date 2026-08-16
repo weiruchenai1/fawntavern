@@ -20,6 +20,8 @@ import me.rerere.fawntavern.ui.settings.SettingsScreen
 import me.rerere.fawntavern.ui.settings.SystemLogScreen
 import me.rerere.fawntavern.ui.settings.TtsConfigScreen
 import me.rerere.fawntavern.ui.settings.WebSearchConfigScreen
+import me.rerere.fawntavern.ui.statistics.StatisticsScreen
+import me.rerere.fawntavern.ui.translator.TranslatorScreen
 import me.rerere.fawntavern.ui.worldbook.WorldBookListScreen
 
 /** 渲染覆盖聊天页的全屏页面。 */
@@ -38,6 +40,14 @@ internal fun ChatDestinationHost(
 ) {
     stateHolder.SaveableStateProvider(destination.name) {
         when (destination) {
+        ChatDestination.Translator -> {
+            TranslatorScreen(
+                onBack = onBack,
+                apiConfig = viewModel.apiConfig,
+                fallbackModelSpec = viewModel.displayModelSpec().orEmpty(),
+            )
+        }
+        ChatDestination.Statistics -> { StatisticsScreen(onBack = onBack) }
         ChatDestination.Search -> {
             SearchScreen(
                 charFile = viewModel.session?.charFile.orEmpty(),

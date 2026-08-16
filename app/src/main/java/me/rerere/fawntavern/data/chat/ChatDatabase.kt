@@ -62,6 +62,7 @@ internal data class MessageEntity(
     @ColumnInfo(defaultValue = "") val searchJson: String = "",  // List<MsgSearch> JSON，空串 = 无联网搜索
     @ColumnInfo(defaultValue = "0") val promptTokens: Int = 0,
     @ColumnInfo(defaultValue = "0") val completionTokens: Int = 0,
+    @ColumnInfo(defaultValue = "0") val cachedTokens: Int = 0,
     @ColumnInfo(defaultValue = "0") val generationMs: Long = 0,
 )
 
@@ -86,6 +87,18 @@ internal data class AttachmentColumns(
     val imagesJson: String,
     val filesJson: String,
     val altsJson: String,
+)
+
+internal data class TokenStatsRow(
+    val totalMessages: Int,
+    val promptTokens: Long,
+    val completionTokens: Long,
+    val cachedTokens: Long,
+)
+
+internal data class DailyMessageCountRow(
+    val day: String,
+    val count: Int,
 )
 
 @Dao
@@ -138,6 +151,12 @@ internal interface ChatDao {
 
     @Query("SELECT COUNT(*) FROM sessions")
     suspend fun countSessions(): Int
+
+    @Query("SELECT COUNT(*) AS totalMessages, COALESCE(SUM(promptTokens), 0) AS promptTokens, COALESCE(SUM(completionTokens), 0) AS completionTokens, COALESCE(SUM(cachedTokens), 0) AS cachedTokens FROM messages")
+    suspend fun tokenStats(): TokenStatsRow
+
+    @Query("SELECT strftime('%Y-%m-%d', ts / 1000, 'unixepoch', 'localtime') AS day, COUNT(*) AS count FROM messages WHERE role = 'user' AND ts >= :startMillis GROUP BY day ORDER BY day")
+    suspend fun messageCountPerDay(startMillis: Long): List<DailyMessageCountRow>
 
     @Transaction
     @Query("SELECT * FROM sessions ORDER BY pinned DESC, updatedAt DESC")
@@ -248,7 +267,7 @@ internal interface ChatDao {
     suspend fun updatePinned(id: String, pinned: Boolean)
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 11, exportSchema = true)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 12, exportSchema = true)
 internal abstract class ChatDatabase : RoomDatabase() {
 
     abstract fun dao(): ChatDao
@@ -267,7 +286,13 @@ internal abstract class ChatDatabase : RoomDatabase() {
             }
         }
 
-        private val ALL_MIGRATIONS = arrayOf(MIGRATION_9_10, MIGRATION_10_11)
+        internal val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN cachedTokens INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        private val ALL_MIGRATIONS = arrayOf(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
 
         @Volatile private var instance: ChatDatabase? = null
 

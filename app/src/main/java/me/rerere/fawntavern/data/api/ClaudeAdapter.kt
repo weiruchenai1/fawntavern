@@ -80,6 +80,7 @@ internal object ClaudeAdapter : ProviderAdapter {
         val blocks = sortedMapOf<Int, Block>()
         var promptTokens = 0
         var completionTokens = 0
+        var cachedTokens = 0
         SseClient.post(
             url = provider.apiEndpoint("/messages"),
             headers = model.applyHeaders(mapOf(
@@ -95,6 +96,7 @@ internal object ClaudeAdapter : ProviderAdapter {
                 "message_start" -> obj.optJSONObject("message")?.optJSONObject("usage")?.let { usage ->
                     promptTokens = usage.optInt("input_tokens", promptTokens)
                     completionTokens = usage.optInt("output_tokens", completionTokens)
+                    cachedTokens = usage.optInt("cache_read_input_tokens", cachedTokens)
                 }
                 "message_delta" -> obj.optJSONObject("usage")?.let { usage ->
                     completionTokens = usage.optInt("output_tokens", completionTokens)
@@ -141,6 +143,7 @@ internal object ClaudeAdapter : ProviderAdapter {
         if (toolCalls.isEmpty()) return StreamEnd(
             promptTokens = promptTokens,
             completionTokens = completionTokens,
+            cachedTokens = cachedTokens,
         )
         // 原样重建本轮 assistant 内容块（thinking 签名 / redacted_thinking 必须逐字回显）
         val raw = JSONArray()
@@ -168,6 +171,7 @@ internal object ClaudeAdapter : ProviderAdapter {
             rawBlocks = raw.toString(),
             promptTokens = promptTokens,
             completionTokens = completionTokens,
+            cachedTokens = cachedTokens,
         )
     }
 

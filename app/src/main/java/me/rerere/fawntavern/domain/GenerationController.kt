@@ -128,6 +128,7 @@ internal class GenerationController(
             }
             var promptTokens = 0
             var completionTokens = 0
+            var cachedTokens = 0
             var countedContentChars = 0
             var countedReasoningChars = 0
             // 记录本次组装出的完整 prompt（日志开关关闭时为空操作）
@@ -170,6 +171,7 @@ internal class GenerationController(
                 val estimatedOutput = PromptBuilder.estTokens(roundContent) +
                     PromptBuilder.estTokens(roundReasoning)
                 completionTokens += end.completionTokens.takeIf { it > 0 } ?: estimatedOutput
+                cachedTokens += end.cachedTokens
                 end.generatedImages.forEach { image ->
                     val persisted = persistGeneratedImage(image)
                         ?: throw IllegalStateException("Failed to save generated image")
@@ -244,6 +246,7 @@ internal class GenerationController(
             cur = cur.copy(
                 promptTokens = promptTokens,
                 completionTokens = completionTokens,
+                cachedTokens = cachedTokens,
                 generationMs = (System.currentTimeMillis() - generationStartedAt).coerceAtLeast(1L),
             )
         } catch (_: ChatApi.Stopped) {
@@ -271,6 +274,7 @@ internal class GenerationController(
                 model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
                 images = cur.images, imageAspectRatio = cur.imageAspectRatio,
                 promptTokens = cur.promptTokens, completionTokens = cur.completionTokens,
+                cachedTokens = cur.cachedTokens,
                 generationMs = cur.generationMs)
             cur = cur.copy(alts = alts)
         }

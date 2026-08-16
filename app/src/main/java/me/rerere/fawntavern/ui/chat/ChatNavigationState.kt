@@ -8,6 +8,8 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 
 /** 覆盖在聊天页之上的全屏页面。 */
 internal enum class ChatDestination {
+    Translator,
+    Statistics,
     Settings,
     Presets,
     Characters,

@@ -1,7 +1,7 @@
 package me.rerere.fawntavern.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,10 +26,9 @@ import me.rerere.fawntavern.R
  */
 @Composable
 fun AppTopBar(title: String, onBack: () -> Unit, actions: (@Composable () -> Unit)? = null) {
-    Row(
+    Box(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
             .statusBarsPadding().padding(horizontal = Space16, vertical = Space8),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
         AppIconButton(
             icon = Lucide.ChevronLeft,
@@ -38,11 +37,17 @@ fun AppTopBar(title: String, onBack: () -> Unit, actions: (@Composable () -> Uni
             container = MaterialTheme.colorScheme.surfaceContainerHighest,
             size = 32.dp,
             iconSize = 24.dp,
+            modifier = Modifier.align(Alignment.CenterStart),
         )
         Text(title, style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
+            modifier = Modifier.align(Alignment.Center).padding(horizontal = 48.dp),
+            textAlign = TextAlign.Center,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (actions != null) actions() else Spacer(Modifier.size(32.dp))
+        if (actions != null) {
+            Box(Modifier.align(Alignment.CenterEnd)) { actions() }
+        } else {
+            Spacer(Modifier.size(32.dp).align(Alignment.CenterEnd))
+        }
     }
 }

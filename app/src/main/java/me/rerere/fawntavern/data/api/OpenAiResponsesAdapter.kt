@@ -16,6 +16,7 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
         val rawBlocks: String = "",
         val promptTokens: Int = 0,
         val completionTokens: Int = 0,
+        val cachedTokens: Int = 0,
         val generatedImages: List<GeneratedImage> = emptyList(),
     )
 
@@ -38,6 +39,7 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
         val callsByIndex = sortedMapOf<Int, MutableToolCall>()
         var promptTokens = 0
         var completionTokens = 0
+        var cachedTokens = 0
         var rawBlocks = ""
         var generatedImages = emptyList<GeneratedImage>()
         var receivedContentDelta = false
@@ -105,6 +107,7 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
                     rawBlocks = parsed.rawBlocks
                     promptTokens = parsed.promptTokens
                     completionTokens = parsed.completionTokens
+                    cachedTokens = parsed.cachedTokens
                     generatedImages = parsed.generatedImages
                 }
             }
@@ -123,6 +126,7 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
             rawBlocks = rawBlocks,
             promptTokens = promptTokens,
             completionTokens = completionTokens,
+            cachedTokens = cachedTokens,
             generatedImages = generatedImages,
         )
     }
@@ -283,6 +287,8 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
             rawBlocks = rawBlocks.takeIf { it.length() > 0 }?.toString().orEmpty(),
             promptTokens = usage?.optInt("input_tokens", 0) ?: 0,
             completionTokens = usage?.optInt("output_tokens", 0) ?: 0,
+            cachedTokens = usage?.optJSONObject("input_tokens_details")
+                ?.optInt("cached_tokens", 0) ?: 0,
             generatedImages = images,
         )
     }

@@ -17,6 +17,7 @@ data class MsgAlt(
     val searches: List<MsgSearch> = emptyList(),
     val promptTokens: Int = 0,
     val completionTokens: Int = 0,
+    val cachedTokens: Int = 0,
     val generationMs: Long = 0,
     val images: List<String> = emptyList(),
     val imageAspectRatio: String = "2:3",
@@ -68,6 +69,7 @@ data class ChatMessage(
     val searches: List<MsgSearch> = emptyList(),  // 当前版本的搜索工具调用（仅 assistant；按调用顺序）
     val promptTokens: Int = 0,       // 本次请求输入 token（API usage 优先，缺失时估算）
     val completionTokens: Int = 0,   // 本次生成输出 token（API usage 优先，缺失时估算）
+    val cachedTokens: Int = 0,       // 本次请求由供应商缓存命中的输入 token
     val generationMs: Long = 0,      // 从发起请求到生成收尾的总用时
 )
 

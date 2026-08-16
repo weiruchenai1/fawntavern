@@ -9,6 +9,7 @@ data class StreamEnd(
     /** 本轮请求的 token 用量；供应商未返回时保持 0，由生成层估算。 */
     val promptTokens: Int = 0,
     val completionTokens: Int = 0,
+    val cachedTokens: Int = 0,
     /** 图片生成模型在本轮返回的图片；上层需将其持久化为聊天附件。 */
     val generatedImages: List<GeneratedImage> = emptyList(),
 )

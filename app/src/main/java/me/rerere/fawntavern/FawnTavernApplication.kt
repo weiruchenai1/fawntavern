@@ -13,6 +13,7 @@ import me.rerere.fawntavern.data.backup.AppBackup
 import me.rerere.fawntavern.core.diagnostics.CrashReportStore
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import me.rerere.fawntavern.data.diagnostics.RemoteDiagnostics
+import me.rerere.fawntavern.data.settings.AppStatisticsStore
 
 class FawnTavernApplication : Application() {
     sealed interface RecoveryState {
@@ -28,6 +29,7 @@ class FawnTavernApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppStatisticsStore.incrementLaunchCount(this)
         val versionName = runCatching {
             packageManager.getPackageInfo(packageName, 0).versionName
         }.getOrNull().orEmpty().ifBlank { "unknown" }

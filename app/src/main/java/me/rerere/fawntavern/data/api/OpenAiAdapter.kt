@@ -54,6 +54,7 @@ internal object OpenAiAdapter : ProviderAdapter {
         val callsByIndex = sortedMapOf<Int, Triple<String, String, StringBuilder>>()
         var promptTokens = 0
         var completionTokens = 0
+        var cachedTokens = 0
         SseClient.post(
             url = provider.apiEndpoint("/chat/completions"),
             headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
@@ -66,6 +67,11 @@ internal object OpenAiAdapter : ProviderAdapter {
             obj.optJSONObject("usage")?.let { usage ->
                 promptTokens = usage.optInt("prompt_tokens", usage.optInt("input_tokens", promptTokens))
                 completionTokens = usage.optInt("completion_tokens", usage.optInt("output_tokens", completionTokens))
+                cachedTokens = usage.optJSONObject("prompt_tokens_details")
+                    ?.optInt("cached_tokens", cachedTokens)
+                    ?: usage.optJSONObject("input_tokens_details")
+                        ?.optInt("cached_tokens", cachedTokens)
+                    ?: cachedTokens
             }
             val delta = obj.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: return@post
             val content = delta.strOr("content")
@@ -93,6 +99,7 @@ internal object OpenAiAdapter : ProviderAdapter {
                 },
             promptTokens = promptTokens,
             completionTokens = completionTokens,
+            cachedTokens = cachedTokens,
         )
     }
 

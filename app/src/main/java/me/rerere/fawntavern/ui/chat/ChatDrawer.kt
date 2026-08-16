@@ -49,7 +49,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.rerere.fawntavern.R
 import com.composables.icons.lucide.Bolt
+import com.composables.icons.lucide.ChartColumnBig
 import com.composables.icons.lucide.ImagePlus
+import com.composables.icons.lucide.Languages
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.PencilLine
 import com.composables.icons.lucide.Pin
@@ -100,6 +102,8 @@ private fun dateHeaderText(date: java.time.LocalDate, today: java.time.LocalDate
 fun ChatDrawerContent(
     onClose: () -> Unit,
     onSettings: () -> Unit,
+    onTranslator: () -> Unit = {},
+    onStatistics: () -> Unit = {},
     onCharSelect: () -> Unit = {},
     onCharList: () -> Unit = {},
     onSearch: () -> Unit = {},
@@ -381,7 +385,7 @@ fun ChatDrawerContent(
 
         // ── 底部导航 ──
         Row(Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(Space8),
             verticalAlignment = Alignment.CenterVertically) {
             AppIconButton(
                 icon = Lucide.Smile,
@@ -389,12 +393,31 @@ fun ChatDrawerContent(
                 onClick = onCharList,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 container = MaterialTheme.colorScheme.surfaceContainerHighest,
+                iconSize = 22.dp,
             )
+            AppIconButton(
+                icon = Lucide.Languages,
+                contentDescription = stringResource(R.string.translator_title),
+                onClick = onTranslator,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                container = MaterialTheme.colorScheme.surfaceContainerHighest,
+                iconSize = 22.dp,
+            )
+            AppIconButton(
+                icon = Lucide.ChartColumnBig,
+                contentDescription = stringResource(R.string.statistics_title),
+                onClick = onStatistics,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                container = MaterialTheme.colorScheme.surfaceContainerHighest,
+                iconSize = 22.dp,
+            )
+            Spacer(Modifier.weight(1f))
             AppIconButton(
                 icon = Lucide.Bolt,
                 contentDescription = stringResource(R.string.settings),
                 onClick = onSettings,
                 container = MaterialTheme.colorScheme.surfaceContainerHighest,
+                iconSize = 22.dp,
             )
         }
     }

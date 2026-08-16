@@ -40,6 +40,7 @@ import com.composables.icons.lucide.Bolt
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.FileText
+import com.composables.icons.lucide.Languages
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquareText
 import com.composables.icons.lucide.RotateCcw
@@ -79,6 +80,7 @@ fun DefaultModelPage(onBack: () -> Unit) {
     val chatEntry = state.entry(DefaultModelRole.CHAT)
     val titleEntry = state.entry(DefaultModelRole.TITLE)
     val summaryEntry = state.entry(DefaultModelRole.SUMMARY)
+    val translationEntry = state.entry(DefaultModelRole.TRANSLATION)
 
     val useCurrentLabel = stringResource(R.string.default_model_use_global)
 
@@ -144,6 +146,20 @@ fun DefaultModelPage(onBack: () -> Unit) {
             onPick = { pickingRole = DefaultModelRole.SUMMARY; modelSelector.open() },
             onReset = { state = controller.reset(state, DefaultModelRole.SUMMARY) },
             onConfig = { promptRole = DefaultModelRole.SUMMARY },
+        )
+
+        val (trIcon, trName) = roleModelParts(translationEntry)
+        ModelCard(
+            icon = Lucide.Languages,
+            title = stringResource(R.string.default_model_translation),
+            subtitle = stringResource(R.string.default_model_translation_desc),
+            iconKey = trIcon,
+            displayName = trName,
+            showReset = translationEntry.model.isNotBlank(),
+            showBolt = true,
+            onPick = { pickingRole = DefaultModelRole.TRANSLATION; modelSelector.open() },
+            onReset = { state = controller.reset(state, DefaultModelRole.TRANSLATION) },
+            onConfig = { promptRole = DefaultModelRole.TRANSLATION },
         )
     }
 
@@ -270,10 +286,16 @@ private fun PromptSheet(
 ) {
     val title = when (role) {
         DefaultModelRole.TITLE -> stringResource(R.string.default_model_prompt_title)
-        else -> stringResource(R.string.default_model_prompt_summary)
+        DefaultModelRole.SUMMARY -> stringResource(R.string.default_model_prompt_summary)
+        DefaultModelRole.TRANSLATION -> stringResource(R.string.default_model_prompt_translation)
+        DefaultModelRole.CHAT -> error("Chat role does not have a prompt editor")
     }
-    val hint = if (role == DefaultModelRole.TITLE) stringResource(R.string.default_model_prompt_title_hint)
-        else stringResource(R.string.default_model_prompt_summary_hint)
+    val hint = when (role) {
+        DefaultModelRole.TITLE -> stringResource(R.string.default_model_prompt_title_hint)
+        DefaultModelRole.SUMMARY -> stringResource(R.string.default_model_prompt_summary_hint)
+        DefaultModelRole.TRANSLATION -> stringResource(R.string.default_model_prompt_translation_hint)
+        DefaultModelRole.CHAT -> error("Chat role does not have a prompt editor")
+    }
     val text = rememberTextFieldState(currentPrompt.ifBlank { defaultPrompt })
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,

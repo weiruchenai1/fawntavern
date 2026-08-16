@@ -538,14 +538,18 @@
     <string name="default_model_title_desc">Auto-generates a session title after the first exchange; shown in the drawer</string>
     <string name="default_model_summary">Summary Model</string>
     <string name="default_model_summary_desc">Used by the summarization extension to compress long conversations</string>
+    <string name="default_model_translation">Translation Model</string>
+    <string name="default_model_translation_desc">Used by the translator; falls back to the current chat model when unset</string>
     <string name="default_model_use_global">Use current chat model</string>
     <string name="default_model_prompt_config">Prompt</string>
     <string name="default_model_reset_model">Reset model</string>
     <string name="default_model_reset_prompt">Reset to default</string>
     <string name="default_model_prompt_title">Title model · Custom prompt</string>
     <string name="default_model_prompt_summary">Summary model · Custom prompt</string>
+    <string name="default_model_prompt_translation">Translation model · Custom prompt</string>
     <string name="default_model_prompt_title_hint">Prompt for generating the title. Use {{charName}}, {{userName}}, and {{history}} (first few exchanges).</string>
     <string name="default_model_prompt_summary_hint">Prompt for summarization. Use {{charName}}, {{userName}}.</string>
+    <string name="default_model_prompt_translation_hint">System prompt for translation. Use {language} for the selected target language.</string>
     <!-- Character card default model -->
     <string name="char_default_model">Chat Model</string>
     <string name="char_default_model_desc">Set the default chat model for this character (uses global default when not set)</string>
@@ -693,4 +697,38 @@
     <string name="crash_feedback_share_failed">Unable to create the crash report file</string>
     <string name="crash_feedback_include_safe_logs">Include safe system logs (%1$d)</string>
 
+    <!-- Translator -->
+    <string name="translator_title">Translator</string>
+    <string name="translate">Translate</string>
+    <string name="translator_input_placeholder">Enter text to translate</string>
+    <string name="translator_result_placeholder">Translation result will appear here</string>
+    <string name="paste_text">Paste text</string>
+    <string name="copy_translation">Copy translation</string>
+    <string name="select_translation_language">Select translation language</string>
+    <string name="translator_input_required">Enter text to translate first</string>
+    <string name="translator_failed">Translation failed: %1$s</string>
+    <string name="language_simplified_chinese">🇨🇳 Simplified Chinese</string>
+    <string name="language_english">🇺🇸 English</string>
+    <string name="language_traditional_chinese">🇨🇳 Traditional Chinese</string>
+    <string name="language_japanese">🇯🇵 Japanese</string>
+    <string name="language_korean">🇰🇷 Korean</string>
+    <string name="language_french">🇫🇷 French</string>
+    <string name="language_german">🇩🇪 German</string>
+    <string name="language_italian">🇮🇹 Italian</string>
+    <string name="language_spanish">🇪🇸 Spanish</string>
+
+    <!-- Statistics -->
+    <string name="statistics_title">Statistics</string>
+    <string name="stats_heatmap">Chat heatmap</string>
+    <string name="stats_heatmap_less">Less</string>
+    <string name="stats_heatmap_more">More</string>
+    <string name="stats_dow_mon">M</string>
+    <string name="stats_dow_wed">W</string>
+    <string name="stats_dow_fri">F</string>
+    <string name="stats_total_conversations">Total conversations</string>
+    <string name="stats_total_messages">Total messages</string>
+    <string name="stats_input_tokens">Input tokens</string>
+    <string name="stats_output_tokens">Output tokens</string>
+    <string name="stats_cached_tokens">Tokens saved by cache</string>
+    <string name="stats_launch_count">App launch count</string>
 </resources>

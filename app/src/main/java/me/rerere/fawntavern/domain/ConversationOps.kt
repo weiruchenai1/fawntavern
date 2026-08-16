@@ -73,12 +73,14 @@ internal object ConversationOps {
             reasoningMs = m.reasoningMs, searches = m.searches, images = m.images,
             imageAspectRatio = m.imageAspectRatio,
             promptTokens = m.promptTokens, completionTokens = m.completionTokens,
+            cachedTokens = m.cachedTokens,
             generationMs = m.generationMs)
         val target = newAlts[ni]
         return m.copy(content = target.content, reasoning = target.reasoning,
             model = target.model, reasoningMs = target.reasoningMs, searches = target.searches,
             images = target.images, imageAspectRatio = target.imageAspectRatio,
             promptTokens = target.promptTokens, completionTokens = target.completionTokens,
+            cachedTokens = target.cachedTokens,
             generationMs = target.generationMs,
             alts = newAlts, altIdx = ni)
     }
@@ -97,6 +99,7 @@ internal object ConversationOps {
             model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
             images = cur.images, imageAspectRatio = cur.imageAspectRatio,
             promptTokens = cur.promptTokens, completionTokens = cur.completionTokens,
+            cachedTokens = cur.cachedTokens,
             generationMs = cur.generationMs,
             alts = if (single) emptyList() else newAlts,
             altIdx = if (single) 0 else newIdx,
@@ -111,10 +114,11 @@ internal object ConversationOps {
             model = m.model, reasoningMs = m.reasoningMs, searches = m.searches, images = m.images,
             imageAspectRatio = m.imageAspectRatio,
             promptTokens = m.promptTokens, completionTokens = m.completionTokens,
+            cachedTokens = m.cachedTokens,
             generationMs = m.generationMs)
         alts += MsgAlt(model = modelId)
         return m.copy(content = "", reasoning = "", model = modelId, reasoningMs = 0, images = emptyList(),
-            promptTokens = 0, completionTokens = 0, generationMs = 0,
+            promptTokens = 0, completionTokens = 0, cachedTokens = 0, generationMs = 0,
             alts = alts, altIdx = alts.lastIndex)
     }
 }

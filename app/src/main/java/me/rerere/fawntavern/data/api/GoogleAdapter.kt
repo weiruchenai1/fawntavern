@@ -80,6 +80,7 @@ internal object GoogleAdapter : ProviderAdapter {
         val toolCalls = mutableListOf<ApiToolCall>()
         var promptTokens = 0
         var completionTokens = 0
+        var cachedTokens = 0
         SseClient.post(
             url = provider.apiEndpoint(
                 "/models/{model}:streamGenerateContent?alt=sse",
@@ -96,6 +97,7 @@ internal object GoogleAdapter : ProviderAdapter {
                 promptTokens = usage.optInt("promptTokenCount", promptTokens)
                 completionTokens = usage.optInt("candidatesTokenCount", completionTokens) +
                     usage.optInt("thoughtsTokenCount", 0)
+                cachedTokens = usage.optInt("cachedContentTokenCount", cachedTokens)
             }
             val parts = obj.optJSONArray("candidates")
                 ?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts") ?: return@post
@@ -120,6 +122,7 @@ internal object GoogleAdapter : ProviderAdapter {
             toolCalls = toolCalls,
             promptTokens = promptTokens,
             completionTokens = completionTokens,
+            cachedTokens = cachedTokens,
         )
     }
 

@@ -14,16 +14,30 @@ class DefaultModelControllerTest {
 
         val modeled = controller.setModel(initial, DefaultModelRole.TITLE, "provider::model")
         val prompted = controller.setPrompt(modeled, DefaultModelRole.TITLE, "prompt")
+        val withTranslation = controller.setModel(
+            prompted,
+            DefaultModelRole.TRANSLATION,
+            "translation-provider::translation-model",
+        )
 
-        assertEquals("provider::model", prompted.entry(DefaultModelRole.TITLE).model)
-        assertEquals("prompt", prompted.entry(DefaultModelRole.TITLE).prompt)
+        assertEquals("provider::model", withTranslation.entry(DefaultModelRole.TITLE).model)
+        assertEquals("prompt", withTranslation.entry(DefaultModelRole.TITLE).prompt)
+        assertEquals(
+            "translation-provider::translation-model",
+            withTranslation.entry(DefaultModelRole.TRANSLATION).model,
+        )
 
-        val reset = controller.reset(prompted, DefaultModelRole.TITLE)
+        val reset = controller.reset(withTranslation, DefaultModelRole.TITLE)
 
         assertEquals(DefaultModelEntry(), reset.entry(DefaultModelRole.TITLE))
         assertEquals(DefaultModelEntry(), reset.entry(DefaultModelRole.CHAT))
+        assertEquals(
+            "translation-provider::translation-model",
+            reset.entry(DefaultModelRole.TRANSLATION).model,
+        )
         assertEquals(DefaultModelRole.TITLE, source.resetRole)
         assertTrue(controller.defaultPrompt(DefaultModelRole.TITLE).isNotBlank())
+        assertTrue(controller.defaultPrompt(DefaultModelRole.TRANSLATION).contains("{language}"))
     }
 
     private class FakeDefaultModelDataSource : DefaultModelDataSource {
