@@ -7,20 +7,41 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.JsonFileDir
+import me.rerere.fawntavern.data.character.CharacterRepository
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 
 object PresetRepository {
 
     private const val PRESETS_DIR = "presets"
+    private const val PREFS = "preset_repo"
+    private const val KEY_DEFAULT_NAME = "default_preset_name"
     private val writeMutex = Mutex()
 
     fun presetsDir(context: Context): File = JsonFileDir.dir(context, PRESETS_DIR)
 
-    /** 列出所有已导入的预设名（文件名，不含 .json）。 */
-    suspend fun listNames(context: Context): List<String> =
-        JsonFileDir.listNames(context, PRESETS_DIR)
+    /** 确保内置默认预设存在；文件名首次创建后固定，不随语言切换。 */
+    suspend fun ensureDefaultPreset(context: Context, fallbackName: String): String = withContext(Dispatchers.IO) {
+        writeMutex.withLock {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val name = prefs.getString(KEY_DEFAULT_NAME, null)
+                ?: fallbackName.also { value -> prefs.edit().putString(KEY_DEFAULT_NAME, value).apply() }
+            val file = JsonFileDir.file(context, PRESETS_DIR, name)
+            if (!file.exists()) JsonFileDir.atomicWriteText(file, JSONObject().toString(2))
+            name
+        }
+    }
+
+    fun defaultPresetName(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_DEFAULT_NAME, null)
+
+    suspend fun listNames(context: Context): List<String> {
+        val names = JsonFileDir.listNames(context, PRESETS_DIR)
+        val defaultName = defaultPresetName(context)
+        return names.sortedBy { it != defaultName }
+    }
 
     suspend fun load(context: Context, name: String): StPreset = withContext(Dispatchers.IO) {
         val file = JsonFileDir.file(context, PRESETS_DIR, name)
@@ -154,15 +175,48 @@ object PresetRepository {
         }
     }
 
-    suspend fun delete(context: Context, name: String) =
-        JsonFileDir.delete(context, PRESETS_DIR, name)
+    suspend fun delete(context: Context, name: String) {
+        if (name != defaultPresetName(context)) JsonFileDir.delete(context, PRESETS_DIR, name)
+    }
 
     /** 重命名预设，成功返回 true（目标名已存在或源不存在则失败） */
     suspend fun rename(context: Context, oldName: String, newName: String): Boolean =
-        JsonFileDir.rename(context, PRESETS_DIR, oldName, newName)
+        withContext(Dispatchers.IO) {
+            writeMutex.withLock {
+                val wasDefault = oldName == defaultPresetName(context)
+                if (!JsonFileDir.rename(context, PRESETS_DIR, oldName, newName)) {
+                    return@withLock false
+                }
+                var linksRenamed = false
+                try {
+                    CharacterRepository.renameLinkedPreset(context, oldName, newName)
+                    linksRenamed = true
+                    if (wasDefault) {
+                        val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                            .edit().putString(KEY_DEFAULT_NAME, newName).commit()
+                        if (!saved) throw IOException("Unable to save the default preset name")
+                    }
+                    true
+                } catch (_: Exception) {
+                    if (linksRenamed) {
+                        runCatching { CharacterRepository.renameLinkedPreset(context, newName, oldName) }
+                    }
+                    runCatching { JsonFileDir.rename(context, PRESETS_DIR, newName, oldName) }
+                    false
+                }
+            }
+        }
 
-    /** 清空所有预设 */
-    suspend fun clear(context: Context) = JsonFileDir.clear(context, PRESETS_DIR)
+    /** 清空用户预设，保留内置默认预设。 */
+    suspend fun clear(context: Context) = withContext(Dispatchers.IO) {
+        writeMutex.withLock {
+            val keep = defaultPresetName(context)
+            presetsDir(context).listFiles()?.forEach { file ->
+                if (file.nameWithoutExtension != keep) file.delete()
+            }
+        }
+        Unit
+    }
 
     /**
      * 从 content URI 读取并解析一个独立的 ST 正则脚本文件，返回内存对象（不落盘）。

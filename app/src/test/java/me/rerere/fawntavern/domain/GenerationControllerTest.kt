@@ -5,6 +5,7 @@ import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ApiToolCall
 import me.rerere.fawntavern.data.api.ChatApi
+import me.rerere.fawntavern.data.api.GeneratedImage
 import me.rerere.fawntavern.data.api.StreamEnd
 import me.rerere.fawntavern.data.api.ToolSpec
 import me.rerere.fawntavern.data.chat.ChatMessage
@@ -78,5 +79,27 @@ class GenerationControllerTest {
         assertEquals("{\"items\":[\"result\"]}", toolRound.toolCalls.single().result)
         assertEquals("final answer", result.content)
         assertTrue(result.generationMs > 0)
+    }
+
+    @Test
+    fun generatedImagesArePersistedIntoTheFinalMessage() = runBlocking {
+        val image = GeneratedImage(byteArrayOf(1, 2, 3), "image/png")
+        val client = GenerationStreamClient { _, _, _, _, _, _, _ ->
+            StreamEnd(generatedImages = listOf(image))
+        }
+
+        val result = GenerationController(client).run(
+            apiMessages = listOf(ApiMessage("user", "draw")),
+            genMessage = ChatMessage(role = "assistant"),
+            provider = ApiProvider(id = "provider"),
+            modelId = "image-model",
+            built = PromptBuilder.Built(),
+            streaming = false,
+            persistGeneratedImage = { "attachments/generated.png" },
+            errorText = { it.message.orEmpty() },
+            onUpdate = {},
+        )
+
+        assertEquals(listOf("attachments/generated.png"), result.images)
     }
 }

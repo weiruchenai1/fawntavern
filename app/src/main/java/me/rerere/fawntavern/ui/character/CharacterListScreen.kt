@@ -27,10 +27,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +64,7 @@ import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircle
+import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Smile
 import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.Dispatchers
@@ -79,6 +86,7 @@ import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = {}) {
     val context = LocalContext.current
@@ -104,6 +112,10 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     var chars by remember { mutableStateOf<Map<String, CharacterCard>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
     var selectedChar by remember { mutableStateOf<CharacterCard?>(null) }
+    var showAddSheet by remember { mutableStateOf(false) }
+    var newCharacterName by remember { mutableStateOf("") }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingImportName by remember { mutableStateOf("") }
 
     var longPressName by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
@@ -135,28 +147,84 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
 
     LaunchedEffect(Unit) { refresh() }
 
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
-    ) { uris ->
-        if (uris.isNotEmpty()) {
-            scope.launch {
-                var imported = 0
-                var failed = 0
-                for (uri in uris) {
-                    try {
-                        controller.import(uri)
-                        imported++
-                    } catch (_: Exception) {
-                        failed++
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        pendingImportUri = uri
+        pendingImportName = uri?.lastPathSegment?.substringAfterLast('/') ?: uri?.toString().orEmpty()
+    }
+
+    fun dismissAddSheet() {
+        showAddSheet = false
+        newCharacterName = ""
+        pendingImportUri = null
+        pendingImportName = ""
+    }
+
+    fun saveNewCharacter() {
+        val uri = pendingImportUri
+        val name = newCharacterName.trim()
+        if (uri == null && name.isBlank()) return
+        scope.launch {
+            try {
+                if (uri != null) {
+                    controller.import(uri)
+                    Toast.makeText(context, resources.getString(R.string.character_imported), Toast.LENGTH_SHORT).show()
+                } else {
+                    controller.create(name)
+                    Toast.makeText(context, resources.getString(R.string.character_created), Toast.LENGTH_SHORT).show()
+                }
+                dismissAddSheet()
+                refresh()
+            } catch (error: Exception) {
+                Toast.makeText(context, resources.getString(R.string.char_save_failed_fmt, error.message.orEmpty()), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    if (showAddSheet) {
+        ModalBottomSheet(onDismissRequest = ::dismissAddSheet) {
+            Column(
+                Modifier.fillMaxWidth().imePadding().padding(horizontal = Space16, bottom = Space16),
+                verticalArrangement = Arrangement.spacedBy(Space12),
+            ) {
+                Text(stringResource(R.string.add_character), style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(
+                    value = newCharacterName,
+                    onValueChange = { newCharacterName = it },
+                    label = { Text(stringResource(R.string.char_name_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedButton(
+                    onClick = { importLauncher.launch("*/*") },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Lucide.FilePlus, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(Space8))
+                    Text(stringResource(R.string.import_character_card))
+                }
+                if (pendingImportUri != null) {
+                    Text(
+                        stringResource(R.string.selected_file_fmt, pendingImportName),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Space8),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = ::dismissAddSheet, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                    Button(
+                        onClick = ::saveNewCharacter,
+                        enabled = pendingImportUri != null || newCharacterName.isNotBlank(),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.save))
                     }
                 }
-                if (imported > 0) {
-                    Toast.makeText(context, resources.getQuantityString(R.plurals.toast_imported_files_fmt, imported, imported), Toast.LENGTH_SHORT).show()
-                }
-                if (failed > 0) {
-                    Toast.makeText(context, resources.getQuantityString(R.plurals.toast_import_failed_count_fmt, failed, failed), Toast.LENGTH_SHORT).show()
-                }
-                refresh()
             }
         }
     }
@@ -234,8 +302,8 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(stringResource(R.string.characters), onBack) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { importLauncher.launch("*/*") }) {
-                Icon(Lucide.FilePlus, stringResource(R.string.import_label), Modifier.size(24.dp))
+            FloatingActionButton(onClick = { showAddSheet = true }) {
+                Icon(Lucide.Plus, stringResource(R.string.add_character), Modifier.size(24.dp))
             }
         }
     ) { padding ->

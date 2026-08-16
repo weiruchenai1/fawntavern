@@ -47,6 +47,32 @@ internal object SseClient {
         }
     }
 
+    /** POST JSON 并一次性读取 JSON 响应，供图片生成等非 SSE 端点使用。 */
+    fun postJson(
+        url: String,
+        headers: Map<String, String>,
+        body: JSONObject,
+        stopped: () -> Unit = {},
+        onCall: (okhttp3.Call) -> Unit = {},
+    ): JSONObject {
+        val request = Request.Builder()
+            .url(url)
+            .post(body.toString().toRequestBody(JSON))
+            .header("Accept", "application/json")
+            .apply { headers.forEach { (k, v) -> if (v.isNotBlank()) header(k, v) } }
+            .build()
+        val call = Http.sseClient.newCall(request)
+        onCall(call)
+        call.execute().use { response ->
+            stopped()
+            val text = response.body.string()
+            if (!response.isSuccessful) {
+                throw IllegalStateException("HTTP ${response.code}: ${text.take(300)}")
+            }
+            return JSONObject(text)
+        }
+    }
+
     fun JSONObject.strOr(key: String): String =
         if (has(key) && !isNull(key)) optString(key, "") else ""
 }

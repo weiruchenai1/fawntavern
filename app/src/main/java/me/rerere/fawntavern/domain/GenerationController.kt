@@ -9,6 +9,7 @@ import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ApiToolCall
 import me.rerere.fawntavern.data.api.ChatApi
 import me.rerere.fawntavern.data.api.GenParams
+import me.rerere.fawntavern.data.api.GeneratedImage
 import me.rerere.fawntavern.data.api.StreamEnd
 import me.rerere.fawntavern.data.api.ToolSpec
 import me.rerere.fawntavern.data.chat.ChatMessage
@@ -72,6 +73,7 @@ internal class GenerationController(
         streaming: Boolean,
         tools: List<ToolSpec> = emptyList(),
         toolExecutor: ToolExecutor? = null,
+        persistGeneratedImage: suspend (GeneratedImage) -> String? = { null },
         errorText: (Exception) -> String,
         onUpdate: (ChatMessage) -> Unit,
     ): ChatMessage = coroutineScope {
@@ -86,6 +88,7 @@ internal class GenerationController(
         var reasoningAccum = 0L
         // 搜索时间线步骤（工具循环期间追加/更新），随每帧刷进 cur
         var searches = genMessage.searches
+        var generatedImages = genMessage.images
         // 累加缓冲：SSE 在 IO 线程高频回调，UI 按帧节流刷新，避免每个 token 都重组。
         // lock 保护 StringBuilder：IO 线程 append 与主线程 toString 并发
         val lock = Any()
@@ -166,6 +169,13 @@ internal class GenerationController(
                 val estimatedOutput = PromptBuilder.estTokens(roundContent) +
                     PromptBuilder.estTokens(roundReasoning)
                 completionTokens += end.completionTokens.takeIf { it > 0 } ?: estimatedOutput
+                end.generatedImages.forEach { image ->
+                    val path = persistGeneratedImage(image)
+                        ?: throw IllegalStateException("Failed to save generated image")
+                    generatedImages = generatedImages + path
+                    cur = cur.copy(images = generatedImages)
+                    onUpdate(cur)
+                }
                 countedContentChars = synchronized(lock) { buf.length }
                 countedReasoningChars = synchronized(lock) { reasoningBuf.length }
                 if (end.toolCalls.isEmpty() || toolExecutor == null) break
@@ -251,6 +261,7 @@ internal class GenerationController(
             alts[cur.altIdx] = alts[cur.altIdx].copy(
                 content = cur.content, reasoning = cur.reasoning,
                 model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
+                images = cur.images,
                 promptTokens = cur.promptTokens, completionTokens = cur.completionTokens,
                 generationMs = cur.generationMs)
             cur = cur.copy(alts = alts)

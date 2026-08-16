@@ -43,6 +43,12 @@ data class ApiImage(
     val base64: String,
 )
 
+/** 图片生成接口返回的图片内容；由聊天层落盘后写入消息附件。 */
+data class GeneratedImage(
+    val bytes: ByteArray,
+    val mimeType: String = "image/png",
+)
+
 /** 采样参数（来自关联预设）；null 字段 = 不下发，使用服务端默认值 */
 data class GenParams(
     val temperature: Float? = null,

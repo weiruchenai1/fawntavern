@@ -39,7 +39,11 @@ object CharacterRepository {
      * 文件名在首次创建时按当时语言固定并记录在 prefs，之后不随语言切换变化。
      * @return 默认卡的文件名
      */
-    suspend fun ensureDefaultCard(context: Context, fallbackName: String): String = withContext(Dispatchers.IO) {
+    suspend fun ensureDefaultCard(
+        context: Context,
+        fallbackName: String,
+        defaultPresetName: String = "",
+    ): String = withContext(Dispatchers.IO) {
         mutationMutex.withLock {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val name = prefs.getString(KEY_DEFAULT_NAME, null)
@@ -54,8 +58,18 @@ object CharacterRepository {
                         .put("description", "")
                         .put("first_mes", "")
                         .put("tags", JSONArray())
-                        .put("alternate_greetings", JSONArray()))
+                        .put("alternate_greetings", JSONArray())
+                        .apply {
+                            if (defaultPresetName.isNotBlank()) put("linked_preset", defaultPresetName)
+                        })
                 JsonFileDir.atomicWriteText(file, json.toString(2))
+            } else if (defaultPresetName.isNotBlank()) {
+                val json = JSONObject(file.readText())
+                val data = json.optJSONObject("data") ?: json
+                if (!data.has("linked_preset")) {
+                    data.put("linked_preset", defaultPresetName)
+                    JsonFileDir.atomicWriteText(file, json.toString(2))
+                }
             }
             name
         }
@@ -129,6 +143,36 @@ object CharacterRepository {
         CharacterParser.parse(JSONObject(file.readText()), name)
     }
 
+    /** 创建一个空白的 SillyTavern v2 角色卡。 */
+    suspend fun create(
+        context: Context,
+        requestedName: String,
+        defaultPresetName: String = "",
+    ): CharacterCard = withContext(Dispatchers.IO) {
+        val displayName = requestedName.trim()
+        require(displayName.isNotBlank()) { "角色名称不能为空" }
+        mutationMutex.withLock {
+            val name = uniqueFileName(context, displayName)
+            val json = JSONObject()
+                .put("spec", "chara_card_v2")
+                .put("spec_version", "2.0")
+                .put("data", JSONObject()
+                    .put("name", displayName)
+                    .put("description", "")
+                    .put("personality", "")
+                    .put("scenario", "")
+                    .put("first_mes", "")
+                    .put("mes_example", "")
+                    .put("tags", JSONArray())
+                    .put("alternate_greetings", JSONArray())
+                    .apply {
+                        if (defaultPresetName.isNotBlank()) put("linked_preset", defaultPresetName)
+                    })
+            JsonFileDir.atomicWriteText(File(charsDir(context), "$name.json"), json.toString(2))
+            CharacterParser.parse(json, name)
+        }
+    }
+
     /** 在数据层原子更新角色卡 JSON；变换或写盘失败会抛错，原文件保持不变。 */
     suspend fun updateJson(context: Context, name: String, transform: (JSONObject) -> Unit) =
         withContext(Dispatchers.IO) {
@@ -141,7 +185,41 @@ object CharacterRepository {
             }
         }
 
-    suspend fun import(context: Context, uri: Uri): CharacterCard = withContext(Dispatchers.IO) {
+    /** 预设重命名后同步角色卡关联；任一写入失败时恢复已经修改的角色卡。 */
+    suspend fun renameLinkedPreset(context: Context, oldName: String, newName: String) =
+        withContext(Dispatchers.IO) {
+            mutationMutex.withLock {
+                val updates = charsDir(context).listFiles()
+                    ?.filter { it.extension == "json" }
+                    ?.mapNotNull { file ->
+                        val original = file.readText()
+                        val json = JSONObject(original)
+                        val data = json.optJSONObject("data") ?: json
+                        if (data.optString("linked_preset", "") != oldName) return@mapNotNull null
+                        data.put("linked_preset", newName)
+                        Triple(file, original, json.toString(2))
+                    }
+                    .orEmpty()
+                val written = mutableListOf<Pair<File, String>>()
+                try {
+                    updates.forEach { (file, original, updated) ->
+                        JsonFileDir.atomicWriteText(file, updated)
+                        written += file to original
+                    }
+                } catch (error: Exception) {
+                    written.asReversed().forEach { (file, original) ->
+                        runCatching { JsonFileDir.atomicWriteText(file, original) }
+                    }
+                    throw error
+                }
+            }
+        }
+
+    suspend fun import(
+        context: Context,
+        uri: Uri,
+        defaultPresetName: String = "",
+    ): CharacterCard = withContext(Dispatchers.IO) {
         val rawBytes = context.contentResolver.openInputStream(uri)?.readBytes()
             ?: throw IllegalStateException("无法读取文件")
 
@@ -149,6 +227,11 @@ object CharacterRepository {
             ?: throw IllegalStateException("无法解析角色卡，请确认是 PNG/JSON 格式的 SillyTavern 角色卡")
 
         val json = JSONObject(jsonStr)
+        val data = json.optJSONObject("data") ?: json
+        if (!data.has("linked_preset") && defaultPresetName.isNotBlank()) {
+            data.put("linked_preset", defaultPresetName)
+        }
+        val persistedJson = json.toString(2)
 
         val parsed = CharacterParser.parse(json)
         val displayName = JsonFileDir.queryDisplayName(context, uri)
@@ -184,7 +267,7 @@ object CharacterRepository {
                     JsonFileDir.atomicWriteText(createdWorldBook, charaBook.toString(2))
                 }
 
-                JsonFileDir.atomicWriteText(cardFile, jsonStr)
+                JsonFileDir.atomicWriteText(cardFile, persistedJson)
                 parsed
             } catch (error: Exception) {
                 if (!cardFile.exists()) {

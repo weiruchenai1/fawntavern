@@ -119,6 +119,7 @@ object ApiConfigStore {
                     baseUrl = obj.optString("baseUrl", ""),
                     apiKey = obj.optString("apiKey", ""),
                     enabled = obj.optBoolean("enabled", true),
+                    useResponseApi = obj.optBoolean("useResponseApi", false),
                     models = models,
                     balanceEnabled = obj.optBoolean("balanceEnabled", false),
                     balancePath = obj.optString("balancePath", ""),
@@ -197,6 +198,7 @@ object ApiConfigStore {
             obj.put("baseUrl", p.baseUrl)
             obj.put("apiKey", p.apiKey)
             obj.put("enabled", p.enabled)
+            obj.put("useResponseApi", p.useResponseApi)
             obj.put("models", JSONArray().apply { p.models.forEach { put(modelToJson(it)) } })
             obj.put("balanceEnabled", p.balanceEnabled)
             obj.put("balancePath", p.balancePath)
@@ -221,6 +223,7 @@ object ApiConfigStore {
                 baseUrl = obj.optString("baseUrl", ""),
                 apiKey = obj.optString("apiKey", ""),
                 enabled = obj.optBoolean("enabled", true),
+                useResponseApi = obj.optBoolean("useResponseApi", false),
                 models = models,
                 balanceEnabled = obj.optBoolean("balanceEnabled", false),
                 balancePath = obj.optString("balancePath", ""),

@@ -191,8 +191,17 @@ private fun ColumnScope.ModelSelectorList(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    val lazyListState = rememberLazyListState()
+    val selectedModelPosition = remember(providers, currentModel) {
+        selectedModelListPosition(providers, currentModel)
+    }
+    val lazyListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = selectedModelPosition ?: 0,
+    )
     val badgeListState = rememberLazyListState()
+
+    LaunchedEffect(currentModel, selectedModelPosition) {
+        lazyListState.requestScrollToItem(selectedModelPosition ?: 0)
+    }
 
     // 主列表滚动时，底部快捷条跟随滚到当前提供商对应的徽章
     LaunchedEffect(lazyListState, providerPositions) {
@@ -277,6 +286,26 @@ private fun ColumnScope.ModelSelectorList(
 }
 
 /** 模型行：「可用模型」面板的行样式 + 单选高亮（选中 primaryContainer + Check）。 */
+internal fun selectedModelListPosition(
+    providers: List<ApiProvider>,
+    currentModel: String,
+): Int? {
+    var position = 0
+    providers.forEach { provider ->
+        position++ // 提供商分组标题
+        if (provider.models.isEmpty()) {
+            position++ // 空提供商提示
+        } else {
+            val modelIndex = provider.models.indexOfFirst {
+                "${provider.id}::${it.id}" == currentModel
+            }
+            if (modelIndex >= 0) return position + modelIndex
+            position += provider.models.size
+        }
+    }
+    return null
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ModelSelectorRow(

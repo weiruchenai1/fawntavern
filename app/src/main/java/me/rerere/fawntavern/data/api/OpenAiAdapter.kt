@@ -1,6 +1,8 @@
 package me.rerere.fawntavern.data.api
 
+import java.util.Base64
 import me.rerere.fawntavern.data.api.SseClient.strOr
+import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -13,6 +15,14 @@ internal object OpenAiAdapter : ProviderAdapter {
         onDelta: (String, String) -> Unit,
         stopped: () -> Unit, onCall: (okhttp3.Call) -> Unit,
     ): StreamEnd {
+        if (isImageGenerationModel(model)) {
+            return generateImages(provider, model, messages, stopped, onCall)
+        }
+        if (provider.useResponseApi) {
+            return OpenAiResponsesAdapter.stream(
+                provider, model, messages, params, tools, onDelta, stopped, onCall,
+            )
+        }
         val body = JSONObject().apply {
             put("model", model.id)
             put("stream", true)
@@ -85,6 +95,112 @@ internal object OpenAiAdapter : ProviderAdapter {
             completionTokens = completionTokens,
         )
     }
+
+    private fun generateImages(
+        provider: ApiProvider,
+        model: ModelInfo,
+        messages: List<ApiMessage>,
+        stopped: () -> Unit,
+        onCall: (okhttp3.Call) -> Unit,
+    ): StreamEnd {
+        val prompt = imageGenerationPrompt(messages)
+        require(prompt.isNotBlank()) { "Image generation requires a text prompt" }
+        val body = JSONObject()
+            .put("model", model.id)
+            .put("prompt", prompt)
+            .apply { applyCustomBodies(model) }
+        val response = SseClient.postJson(
+            url = "${provider.baseUrl.trimEnd('/')}/images/generations",
+            headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
+            body = body,
+            stopped = stopped,
+            onCall = onCall,
+        )
+        val images = parseGeneratedImages(response) { url ->
+            stopped()
+            downloadGeneratedImage(url, stopped, onCall)
+        }
+        check(images.isNotEmpty()) { "Image generation returned no images" }
+        return StreamEnd(generatedImages = images)
+    }
+
+    private fun downloadGeneratedImage(
+        url: String,
+        stopped: () -> Unit,
+        onCall: (okhttp3.Call) -> Unit,
+    ): GeneratedImage {
+        val request = Request.Builder().url(url).header("Accept", "image/*").build()
+        val call = Http.client.newCall(request)
+        onCall(call)
+        call.execute().use { response ->
+            stopped()
+            if (!response.isSuccessful) {
+                throw IllegalStateException("HTTP ${response.code}: failed to download generated image")
+            }
+            val body = response.body
+            val length = body.contentLength()
+            check(length <= MAX_GENERATED_IMAGE_BYTES || length < 0) { "Generated image is too large" }
+            val responseMime = body.contentType()?.toString()?.substringBefore(';')
+            val bytes = body.bytes()
+            check(bytes.size <= MAX_GENERATED_IMAGE_BYTES) { "Generated image is too large" }
+            return GeneratedImage(
+                bytes = bytes,
+                mimeType = responseMime?.takeIf { it.startsWith("image/") } ?: inferImageMime(bytes),
+            )
+        }
+    }
+
+    internal fun isImageGenerationModel(model: ModelInfo): Boolean =
+        Modality.IMAGE in model.outputModalities
+
+    internal fun imageGenerationPrompt(messages: List<ApiMessage>): String =
+        messages.lastOrNull { it.role == "user" && it.content.isNotBlank() }?.content
+            ?: messages.lastOrNull { it.content.isNotBlank() }?.content.orEmpty()
+
+    internal fun parseGeneratedImages(
+        response: JSONObject,
+        download: (String) -> GeneratedImage,
+    ): List<GeneratedImage> {
+        val data = response.optJSONArray("data") ?: return emptyList()
+        return buildList {
+            for (index in 0 until data.length()) {
+                val item = data.optJSONObject(index) ?: continue
+                val encoded = item.strOr("b64_json")
+                if (encoded.isNotBlank()) {
+                    val payload = encoded.substringAfter(',', encoded)
+                    check(payload.length <= MAX_GENERATED_IMAGE_BASE64_CHARS) {
+                        "Generated image is too large"
+                    }
+                    val bytes = try {
+                        Base64.getDecoder().decode(payload)
+                    } catch (error: IllegalArgumentException) {
+                        throw IllegalStateException("Image generation returned invalid base64 data", error)
+                    }
+                    check(bytes.size <= MAX_GENERATED_IMAGE_BYTES) { "Generated image is too large" }
+                    val dataMime = encoded.takeIf { it.startsWith("data:") }
+                        ?.substringAfter("data:")?.substringBefore(';')
+                    add(GeneratedImage(bytes, dataMime ?: inferImageMime(bytes)))
+                    continue
+                }
+                item.strOr("url").takeIf { it.isNotBlank() }?.let { add(download(it)) }
+            }
+        }
+    }
+
+    private fun inferImageMime(bytes: ByteArray): String = when {
+        bytes.size >= 8 && bytes.sliceArray(0..7).contentEquals(
+            byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a),
+        ) -> "image/png"
+        bytes.size >= 3 && bytes[0] == 0xff.toByte() && bytes[1] == 0xd8.toByte() &&
+            bytes[2] == 0xff.toByte() -> "image/jpeg"
+        bytes.size >= 12 && String(bytes, 0, 4, Charsets.US_ASCII) == "RIFF" &&
+            String(bytes, 8, 4, Charsets.US_ASCII) == "WEBP" -> "image/webp"
+        else -> "image/png"
+    }
+
+    private const val MAX_GENERATED_IMAGE_BYTES = 25 * 1024 * 1024
+    private const val MAX_GENERATED_IMAGE_BASE64_CHARS =
+        ((MAX_GENERATED_IMAGE_BYTES + 2) / 3) * 4
 
     /**
      * 思考预算：OpenAI 兼容阵营各家字段互不相同（无统一标准），按 baseUrl 主机名分流；

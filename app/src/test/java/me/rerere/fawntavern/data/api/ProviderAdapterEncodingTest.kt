@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONArray
+import org.json.JSONObject
 
 class ProviderAdapterEncodingTest {
     private val call = ApiToolCall(
@@ -24,6 +26,63 @@ class ProviderAdapterEncodingTest {
             .getJSONObject(0).getJSONObject("function").getString("name"))
         assertEquals("tool", encoded[1].getString("role"))
         assertEquals("call-1", encoded[1].getString("tool_call_id"))
+    }
+
+    @Test
+    fun responsesApiUsesInstructionsFlatToolsAndToolOutputItems() {
+        val provider = ApiProvider(
+            baseUrl = "https://api.openai.com/v1",
+            useResponseApi = true,
+        )
+        val rawReasoning = JSONArray().put(JSONObject()
+            .put("type", "reasoning")
+            .put("id", "reasoning-1")
+            .put("encrypted_content", "encrypted"))
+        val body = OpenAiResponsesAdapter.buildRequestBody(
+            provider = provider,
+            model = ModelInfo("gpt-test"),
+            messages = listOf(
+                ApiMessage("system", "system one"),
+                ApiMessage("system", "system two"),
+                ApiMessage(
+                    role = "assistant",
+                    content = "",
+                    toolCalls = listOf(call),
+                    rawBlocks = rawReasoning.toString(),
+                ),
+            ),
+            params = GenParams(maxTokens = 321),
+            tools = listOf(ToolSpec("search_web", "Search", "{\"type\":\"object\"}")),
+            stream = true,
+        )
+
+        assertEquals("system one\n\nsystem two", body.getString("instructions"))
+        assertEquals(321, body.getInt("max_output_tokens"))
+        val tool = body.getJSONArray("tools").getJSONObject(0)
+        assertEquals("function", tool.getString("type"))
+        assertEquals("search_web", tool.getString("name"))
+        assertFalse(tool.has("function"))
+        val input = body.getJSONArray("input")
+        assertEquals("reasoning", input.getJSONObject(0).getString("type"))
+        assertEquals("function_call", input.getJSONObject(1).getString("type"))
+        assertEquals("function_call_output", input.getJSONObject(2).getString("type"))
+        assertEquals("call-1", input.getJSONObject(2).getString("call_id"))
+    }
+
+    @Test
+    fun volcResponsesApiOmitsUnsupportedReasoningMetadata() {
+        val body = OpenAiResponsesAdapter.buildRequestBody(
+            provider = ApiProvider(baseUrl = "https://ark.cn-beijing.volces.com/api/v3"),
+            model = ModelInfo("reasoner", abilities = listOf(ModelAbility.REASONING)),
+            messages = listOf(ApiMessage("user", "hello")),
+            params = GenParams(reasoning = ReasoningLevel.LOW),
+            tools = emptyList(),
+            stream = true,
+        )
+
+        assertEquals("low", body.getJSONObject("reasoning").getString("effort"))
+        assertFalse(body.getJSONObject("reasoning").has("summary"))
+        assertFalse(body.has("include"))
     }
 
     @Test

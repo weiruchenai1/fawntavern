@@ -19,6 +19,7 @@
     <string name="remove_image">Remove Image</string>
     <string name="clear">Clear</string>
     <string name="retry">Retry</string>
+    <string name="refresh">Refresh</string>
     <string name="preset_save_failed_fmt">Could not save the preset. Your edits are still open: %1$s</string>
     <string name="worldbook_save_failed_fmt">Could not save the world book. Your edits are still open: %1$s</string>
     <string name="backup_recovery_in_progress">Recovering an interrupted backup</string>
@@ -38,7 +39,7 @@
     <string name="language">Language</string>
     <string name="font_size">Font Size</string>
     <string name="workspace">Workspace</string>
-    <string name="characters">Characters</string>
+    <string name="characters">Character Cards</string>
     <string name="presets">Presets</string>
     <string name="world_books">World Books</string>
     <string name="api_config">API Config</string>
@@ -60,6 +61,12 @@
     <string name="about_disclaimer_text">This app is for learning and entertainment purposes only. AI-generated content does not represent the developer\'s views. Please use responsibly.</string>
 
     <!-- Prompt debug log -->
+    <string name="logs">Logs</string>
+    <string name="system_log">System Log</string>
+    <string name="system_log_empty">No system logs</string>
+    <plurals name="system_log_entry_count"><item quantity="one">%1$d entry</item><item quantity="other">%1$d entries</item></plurals>
+    <string name="log_level_error">Error</string>
+    <string name="log_level_warning">Warning</string>
     <string name="debug_log">Prompt Log</string>
     <string name="debug_log_desc">Records the full prompt sent to the AI each time, to verify that character cards / world books / presets are inserted and assembled correctly. Kept in memory only; cleared on restart.</string>
     <string name="debug_log_enable">Enable logging</string>
@@ -82,6 +89,7 @@
     <string name="select_character">Select Character</string>
     <string name="no_characters">No characters</string>
     <string name="default_character">Default Character</string>
+    <string name="default_preset">Default Preset</string>
     <string name="character_avatar">Character avatar</string>
     <string name="edit_avatar">Change Avatar</string>
     <string name="edit_username">Change Username</string>
@@ -211,7 +219,12 @@
 
     <!-- Characters -->
     <string name="char_loading">Loading…</string>
-    <string name="no_characters_desc">Tap + to import a PNG/JSON character card</string>
+    <string name="add_character">Add character</string>
+    <string name="import_character_card">Import SillyTavern character card</string>
+    <string name="selected_file_fmt">Selected file: %1$s</string>
+    <string name="character_created">Character created</string>
+    <string name="character_imported">Character card imported</string>
+    <string name="no_characters_desc">Tap + to add a character or import a PNG/JSON character card</string>
     <string name="no_characters_title">No characters</string>
     <string name="add_tag">Add Tag</string>
     <string name="tag_label">Tag</string>
@@ -474,6 +487,7 @@
     <string name="config_tab">Config</string>
     <string name="models_tab">Models</string>
     <string name="response_api_label">Response API</string>
+    <string name="response_api_warning">OpenAI\'s newer /responses endpoint. Most compatible providers do not support it; enable it only when the service explicitly does.</string>
     <string name="balance_label">Check Balance</string>
     <string name="balance_api_path">Balance API Path</string>
     <string name="balance_json_key">Result JSON Key</string>
@@ -483,6 +497,15 @@
     <string name="test_tool_call">Tool Call</string>
     <string name="test_tool_called_fmt">Called %1$s, args %2$s</string>
     <string name="test_tool_not_called_fmt">No tool call, response: %s</string>
+    <string name="test_view_details">View details</string>
+    <string name="test_detail_title">%s Details</string>
+    <string name="test_detail_model">Model</string>
+    <string name="test_detail_status">Status</string>
+    <string name="test_detail_content">Details</string>
+    <string name="test_detail_empty">No response text</string>
+    <string name="test_status_waiting">Waiting</string>
+    <string name="test_status_success">Succeeded</string>
+    <string name="test_status_failed">Failed</string>
 
     <!-- Extensions -->
     <string name="extensions">Extensions</string>

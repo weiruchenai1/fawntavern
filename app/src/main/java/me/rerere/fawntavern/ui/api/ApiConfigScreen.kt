@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.text.selection.SelectionContainer
 import me.rerere.fawntavern.R
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -32,6 +33,7 @@ import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ConnectionTester
 import me.rerere.fawntavern.data.api.ModelApi
 import me.rerere.fawntavern.data.api.ModelInfo
+import me.rerere.fawntavern.data.api.OpenAiResponsesAdapter
 import me.rerere.fawntavern.data.api.modelInfoOf
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -293,9 +295,8 @@ private fun ProviderConfigTab(
     var name by remember(prov) { mutableStateOf(prov.name) }
     var baseUrl by remember(prov) { mutableStateOf(prov.baseUrl) }
     var apiKey by remember(prov) { mutableStateOf(prov.apiKey) }
-    var apiPath by remember(prov) { mutableStateOf("/chat/completions") }
     var enabledValue by remember(prov) { mutableStateOf(prov.enabled) }
-    var responseApi by remember { mutableStateOf(false) }
+    var responseApi by remember(prov) { mutableStateOf(prov.useResponseApi) }
     var balanceEnabled by remember(prov) { mutableStateOf(prov.balanceEnabled) }
     var balancePath by remember(prov) { mutableStateOf(prov.balancePath) }
     var balanceJsonKey by remember(prov) { mutableStateOf(prov.balanceJsonKey) }
@@ -304,8 +305,19 @@ private fun ProviderConfigTab(
 
     val currentProv = prov.copy(
         name = name, baseUrl = baseUrl, apiKey = apiKey, enabled = enabledValue,
+        useResponseApi = responseApi,
         balanceEnabled = balanceEnabled, balancePath = balancePath, balanceJsonKey = balanceJsonKey,
     )
+    val apiPath = when (prov.type) {
+        "google" -> "/models/{model}:streamGenerateContent"
+        "claude" -> "/messages"
+        else -> if (responseApi) {
+            runCatching { java.net.URI(OpenAiResponsesAdapter.endpoint(currentProv)).path }
+                .getOrNull()
+                .orEmpty()
+                .ifBlank { "/responses" }
+        } else "/chat/completions"
+    }
 
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -320,7 +332,14 @@ private fun ProviderConfigTab(
                 SegmentedButton(
                     shape = SegmentedButtonDefaults.itemShape(idx, types.size),
                     selected = selectedTypeIdx == idx,
-                    onClick = { selectedTypeIdx = idx; update(prov.copy(type = key)) },
+                    onClick = {
+                        selectedTypeIdx = idx
+                        if (key != "openai") responseApi = false
+                        update(currentProv.copy(
+                            type = key,
+                            useResponseApi = key == "openai" && responseApi,
+                        ))
+                    },
                     label = { Text(label) })
             }
         }
@@ -341,8 +360,14 @@ private fun ProviderConfigTab(
             label = { Text(stringResource(R.string.api_base_url)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("https://api.openai.com/v1") })
 
-        OutlinedTextField(apiPath, { apiPath = it },
-            label = { Text(stringResource(R.string.api_path_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            value = apiPath,
+            onValueChange = {},
+            label = { Text(stringResource(R.string.api_path_label)) },
+            singleLine = true,
+            readOnly = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween) {
@@ -351,11 +376,23 @@ private fun ProviderConfigTab(
             Switch(enabledValue, { enabledValue = it; update(currentProv.copy(enabled = it)) })
         }
 
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(stringResource(R.string.response_api_label), style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Switch(responseApi, { responseApi = it })
+        if (prov.type == "openai") {
+            Column(verticalArrangement = Arrangement.spacedBy(Space4)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(stringResource(R.string.response_api_label), style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Switch(responseApi, {
+                        responseApi = it
+                        update(currentProv.copy(useResponseApi = it))
+                    })
+                }
+                Text(
+                    stringResource(R.string.response_api_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
@@ -688,11 +725,14 @@ private sealed interface TestState {
     data class Err(val message: String) : TestState
 }
 
+private enum class ConnectionTestKind { NON_STREAMING, STREAMING, TOOL_CALL }
+
 /**
  * 连接测试对话框：选一个模型，对其并发跑 非流式 / 流式 / 工具调用 三项测试，
  * 各自独立显示进度与结果（成功显示回复文本，失败显示错误信息）。
  * 模型选择通过底部面板（[ModelPickerSheet]）完成。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -707,6 +747,7 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
     var streaming by remember { mutableStateOf<TestState>(TestState.Idle) }
     var streamingText by remember { mutableStateOf("") }
     var toolCall by remember { mutableStateOf<TestState>(TestState.Idle) }
+    var detailKind by remember { mutableStateOf<ConnectionTestKind?>(null) }
 
     val running = nonStreaming is TestState.Loading ||
         streaming is TestState.Loading || toolCall is TestState.Loading
@@ -742,7 +783,14 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
     // 模型选择底板：从屏幕底部滑出，点击模型后自动关闭并把选中模型带回弹窗
     ModelSelectorSheet(
         state = modelSelector,
-        onSelect = { _, modelId -> selectedModel = modelId },
+        onSelect = { _, modelId ->
+            selectedModel = modelId
+            nonStreaming = TestState.Idle
+            streaming = TestState.Idle
+            streamingText = ""
+            toolCall = TestState.Idle
+            detailKind = null
+        },
     )
 
     AlertDialog(
@@ -772,9 +820,22 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
                     Icon(Lucide.ChevronDown, null, Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TestResultRow(stringResource(R.string.test_non_streaming), nonStreaming)
-                TestResultRow(stringResource(R.string.test_streaming), streaming, liveText = streamingText)
-                TestResultRow(stringResource(R.string.test_tool_call), toolCall)
+                TestResultRow(
+                    stringResource(R.string.test_non_streaming),
+                    nonStreaming,
+                    onClick = { detailKind = ConnectionTestKind.NON_STREAMING },
+                )
+                TestResultRow(
+                    stringResource(R.string.test_streaming),
+                    streaming,
+                    liveText = streamingText,
+                    onClick = { detailKind = ConnectionTestKind.STREAMING },
+                )
+                TestResultRow(
+                    stringResource(R.string.test_tool_call),
+                    toolCall,
+                    onClick = { detailKind = ConnectionTestKind.TOOL_CALL },
+                )
             }
         },
         confirmButton = {
@@ -786,19 +847,47 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
         },
     )
+
+    detailKind?.let { kind ->
+        val label = when (kind) {
+            ConnectionTestKind.NON_STREAMING -> stringResource(R.string.test_non_streaming)
+            ConnectionTestKind.STREAMING -> stringResource(R.string.test_streaming)
+            ConnectionTestKind.TOOL_CALL -> stringResource(R.string.test_tool_call)
+        }
+        val state = when (kind) {
+            ConnectionTestKind.NON_STREAMING -> nonStreaming
+            ConnectionTestKind.STREAMING -> streaming
+            ConnectionTestKind.TOOL_CALL -> toolCall
+        }
+        ConnectionTestDetailSheet(
+            label = label,
+            modelId = selectedModel,
+            state = state,
+            liveText = if (kind == ConnectionTestKind.STREAMING) streamingText else "",
+            onDismiss = { detailKind = null },
+        )
+    }
 }
 
 @Composable
-private fun TestResultRow(label: String, state: TestState, liveText: String = "") {
+private fun TestResultRow(
+    label: String,
+    state: TestState,
+    liveText: String = "",
+    onClick: () -> Unit,
+) {
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = state !is TestState.Idle, onClick = onClick)
+            .padding(vertical = Space4),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(Space8),
     ) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp))
         when (state) {
             TestState.Idle -> Text("—", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             TestState.Loading -> Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (liveText.isNotBlank()) {
@@ -819,6 +908,111 @@ private fun TestResultRow(label: String, state: TestState, liveText: String = ""
             is TestState.Err -> Text(state.message, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f),
                 maxLines = 4, overflow = TextOverflow.Ellipsis)
+        }
+        if (state !is TestState.Idle) {
+            Icon(
+                Lucide.ChevronRight,
+                contentDescription = stringResource(R.string.test_view_details),
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConnectionTestDetailSheet(
+    label: String,
+    modelId: String,
+    state: TestState,
+    liveText: String,
+    onDismiss: () -> Unit,
+) {
+    val status = when (state) {
+        TestState.Idle -> stringResource(R.string.test_status_waiting)
+        TestState.Loading -> stringResource(R.string.testing)
+        is TestState.Ok -> stringResource(R.string.test_status_success)
+        is TestState.Err -> stringResource(R.string.test_status_failed)
+    }
+    val detail = when (state) {
+        TestState.Idle -> ""
+        TestState.Loading -> liveText
+        is TestState.Ok -> liveText.ifBlank { state.text }
+        is TestState.Err -> listOf(state.message, liveText)
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+        ),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().fillMaxHeight(0.7f)
+                .padding(horizontal = Space16)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(Space12),
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    stringResource(R.string.test_detail_title, label),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                AppIconButton(
+                    icon = Lucide.X,
+                    contentDescription = stringResource(R.string.close),
+                    onClick = onDismiss,
+                )
+            }
+            DetailField(stringResource(R.string.test_detail_model), modelId)
+            DetailField(stringResource(R.string.test_detail_status), status)
+            Text(
+                stringResource(R.string.test_detail_content),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SelectionContainer(Modifier.fillMaxWidth().weight(1f)) {
+                Text(
+                    detail.ifBlank { stringResource(R.string.test_detail_empty) },
+                    modifier = Modifier.fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .background(
+                            MaterialTheme.colorScheme.surfaceContainer,
+                            RoundedCornerShape(8.dp),
+                        )
+                        .padding(Space12),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state is TestState.Err) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Spacer(Modifier.height(Space8))
+        }
+    }
+}
+
+@Composable
+private fun DetailField(label: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Space12),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            label,
+            modifier = Modifier.width(64.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SelectionContainer(Modifier.weight(1f)) {
+            Text(value, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

@@ -12,10 +12,12 @@ import me.rerere.fawntavern.ui.settings.AboutScreen
 import me.rerere.fawntavern.ui.settings.DataManagementScreen
 import me.rerere.fawntavern.ui.settings.DefaultModelPage
 import me.rerere.fawntavern.ui.settings.FontSizeScreen
+import me.rerere.fawntavern.ui.settings.LogsScreen
 import me.rerere.fawntavern.ui.settings.PreferencesScreen
 import me.rerere.fawntavern.ui.settings.PromptLogScreen
 import me.rerere.fawntavern.ui.settings.CrashReportScreen
 import me.rerere.fawntavern.ui.settings.SettingsScreen
+import me.rerere.fawntavern.ui.settings.SystemLogScreen
 import me.rerere.fawntavern.ui.settings.TtsConfigScreen
 import me.rerere.fawntavern.ui.settings.WebSearchConfigScreen
 import me.rerere.fawntavern.ui.worldbook.WorldBookListScreen
@@ -62,6 +64,14 @@ internal fun ChatDestinationHost(
                 onSolidBackgroundChange = onSolidBackgroundChange,
             )
         }
+        ChatDestination.Logs -> {
+            LogsScreen(
+                onBack = onBack,
+                onOpenSystemLog = { onNavigate(ChatDestination.SystemLog) },
+                onOpenPromptLog = { onNavigate(ChatDestination.PromptLog) },
+            )
+        }
+        ChatDestination.SystemLog -> { SystemLogScreen(onBack = onBack) }
         ChatDestination.PromptLog -> { PromptLogScreen(onBack = onBack) }
         ChatDestination.CrashReport -> { CrashReportScreen(onBack = onBack) }
         ChatDestination.DataMgmt -> {
@@ -109,7 +119,7 @@ internal fun ChatDestinationHost(
                 onNavigateToDataManagement = { onNavigate(ChatDestination.DataMgmt) },
                 onNavigateToFontSize = { onNavigate(ChatDestination.FontSize) },
                 onNavigateToPreferences = { onNavigate(ChatDestination.Preferences) },
-                onNavigateToPromptLog = { onNavigate(ChatDestination.PromptLog) },
+                onNavigateToLogs = { onNavigate(ChatDestination.Logs) },
                 onNavigateToCrashReport = { onNavigate(ChatDestination.CrashReport) },
                 onNavigateToExtensions = { onNavigate(ChatDestination.Extensions) },
                 onNavigateToDefaultModel = { onNavigate(ChatDestination.DefaultModel) },

@@ -10,6 +10,7 @@ import android.provider.OpenableColumns
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import me.rerere.fawntavern.data.api.GeneratedImage
 
 /**
  * 附件落盘：发送时把 content URI 指向的内容拷入 filesDir/attachments/，
@@ -60,6 +61,27 @@ object AttachmentStore {
             bitmap.recycle()
         }
     }
+
+    /** 将图片生成接口返回的内容保存为聊天图片附件。 */
+    suspend fun persistGeneratedImage(context: Context, image: GeneratedImage): String? =
+        withContext(Dispatchers.IO) {
+            if (image.bytes.isEmpty()) return@withContext null
+            val extension = when (image.mimeType.lowercase().substringBefore(';')) {
+                "image/jpeg", "image/jpg" -> "jpg"
+                "image/webp" -> "webp"
+                "image/gif" -> "gif"
+                else -> "png"
+            }
+            val name = "generated_${System.currentTimeMillis()}_${(0..999).random()}.$extension"
+            val out = File(dir(context), name)
+            try {
+                out.writeBytes(image.bytes)
+                "$DIR/$name"
+            } catch (_: Exception) {
+                out.delete()
+                null
+            }
+        }
 
     /** 其它文件：原样拷贝，返回 (原始文件名, filesDir 相对路径)；过大或读取失败返回 null */
     suspend fun persistFile(context: Context, uri: Uri): MsgFile? = withContext(Dispatchers.IO) {

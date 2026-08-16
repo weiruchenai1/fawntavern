@@ -32,6 +32,7 @@ class CharacterLibraryControllerTest {
             if (name == "broken") error("broken card")
             return CharacterCard(name = "Valid")
         }
+        override suspend fun create(name: String): CharacterCard = CharacterCard(name = name)
         override suspend fun import(uri: Uri): CharacterCard = CharacterCard(name = "Imported")
         override suspend fun delete(name: String) = Unit
         override suspend fun saveOrder(names: List<String>) = Unit

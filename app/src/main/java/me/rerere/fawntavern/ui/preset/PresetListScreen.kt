@@ -69,6 +69,7 @@ fun PresetListScreen(onBack: () -> Unit) {
         renameItem = controller::rename,
         deleteItem = controller::delete,
         onOpen = { selectedPreset = it },
+        canDeleteItem = { !controller.isDefault(it) },
         itemCard = { name, p, onClick, onLongPress ->
             PresetCard(
                 name = name,

@@ -2,6 +2,7 @@ package me.rerere.fawntavern.ui.character
 
 import android.content.Context
 import android.net.Uri
+import me.rerere.fawntavern.R
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -11,6 +12,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
+import me.rerere.fawntavern.data.preset.PresetRepository
 
 internal data class CharacterLibraryState(
     val names: List<String>,
@@ -21,6 +23,7 @@ internal interface CharacterLibraryDataSource {
     fun defaultCardName(): String?
     suspend fun names(): List<String>
     suspend fun load(name: String): CharacterCard
+    suspend fun create(name: String): CharacterCard
     suspend fun import(uri: Uri): CharacterCard
     suspend fun delete(name: String)
     suspend fun saveOrder(names: List<String>)
@@ -32,10 +35,16 @@ internal interface CharacterLibraryDataSource {
 internal class AndroidCharacterLibraryDataSource(
     private val context: Context,
 ) : CharacterLibraryDataSource {
+    private suspend fun defaultPresetName(): String =
+        PresetRepository.ensureDefaultPreset(context, context.getString(R.string.default_preset))
+
     override fun defaultCardName(): String? = CharacterRepository.defaultCardName(context)
     override suspend fun names(): List<String> = CharacterRepository.listNames(context)
     override suspend fun load(name: String): CharacterCard = CharacterRepository.load(context, name)
-    override suspend fun import(uri: Uri): CharacterCard = CharacterRepository.import(context, uri)
+    override suspend fun create(name: String): CharacterCard =
+        CharacterRepository.create(context, name, defaultPresetName())
+    override suspend fun import(uri: Uri): CharacterCard =
+        CharacterRepository.import(context, uri, defaultPresetName())
     override suspend fun delete(name: String) = CharacterRepository.delete(context, name)
     override suspend fun saveOrder(names: List<String>) = CharacterRepository.saveOrder(context, names)
     override suspend fun exportPng(name: String): ByteArray = CharacterRepository.exportPngBytes(context, name)
@@ -66,6 +75,7 @@ internal class CharacterLibraryController(
     }
 
     suspend fun import(uri: Uri): CharacterCard = dataSource.import(uri)
+    suspend fun create(name: String): CharacterCard = dataSource.create(name)
     suspend fun delete(name: String) = dataSource.delete(name)
     suspend fun saveOrder(names: List<String>) = dataSource.saveOrder(names)
     suspend fun exportPng(name: String): ByteArray = dataSource.exportPng(name)

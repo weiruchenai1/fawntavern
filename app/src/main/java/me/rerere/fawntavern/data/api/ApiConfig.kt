@@ -7,6 +7,7 @@ data class ApiProvider(
     val baseUrl: String = "",
     val apiKey: String = "",
     val enabled: Boolean = true,
+    val useResponseApi: Boolean = false,    // OpenAI Responses API (/responses)
     val models: List<ModelInfo> = emptyList(),
     val balanceEnabled: Boolean = false,     // 余额查询
     val balancePath: String = "",            // 余额 API 路径，如 /user/balance

@@ -39,6 +39,25 @@ class ConversationOpsTest {
     }
 
     @Test
+    fun switchingAltPreservesGeneratedImagesPerVersion() {
+        val message = ChatMessage(
+            role = "assistant",
+            images = listOf("attachments/first.png"),
+            altIdx = 0,
+            alts = listOf(
+                MsgAlt(images = listOf("attachments/stale.png")),
+                MsgAlt(images = listOf("attachments/second.png")),
+            ),
+        )
+
+        val switched = ConversationOps.switchAltOne(message, 1)
+
+        requireNotNull(switched)
+        assertEquals(listOf("attachments/first.png"), switched.alts[0].images)
+        assertEquals(listOf("attachments/second.png"), switched.images)
+    }
+
+    @Test
     fun deleteAltSelectsNearestVersionAndCollapsesLastVersion() {
         val message = ChatMessage(
             role = "assistant",

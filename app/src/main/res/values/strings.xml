@@ -19,6 +19,7 @@
     <string name="remove_image">移除图片</string>
     <string name="clear">清除</string>
     <string name="retry">重试</string>
+    <string name="refresh">刷新</string>
     <string name="preset_save_failed_fmt">预设保存失败，编辑内容仍保留：%1$s</string>
     <string name="worldbook_save_failed_fmt">世界书保存失败，编辑内容仍保留：%1$s</string>
     <string name="backup_recovery_in_progress">正在恢复未完成的备份，请稍候</string>
@@ -38,7 +39,7 @@
     <string name="language">语言</string>
     <string name="font_size">字体大小</string>
     <string name="workspace">工作空间</string>
-    <string name="characters">角色</string>
+    <string name="characters">角色卡</string>
     <string name="presets">预设</string>
     <string name="world_books">世界书</string>
     <string name="api_config">API 配置</string>
@@ -60,6 +61,12 @@
     <string name="about_disclaimer_text">本应用仅供学习和娱乐用途。AI 生成的内容不代表开发者立场，请合理使用。</string>
 
     <!-- Prompt 调试日志 -->
+    <string name="logs">日志</string>
+    <string name="system_log">系统日志</string>
+    <string name="system_log_empty">暂无系统日志</string>
+    <plurals name="system_log_entry_count"><item quantity="other">共 %1$d 条记录</item></plurals>
+    <string name="log_level_error">错误</string>
+    <string name="log_level_warning">警告</string>
     <string name="debug_log">Prompt 日志</string>
     <string name="debug_log_desc">记录每次发送给 AI 的完整 prompt，用于核对角色卡 / 世界书 / 预设是否已正确插入组装。仅存于内存，重启即清空。</string>
     <string name="debug_log_enable">启用日志记录</string>
@@ -82,6 +89,7 @@
     <string name="select_character">选择角色卡</string>
     <string name="no_characters">暂无角色卡</string>
     <string name="default_character">默认角色</string>
+    <string name="default_preset">默认预设</string>
     <string name="character_avatar">角色头像</string>
     <string name="edit_avatar">修改头像</string>
     <string name="edit_username">修改用户名</string>
@@ -209,7 +217,12 @@
 
     <!-- Characters -->
     <string name="char_loading">加载中…</string>
-    <string name="no_characters_desc">点击右下角导入 PNG/JSON 角色卡</string>
+    <string name="add_character">添加角色</string>
+    <string name="import_character_card">导入 SillyTavern 角色卡</string>
+    <string name="selected_file_fmt">已选文件：%1$s</string>
+    <string name="character_created">角色已创建</string>
+    <string name="character_imported">角色卡已导入</string>
+    <string name="no_characters_desc">点击右下角添加角色或导入 PNG/JSON 角色卡</string>
     <string name="no_characters_title">暂无角色</string>
     <string name="add_tag">添加标签</string>
     <string name="tag_label">标签</string>
@@ -472,6 +485,7 @@
     <string name="config_tab">配置</string>
     <string name="models_tab">模型</string>
     <string name="response_api_label">Response API</string>
+    <string name="response_api_warning">OpenAI 新一代 /responses 接口，大部分兼容提供商不支持；仅在服务明确支持时开启。</string>
     <string name="balance_label">获取账户余额</string>
     <string name="balance_api_path">余额 API 路径</string>
     <string name="balance_json_key">结果 JSON 键</string>
@@ -481,6 +495,15 @@
     <string name="test_tool_call">工具调用</string>
     <string name="test_tool_called_fmt">调用 %1$s，入参 %2$s</string>
     <string name="test_tool_not_called_fmt">未调用工具，回复：%s</string>
+    <string name="test_view_details">查看详情</string>
+    <string name="test_detail_title">%s 详情</string>
+    <string name="test_detail_model">模型</string>
+    <string name="test_detail_status">状态</string>
+    <string name="test_detail_content">详细内容</string>
+    <string name="test_detail_empty">没有返回文本</string>
+    <string name="test_status_waiting">等待测试</string>
+    <string name="test_status_success">成功</string>
+    <string name="test_status_failed">失败</string>
 
     <!-- Extensions -->
     <string name="extensions">扩展</string>

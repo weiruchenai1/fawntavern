@@ -13,6 +13,7 @@ class PresetDataControllerTest {
         val source = FakePresetDataSource()
         val controller = PresetDataController(source)
 
+        assertEquals(true, controller.isDefault("preset"))
         assertEquals(listOf("preset"), controller.names())
         assertEquals(StPreset(name = "preset"), controller.load("preset"))
         controller.save(StPreset(name = "saved"))
@@ -29,6 +30,7 @@ class PresetDataControllerTest {
         var renamed: Pair<String, String>? = null
         var deleted: String? = null
 
+        override fun defaultName(): String = "preset"
         override suspend fun names(): List<String> = listOf("preset")
         override suspend fun load(name: String): StPreset = StPreset(name = name)
         override suspend fun import(uri: Uri): StPreset = StPreset(name = "imported")

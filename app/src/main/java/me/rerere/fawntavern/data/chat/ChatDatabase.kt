@@ -84,6 +84,7 @@ internal data class ChatSearchRow(
 internal data class AttachmentColumns(
     val imagesJson: String,
     val filesJson: String,
+    val altsJson: String,
 )
 
 @Dao
@@ -131,7 +132,7 @@ internal interface ChatDao {
     """)
     suspend fun searchMessages(charFile: String, query: String, limit: Int): List<ChatSearchRow>
 
-    @Query("SELECT imagesJson, filesJson FROM messages WHERE imagesJson != '' OR filesJson != ''")
+    @Query("SELECT imagesJson, filesJson, altsJson FROM messages WHERE imagesJson != '' OR filesJson != '' OR altsJson != ''")
     suspend fun listAttachmentColumns(): List<AttachmentColumns>
 
     @Query("SELECT COUNT(*) FROM sessions")

@@ -203,10 +203,14 @@ object ChatRepository {
         val referenced = dao(context).listAttachmentColumns().asSequence().flatMap { row ->
             val images = if (row.imagesJson.isBlank()) emptyList() else
                 runCatching { json.decodeFromString<List<String>>(row.imagesJson) }.getOrDefault(emptyList())
+            val altImages = if (row.altsJson.isBlank()) emptyList() else
+                runCatching { json.decodeFromString<List<MsgAlt>>(row.altsJson) }
+                    .getOrDefault(emptyList())
+                    .flatMap { it.images }
             val files = if (row.filesJson.isBlank()) emptyList() else
                 runCatching { json.decodeFromString<List<MsgFile>>(row.filesJson) }.getOrDefault(emptyList())
                     .map { it.path }
-            (images + files).asSequence()
+            (images + altImages + files).asSequence()
         }.map { it.substringAfterLast('/') }.toSet()
         withContext(Dispatchers.IO) {
             AttachmentStore.dir(context).listFiles()?.forEach { file ->

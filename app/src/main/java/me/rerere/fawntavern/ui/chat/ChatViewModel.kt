@@ -35,6 +35,7 @@ import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.preset.StPreset
+import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.toCharRegex
 import me.rerere.fawntavern.data.speech.TtsUiState
 import me.rerere.fawntavern.data.settings.PromptLogStore
@@ -201,7 +202,15 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         PromptLog.enabled = PromptLogStore.isEnabled(app)
         // 会话列表来自 Repository 的 Flow：任何 save/delete/clear 后自动刷新
         viewModelScope.launch {
-            val defaultName = CharacterRepository.ensureDefaultCard(ctx, ctx.getString(R.string.default_character))
+            val defaultPresetName = PresetRepository.ensureDefaultPreset(
+                ctx,
+                ctx.getString(R.string.default_preset),
+            )
+            val defaultName = CharacterRepository.ensureDefaultCard(
+                ctx,
+                ctx.getString(R.string.default_character),
+                defaultPresetName,
+            )
             if (ChatRepository.count(ctx) == 0) {
                 session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName)
             }
@@ -432,8 +441,15 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     ?: if (card != null) {
                         ConversationOps.newSession(card, cur.charFile, cur.charName)
                     } else {
-                        val defName = CharacterRepository.defaultCardName(ctx)
-                            ?: CharacterRepository.ensureDefaultCard(ctx, ctx.getString(R.string.default_character))
+                        val defaultPresetName = PresetRepository.ensureDefaultPreset(
+                            ctx,
+                            ctx.getString(R.string.default_preset),
+                        )
+                        val defName = CharacterRepository.ensureDefaultCard(
+                            ctx,
+                            ctx.getString(R.string.default_character),
+                            defaultPresetName,
+                        )
                         currentCard = loadCard(defName)
                         ConversationOps.newSession(currentCard, defName, defName)
                     }

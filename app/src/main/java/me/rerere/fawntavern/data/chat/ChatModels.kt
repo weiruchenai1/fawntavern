@@ -18,6 +18,7 @@ data class MsgAlt(
     val promptTokens: Int = 0,
     val completionTokens: Int = 0,
     val generationMs: Long = 0,
+    val images: List<String> = emptyList(),
 )
 
 /** 联网搜索的单条引用来源（展示"N个引用"胶囊卡与来源列表用） */

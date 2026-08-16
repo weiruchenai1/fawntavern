@@ -57,6 +57,7 @@ object ConnectionTester {
     // ── OpenAI 兼容: POST {base}/chat/completions（stream=false） ──
 
     private fun openAi(provider: ApiProvider, model: ModelInfo, withTool: Boolean): ToolCallResult {
+        if (provider.useResponseApi) return openAiResponses(provider, model, withTool)
         val body = JSONObject().apply {
             put("model", model.id)
             put("stream", false)
@@ -81,6 +82,44 @@ object ConnectionTester {
             toolName = fn?.strOr("name").orEmpty(),
             args = fn?.strOr("arguments").orEmpty(),
             text = msg?.strOr("content").orEmpty(),
+        )
+    }
+
+    private fun openAiResponses(
+        provider: ApiProvider,
+        model: ModelInfo,
+        withTool: Boolean,
+    ): ToolCallResult {
+        val tools = if (withTool) listOf(ToolSpec(
+            name = TOOL_NAME,
+            description = TOOL_DESC,
+            parametersSchema = JSONObject()
+                .put("type", "object")
+                .put("properties", JSONObject())
+                .toString(),
+        )) else emptyList()
+        val body = OpenAiResponsesAdapter.buildRequestBody(
+            provider = provider,
+            model = model,
+            messages = listOf(
+                ApiMessage("system", TEST_SYSTEM),
+                ApiMessage("user", if (withTool) TOOL_USER else TEST_USER),
+            ),
+            params = null,
+            tools = tools,
+            stream = false,
+        )
+        val response = post(
+            OpenAiResponsesAdapter.endpoint(provider),
+            model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
+            body,
+        )
+        val parsed = OpenAiResponsesAdapter.parseCompletedResponse(response)
+        val call = parsed.toolCalls.firstOrNull()
+        return ToolCallResult(
+            toolName = call?.name.orEmpty(),
+            args = call?.arguments.orEmpty(),
+            text = parsed.content,
         )
     }
 

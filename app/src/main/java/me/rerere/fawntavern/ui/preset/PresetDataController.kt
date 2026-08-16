@@ -2,11 +2,13 @@ package me.rerere.fawntavern.ui.preset
 
 import android.content.Context
 import android.net.Uri
+import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.RegexScript
 import me.rerere.fawntavern.data.preset.StPreset
 
 internal interface PresetDataSource {
+    fun defaultName(): String?
     suspend fun names(): List<String>
     suspend fun load(name: String): StPreset
     suspend fun import(uri: Uri): StPreset
@@ -19,7 +21,11 @@ internal interface PresetDataSource {
 internal class AndroidPresetDataSource(
     private val context: Context,
 ) : PresetDataSource {
-    override suspend fun names(): List<String> = PresetRepository.listNames(context)
+    override fun defaultName(): String? = PresetRepository.defaultPresetName(context)
+    override suspend fun names(): List<String> {
+        PresetRepository.ensureDefaultPreset(context, context.getString(R.string.default_preset))
+        return PresetRepository.listNames(context)
+    }
     override suspend fun load(name: String): StPreset = PresetRepository.load(context, name)
     override suspend fun import(uri: Uri): StPreset = PresetRepository.import(context, uri)
     override suspend fun rename(old: String, new: String): Boolean = PresetRepository.rename(context, old, new)
@@ -33,6 +39,7 @@ internal class PresetDataController(
 ) {
     constructor(context: Context) : this(AndroidPresetDataSource(context))
 
+    fun isDefault(name: String): Boolean = name == dataSource.defaultName()
     suspend fun names(): List<String> = dataSource.names()
     suspend fun load(name: String): StPreset = dataSource.load(name)
     suspend fun import(uri: Uri): String = dataSource.import(uri).name

@@ -11,6 +11,7 @@ import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.chat.ChatMessage
+import me.rerere.fawntavern.data.chat.AttachmentStore
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.preset.StPreset
@@ -118,6 +119,9 @@ internal class ChatGenerationRunner(
                 streaming = request.card?.streaming ?: true,
                 tools = if (useSearchTool) listOf(searchTool.spec()) else emptyList(),
                 toolExecutor = if (useSearchTool) searchTool.executor() else null,
+                persistGeneratedImage = { image ->
+                    AttachmentStore.persistGeneratedImage(context, image)
+                },
                 errorText = { error ->
                     context.getString(R.string.chat_error_fmt, error.message.orEmpty())
                 },

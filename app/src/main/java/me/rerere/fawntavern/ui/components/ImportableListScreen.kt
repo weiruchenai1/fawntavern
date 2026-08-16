@@ -102,6 +102,8 @@ fun <T : Any> ImportableListScreen(
     deleteItem: suspend (String) -> Unit,
     onOpen: (T) -> Unit,
     itemCard: @Composable (name: String, item: T, onClick: () -> Unit, onLongPress: () -> Unit) -> Unit,
+    canRenameItem: (String) -> Boolean = { true },
+    canDeleteItem: (String) -> Boolean = { true },
     actions: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -251,27 +253,31 @@ fun <T : Any> ImportableListScreen(
                         if (item != null) {
                             itemCard(name, item,
                                 { onOpen(item) },
-                                { longPressName = name })
+                                { if (canRenameItem(name) || canDeleteItem(name)) longPressName = name })
                         } else {
                             FailedImportableItem(
                                 name = name,
                                 detail = failure?.message,
                                 onRetry = { retryItem(name) },
-                                onLongPress = { longPressName = name },
+                                onLongPress = { if (canRenameItem(name) || canDeleteItem(name)) longPressName = name },
                             )
                         }
                         DropdownMenu(
                             expanded = longPressName == name,
                             onDismissRequest = { longPressName = null },
                         ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.rename)) },
-                                leadingIcon = { Icon(Lucide.Pencil, null, Modifier.size(18.dp)) },
-                                onClick = { longPressName = null; showRenameDialog = name })
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
-                                leadingIcon = { Icon(Lucide.Trash2, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error) },
-                                onClick = { longPressName = null; showDeleteDialog = name })
+                            if (canRenameItem(name)) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.rename)) },
+                                    leadingIcon = { Icon(Lucide.Pencil, null, Modifier.size(18.dp)) },
+                                    onClick = { longPressName = null; showRenameDialog = name })
+                            }
+                            if (canDeleteItem(name)) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
+                                    leadingIcon = { Icon(Lucide.Trash2, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error) },
+                                    onClick = { longPressName = null; showDeleteDialog = name })
+                            }
                         }
                     }
                 }

@@ -71,7 +71,7 @@ fun SettingsScreen(
     onNavigateToDataManagement: () -> Unit = {},
     onNavigateToFontSize: () -> Unit = {},
     onNavigateToPreferences: () -> Unit = {},
-    onNavigateToPromptLog: () -> Unit = {},
+    onNavigateToLogs: () -> Unit = {},
     onNavigateToCrashReport: () -> Unit = {},
     onNavigateToExtensions: () -> Unit = {},
     onNavigateToDefaultModel: () -> Unit = {},
@@ -227,12 +227,16 @@ fun SettingsScreen(
                 { Icon(Lucide.ALargeSmall, null, Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 stringResource(R.string.font_size), onClick = onNavigateToFontSize)
-            SettingsRow(
-                { Icon(Lucide.ScrollText, null, Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                stringResource(R.string.debug_log), onClick = onNavigateToPromptLog)
         }
         SettingsSection(stringResource(R.string.workspace)) {
+            SettingsRow(
+                { Icon(Lucide.Bot, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.default_model_title), onClick = onNavigateToDefaultModel)
+            SettingsRow(
+                { Icon(Lucide.Package, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.api_config), onClick = onNavigateToApiConfig)
             SettingsRow(
                 { Icon(Lucide.Smile, null, Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -246,22 +250,6 @@ fun SettingsScreen(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 stringResource(R.string.world_books), onClick = onNavigateToWorldBooks)
             SettingsRow(
-                { Icon(Lucide.Package, null, Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                stringResource(R.string.api_config), onClick = onNavigateToApiConfig)
-            SettingsRow(
-                { Icon(Lucide.Database, null, Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                stringResource(R.string.data_management), onClick = onNavigateToDataManagement)
-            SettingsRow(
-                { Icon(Lucide.Bot, null, Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                stringResource(R.string.default_model_title), onClick = onNavigateToDefaultModel)
-            SettingsRow(
-                { Icon(Lucide.Puzzle, null, Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                stringResource(R.string.extensions), onClick = onNavigateToExtensions)
-            SettingsRow(
                 { Icon(Lucide.Earth, null, Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 stringResource(R.string.search_service), onClick = onNavigateToWebSearch)
@@ -269,6 +257,14 @@ fun SettingsScreen(
                 { Icon(Lucide.Volume2, null, Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 stringResource(R.string.tts), onClick = onNavigateToTts)
+            SettingsRow(
+                { Icon(Lucide.Puzzle, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.extensions), onClick = onNavigateToExtensions)
+            SettingsRow(
+                { Icon(Lucide.Database, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.data_management), onClick = onNavigateToDataManagement)
         }
         SettingsSection(stringResource(R.string.about)) {
             SettingsRow(
@@ -288,6 +284,11 @@ fun SettingsScreen(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 stringResource(R.string.about),
                 onClick = onNavigateToAbout)
+            SettingsRow(
+                { Icon(Lucide.ScrollText, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.logs),
+                onClick = onNavigateToLogs)
         }
     }
 }
