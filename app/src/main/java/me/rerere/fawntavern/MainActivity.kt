@@ -2,6 +2,7 @@ package me.rerere.fawntavern
 
 import android.content.Context
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -60,6 +61,11 @@ class MainActivity : ComponentActivity() {
 
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // 三键导航下系统会给透明导航栏自己叠一层对比度蒙层，底部 48dp 比应用底色暗一块，
+        // 且抽屉/主页面各自的底色被染成不同深浅；关掉让应用底色直接铺到屏幕底边
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
 
         // 切换语言重启回来时直接重新打开设置页
         val startAtSettings = LanguageStore.consumePendingChange(this)

@@ -5,9 +5,7 @@ import org.json.JSONObject
 
 object WorldBookParser {
     fun parse(json: JSONObject, fileName: String = ""): WorldBook {
-        val name = json.optString("name", "").ifBlank {
-            fileName.removeSuffix(".json")
-        }
+        val name = fileName.removeSuffix(".json").ifBlank { json.optString("name", "") }
         val entries = mutableMapOf<Int, WorldBookEntry>()
 
         fun parseEntry(e: JSONObject, fallbackId: Int) {
