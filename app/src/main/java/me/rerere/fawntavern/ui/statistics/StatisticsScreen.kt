@@ -3,7 +3,6 @@ package me.rerere.fawntavern.ui.statistics
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,9 +33,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ChartColumnBig
@@ -177,7 +176,8 @@ private fun HeatmapPanel(messagesPerDay: Map<LocalDate, Int>) {
 
 @Composable
 private fun ChatHeatmap(messagesPerDay: Map<LocalDate, Int>) {
-    val today = LocalDate.now()
+    val today = remember { LocalDate.now() }
+    val locale = LocalLocale.current.platformLocale
     val firstDay = today.minusDays(364)
     val startSunday = firstDay.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
     val currentSunday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
@@ -237,7 +237,7 @@ private fun ChatHeatmap(messagesPerDay: Map<LocalDate, Int>) {
                         ) {
                             if (labelDate != null) {
                                 Text(
-                                    labelDate.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                                    labelDate.month.getDisplayName(TextStyle.SHORT, locale),
                                     modifier = Modifier.wrapContentWidth(unbounded = true),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -306,14 +306,14 @@ private fun ChatHeatmap(messagesPerDay: Map<LocalDate, Int>) {
 @Composable
 private fun HeatmapCell(level: Int, sizeDp: Int) {
     val alpha = when (level) {
-        1 -> 0.25f
-        2 -> 0.45f
+        1 -> 0.35f
+        2 -> 0.52f
         3 -> 0.68f
         4 -> 0.92f
         else -> 0f
     }
     val color = if (level == 0) {
-        if (isSystemInDarkTheme()) Color.White.copy(alpha = 0.14f) else Color(0xFFDDE2E8)
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
     } else {
         MaterialTheme.colorScheme.primary.copy(alpha = alpha)
     }

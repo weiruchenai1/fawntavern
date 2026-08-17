@@ -630,6 +630,9 @@
     <string name="solid_background">Solid background</string>
     <string name="solid_background_desc">Use a pure black background in dark theme</string>
     <string name="chat_item_display">Chat item display</string>
+    <string name="show_chat_bar_character_name">Show character card name in chat bar</string>
+    <string name="show_chat_bar_model_name">Show model name in chat bar</string>
+    <string name="show_chat_bar_provider">Show provider after model name</string>
     <string name="show_user_avatar">Show user avatar</string>
     <string name="show_user_name">Show user name</string>
     <string name="show_user_timestamp">Show user timestamp</string>

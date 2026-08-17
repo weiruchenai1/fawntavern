@@ -84,7 +84,7 @@ private fun KelivoDrawerIcon(modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun ChatTopBar(title: String, subtitle: String, onDrawer: () -> Unit, onNewChat: () -> Unit) {
+internal fun ChatTopBar(title: String?, subtitle: String?, onDrawer: () -> Unit, onNewChat: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).statusBarsPadding().padding(vertical = Space8),
         verticalAlignment = Alignment.CenterVertically
@@ -95,10 +95,14 @@ internal fun ChatTopBar(title: String, subtitle: String, onDrawer: () -> Unit, o
                 .size(24.dp),
         )
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (title != null) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         Icon(
             Lucide.MessageCirclePlus, "New Chat",

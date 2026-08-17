@@ -14,6 +14,9 @@ class ChatUiSettingsControllerTest {
 
         val initial = controller.load()
         source.preferences = Preferences(
+            showChatBarCharacterName = false,
+            showChatBarModelName = false,
+            showChatBarProvider = false,
             showUserAvatar = false,
             characterMarkdown = false,
             newChatOnLaunch = false,
@@ -22,8 +25,14 @@ class ChatUiSettingsControllerTest {
         source.scale = 1.25f
         val refreshed = controller.load()
 
+        assertTrue(initial.showChatBarCharacterName)
+        assertTrue(initial.showChatBarModelName)
+        assertTrue(initial.showChatBarProvider)
         assertTrue(initial.showUserAvatar)
         assertEquals(1.0f, initial.fontScale, 0.0f)
+        assertFalse(refreshed.showChatBarCharacterName)
+        assertFalse(refreshed.showChatBarModelName)
+        assertFalse(refreshed.showChatBarProvider)
         assertFalse(refreshed.showUserAvatar)
         assertFalse(refreshed.characterMarkdown)
         assertFalse(refreshed.newChatOnLaunch)

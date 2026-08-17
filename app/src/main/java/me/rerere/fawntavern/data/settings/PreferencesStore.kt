@@ -13,6 +13,9 @@ data class Preferences(
     /** 纯色背景：开启时背景用纯黑/纯白，其余表面用半透明灰 */
     val solidBackground: Boolean = false,
     // ── 聊天项显示 ──
+    val showChatBarCharacterName: Boolean = true,
+    val showChatBarModelName: Boolean = true,
+    val showChatBarProvider: Boolean = true,
     val showUserAvatar: Boolean = true,
     val showUserName: Boolean = true,
     val showUserTimestamp: Boolean = false,
@@ -59,6 +62,9 @@ object PreferencesStore {
     private const val PREFS = "preferences"
 
     private const val K_SOLID_BACKGROUND = "solidBackground"
+    private const val K_SHOW_CHAT_BAR_CHARACTER_NAME = "showChatBarCharacterName"
+    private const val K_SHOW_CHAT_BAR_MODEL_NAME = "showChatBarModelName"
+    private const val K_SHOW_CHAT_BAR_PROVIDER = "showChatBarProvider"
     private const val K_SHOW_USER_AVATAR = "showUserAvatar"
     private const val K_SHOW_USER_NAME = "showUserName"
     private const val K_SHOW_USER_TIMESTAMP = "showUserTimestamp"
@@ -97,6 +103,9 @@ object PreferencesStore {
         } catch (_: Exception) { d.navButtonsMode }
         return Preferences(
             solidBackground = p.getBoolean(K_SOLID_BACKGROUND, d.solidBackground),
+            showChatBarCharacterName = p.getBoolean(K_SHOW_CHAT_BAR_CHARACTER_NAME, d.showChatBarCharacterName),
+            showChatBarModelName = p.getBoolean(K_SHOW_CHAT_BAR_MODEL_NAME, d.showChatBarModelName),
+            showChatBarProvider = p.getBoolean(K_SHOW_CHAT_BAR_PROVIDER, d.showChatBarProvider),
             showUserAvatar = p.getBoolean(K_SHOW_USER_AVATAR, d.showUserAvatar),
             showUserName = p.getBoolean(K_SHOW_USER_NAME, d.showUserName),
             showUserTimestamp = p.getBoolean(K_SHOW_USER_TIMESTAMP, d.showUserTimestamp),
@@ -132,6 +141,9 @@ object PreferencesStore {
     fun set(context: Context, s: Preferences) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
             putBoolean(K_SOLID_BACKGROUND, s.solidBackground)
+            .putBoolean(K_SHOW_CHAT_BAR_CHARACTER_NAME, s.showChatBarCharacterName)
+            .putBoolean(K_SHOW_CHAT_BAR_MODEL_NAME, s.showChatBarModelName)
+            .putBoolean(K_SHOW_CHAT_BAR_PROVIDER, s.showChatBarProvider)
             .putBoolean(K_SHOW_USER_AVATAR, s.showUserAvatar)
             .putBoolean(K_SHOW_USER_NAME, s.showUserName)
             .putBoolean(K_SHOW_USER_TIMESTAMP, s.showUserTimestamp)

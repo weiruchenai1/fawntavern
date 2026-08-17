@@ -91,6 +91,9 @@ internal fun ChatItemDisplayScreen(onBack: () -> Unit) {
     }
     PrefSubPage(stringResource(R.string.chat_item_display), onBack) {
         PrefSection(stringResource(R.string.chat_item_display)) {
+            PrefToggle(Lucide.CircleUser, stringResource(R.string.show_chat_bar_character_name), prefs.showChatBarCharacterName) { save(prefs.copy(showChatBarCharacterName = it)) }
+            PrefToggle(Lucide.Bot, stringResource(R.string.show_chat_bar_model_name), prefs.showChatBarModelName) { save(prefs.copy(showChatBarModelName = it)) }
+            PrefToggle(Lucide.Tag, stringResource(R.string.show_chat_bar_provider), prefs.showChatBarProvider) { save(prefs.copy(showChatBarProvider = it)) }
             PrefToggle(Lucide.CircleUser, stringResource(R.string.show_user_avatar), prefs.showUserAvatar) { save(prefs.copy(showUserAvatar = it)) }
             PrefToggle(Lucide.Type, stringResource(R.string.show_user_name), prefs.showUserName) { save(prefs.copy(showUserName = it)) }
             PrefToggle(Lucide.Clock, stringResource(R.string.show_user_timestamp), prefs.showUserTimestamp) { save(prefs.copy(showUserTimestamp = it)) }

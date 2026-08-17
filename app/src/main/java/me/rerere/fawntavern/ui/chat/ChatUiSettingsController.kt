@@ -8,6 +8,9 @@ import me.rerere.fawntavern.data.settings.PreferencesStore
 
 internal data class ChatUiSettings(
     val fontScale: Float,
+    val showChatBarCharacterName: Boolean,
+    val showChatBarModelName: Boolean,
+    val showChatBarProvider: Boolean,
     val showUserAvatar: Boolean,
     val showUserName: Boolean,
     val showUserTimestamp: Boolean,
@@ -59,6 +62,9 @@ internal class ChatUiSettingsController(
         val prefs = dataSource.preferences()
         return ChatUiSettings(
             fontScale = dataSource.fontScale(),
+            showChatBarCharacterName = prefs.showChatBarCharacterName,
+            showChatBarModelName = prefs.showChatBarModelName,
+            showChatBarProvider = prefs.showChatBarProvider,
             showUserAvatar = prefs.showUserAvatar,
             showUserName = prefs.showUserName,
             showUserTimestamp = prefs.showUserTimestamp,

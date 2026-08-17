@@ -628,6 +628,9 @@
     <string name="solid_background">纯色背景</string>
     <string name="solid_background_desc">在暗色主题中使用纯黑背景</string>
     <string name="chat_item_display">聊天项显示</string>
+    <string name="show_chat_bar_character_name">聊天栏显示角色卡名称</string>
+    <string name="show_chat_bar_model_name">聊天栏显示模型名称</string>
+    <string name="show_chat_bar_provider">模型名称后显示提供商</string>
     <string name="show_user_avatar">显示用户头像</string>
     <string name="show_user_name">显示用户名称</string>
     <string name="show_user_timestamp">显示用户时间戳</string>

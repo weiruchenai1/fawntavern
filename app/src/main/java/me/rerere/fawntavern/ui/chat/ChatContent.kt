@@ -240,6 +240,27 @@ internal fun ChatContent(
     // 偏好和字号由 ViewModel 提供；设置页返回时统一刷新快照。
     val prefs = vm.uiSettings
     val fontScale = prefs.fontScale
+    val chatBarTitle = if (prefs.showChatBarCharacterName) {
+        (vm.currentCard?.name ?: vm.session?.charName ?: "")
+            .ifBlank { stringResource(R.string.default_character) }
+    } else {
+        null
+    }
+    val chatBarSubtitle = if (!prefs.showChatBarModelName) {
+        null
+    } else if (displaySpec == null) {
+        stringResource(R.string.no_model_selected)
+    } else {
+        val modelName = displayProv?.model(displayModelId)?.name
+            ?.ifBlank { displayModelId }
+            ?: displayModelId
+        val providerName = displayProv?.name.orEmpty()
+        if (prefs.showChatBarProvider && providerName.isNotBlank()) {
+            "$modelName ($providerName)"
+        } else {
+            modelName
+        }
+    }
     val renderPrefs = RenderPrefs(
         markdown = prefs.characterMarkdown,
         math = prefs.mathRendering,
@@ -304,9 +325,8 @@ internal fun ChatContent(
             containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
                     ChatTopBar(
-                        title = (vm.session?.charName ?: "").ifBlank { stringResource(R.string.default_character) },
-                        subtitle = if (displaySpec == null) stringResource(R.string.no_model_selected)
-                                   else "${displayProv?.models?.find { it.id == displayModelId }?.name ?: displayModelId} (${displayProv?.name ?: ""})",
+                        title = chatBarTitle,
+                        subtitle = chatBarSubtitle,
                         onDrawer = { scope.launch { drawerState.open() } },
                         onNewChat = { vm.newChat() },
                     )
