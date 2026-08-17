@@ -55,6 +55,15 @@ Most phones should use `arm64-v8a`. FawnTavern does not publish packages through
 - API, search, and TTS credentials are encrypted with an AES-GCM key protected by Android Keystore.
 - Model requests are sent to the API provider you configure. Review that provider's privacy policy as well.
 
+## Information Collection Disclosure
+
+FawnTavern runs no backend of its own. Conversations, character cards, presets, world books, and attachments are stored locally by default. Apart from the cases below, the app does not collect or upload any data:
+
+- **Model services**: Chat content is sent to the model API provider you configure and processed there. Review that provider's privacy policy as well.
+- **Web search**: When web search is enabled, search queries are sent to the search provider you configure.
+- **Remote diagnostics (enabled by default; can be disabled in settings)**: To improve stability, the app collects crash logs and app-start events via Tencent Bugly (mainland China) or Google Firebase (other regions), including crash stacks, build type, and version name, and calls a Cloudflare endpoint to determine your region for choosing the diagnostics service (cached for 24 hours). Bugly does not collect device identifiers or privacy information. No diagnostic data is uploaded once disabled in settings.
+- **Update checks**: Update checks only query the GitHub Releases API for the latest version, along with the device CPU architecture to match the correct package; no personal data is involved.
+
 ## Disclaimer
 
 This application is intended for learning and entertainment. AI-generated content does not represent the developer's views. Follow the terms of each model, search, or speech provider and the laws applicable in your location.
