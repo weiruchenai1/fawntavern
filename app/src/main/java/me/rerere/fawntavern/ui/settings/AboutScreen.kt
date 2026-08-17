@@ -1,18 +1,18 @@
 package me.rerere.fawntavern.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,8 +27,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.Heart
+import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.Github
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Scale
+import com.composables.icons.lucide.Smartphone
+import com.composables.icons.lucide.Tag
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 
@@ -39,6 +43,21 @@ fun AboutScreen(onBack: () -> Unit) {
         try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.1"
         } catch (_: Exception) { "0.0.1" }
+    }
+    val systemInfo = remember {
+        val manufacturer = Build.MANUFACTURER.trim()
+        val model = Build.MODEL.trim()
+        val deviceName = if (model.startsWith(manufacturer, ignoreCase = true)) {
+            model
+        } else {
+            "$manufacturer $model".trim()
+        }
+        context.getString(
+            R.string.about_system_value,
+            deviceName,
+            Build.VERSION.RELEASE,
+            Build.VERSION.SDK_INT,
+        )
     }
 
     BackHandler(onBack = onBack)
@@ -61,72 +80,66 @@ fun AboutScreen(onBack: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,
         )
-        Text(
-            stringResource(R.string.about_version, versionName),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        // ── 描述卡片 ──
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                stringResource(R.string.about_description),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+        PrefSection(stringResource(R.string.about_information)) {
+            AboutInfoRow(
+                icon = Lucide.Tag,
+                label = stringResource(R.string.about_version_label),
+                value = versionName,
             )
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            // 技术栈
-            Text(
-                stringResource(R.string.about_tech),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold,
+            AboutInfoRow(
+                icon = Lucide.Smartphone,
+                label = stringResource(R.string.about_system),
+                value = systemInfo,
             )
-            Text(
-                stringResource(R.string.about_tech_detail),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            AboutInfoRow(
+                icon = Lucide.Github,
+                label = stringResource(R.string.about_github),
+                value = stringResource(R.string.about_github_value),
+                onClick = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_URL)))
+                    }
+                },
+            )
+            AboutInfoRow(
+                icon = Lucide.Scale,
+                label = stringResource(R.string.about_license),
+                value = stringResource(R.string.about_license_value),
+                onClick = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LICENSE_URL)))
+                    }
+                },
             )
         }
+    }
+}
 
-        // ── 免责声明 ──
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Lucide.Heart,
-                    null,
-                    Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    stringResource(R.string.about_disclaimer),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Text(
-                stringResource(R.string.about_disclaimer_text),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+private const val GITHUB_URL = "https://github.com/weiruchenai1/fawntavern"
+private const val LICENSE_URL = "https://github.com/weiruchenai1/fawntavern/blob/main/LICENSE"
+
+@Composable
+private fun AboutInfoRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(value, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (onClick != null) {
+            Icon(Lucide.ChevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

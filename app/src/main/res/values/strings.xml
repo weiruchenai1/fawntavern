@@ -53,12 +53,14 @@
     <string name="update_available_message">新版本 %1$s 已发布，当前版本为 %2$s。</string>
     <string name="update_failed_title">检查失败</string>
     <string name="update_failed_message">暂时无法检查更新，请稍后重试。</string>
-    <string name="about_version">版本 %1$s</string>
-    <string name="about_description">轻量 AI 角色扮演聊天客户端。\n\n支持导入 SillyTavern 兼容的角色卡、预设和世界书，可对接多种大模型 API，随时随地与喜欢的角色聊天。</string>
-    <string name="about_tech">技术栈</string>
-    <string name="about_tech_detail">Kotlin + Jetpack Compose (Material 3)</string>
-    <string name="about_disclaimer">免责声明</string>
-    <string name="about_disclaimer_text">本应用仅供学习和娱乐用途。AI 生成的内容不代表开发者立场，请合理使用。</string>
+    <string name="about_information">应用信息</string>
+    <string name="about_version_label">版本</string>
+    <string name="about_system">系统</string>
+    <string name="about_system_value">%1$s · Android %2$s（API %3$d）</string>
+    <string name="about_github">GitHub</string>
+    <string name="about_github_value">weiruchenai1/fawntavern</string>
+    <string name="about_license">许可证</string>
+    <string name="about_license_value">GNU AGPL v3.0</string>
 
     <!-- Prompt 调试日志 -->
     <string name="logs">日志</string>

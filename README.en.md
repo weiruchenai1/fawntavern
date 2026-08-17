@@ -60,3 +60,16 @@ git clone https://github.com/weiruchenai1/fawntavern.git
 cd fawntavern
 .\gradlew.bat assembleDebug
 ```
+
+## License
+
+This project is licensed under [AGPL-3.0](./LICENSE).
+
+## Acknowledgements
+
+- [SillyTavern](https://github.com/SillyTavern/SillyTavern)
+
+This project also references other open-source projects. Special thanks to:
+
+- [RikkaHub](https://github.com/rikkahub/rikkahub)
+- [Kelivo](https://github.com/Chevey339/kelivo)

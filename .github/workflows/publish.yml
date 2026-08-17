@@ -41,8 +41,8 @@ jobs:
             exit 1
           fi
 
-          # 文档或工作流提交会跳过 Android CI。发布时允许复用最近一次成功的祖先提交，
-          # 但从该提交到标签之间只能包含与 android.yml 的 paths-ignore 一致的文件。
+          # 纯文档提交会跳过 Android CI。发布时允许复用最近一次成功的祖先提交，
+          # 但从该提交到标签之间只能包含与 android.yml 的 paths-ignore 一致的文档文件。
           VERIFIED_CI_SHA=""
           while IFS= read -r CANDIDATE_SHA; do
             if ! git merge-base --is-ancestor "$CANDIDATE_SHA" "$GITHUB_SHA"; then
@@ -52,7 +52,7 @@ jobs:
             ONLY_IGNORED_CHANGES=true
             while IFS= read -r CHANGED_PATH; do
               case "$CHANGED_PATH" in
-                *.md|docs/*|.github/workflows/*) ;;
+                *.md|docs/*) ;;
                 *)
                   ONLY_IGNORED_CHANGES=false
                   break

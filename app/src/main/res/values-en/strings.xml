@@ -53,12 +53,14 @@
     <string name="update_available_message">Version %1$s is available. You currently have %2$s.</string>
     <string name="update_failed_title">Update check failed</string>
     <string name="update_failed_message">Unable to check for updates right now. Try again later.</string>
-    <string name="about_version">Version %1$s</string>
-    <string name="about_description">A lightweight AI role-playing chat client.\n\nSupports importing SillyTavern-compatible character cards, presets, and world books with multiple LLM API backends. Chat with your favorite characters anytime, anywhere.</string>
-    <string name="about_tech">Tech Stack</string>
-    <string name="about_tech_detail">Kotlin + Jetpack Compose (Material 3)</string>
-    <string name="about_disclaimer">Disclaimer</string>
-    <string name="about_disclaimer_text">This app is for learning and entertainment purposes only. AI-generated content does not represent the developer\'s views. Please use responsibly.</string>
+    <string name="about_information">App Information</string>
+    <string name="about_version_label">Version</string>
+    <string name="about_system">System</string>
+    <string name="about_system_value">%1$s · Android %2$s (API %3$d)</string>
+    <string name="about_github">GitHub</string>
+    <string name="about_github_value">weiruchenai1/fawntavern</string>
+    <string name="about_license">License</string>
+    <string name="about_license_value">GNU AGPL v3.0</string>
 
     <!-- Prompt debug log -->
     <string name="logs">Logs</string>
