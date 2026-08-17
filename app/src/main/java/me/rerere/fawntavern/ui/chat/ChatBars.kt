@@ -77,7 +77,7 @@ internal data class Attachment(val uri: Uri, val isImage: Boolean)
 private fun KelivoDrawerIcon(modifier: Modifier = Modifier) {
     Icon(
         painter = painterResource(R.drawable.list),
-        contentDescription = "Menu",
+        contentDescription = stringResource(R.string.menu),
         modifier = modifier,
         tint = MaterialTheme.colorScheme.primary,
     )
@@ -307,7 +307,9 @@ internal fun ChatBottomArea(
                     // 附件展开/折叠（Plus ↔ X）
                     AppIconButton(
                         icon = if (showAttachment) Lucide.X else Lucide.Plus,
-                        contentDescription = if (showAttachment) "Close" else "Add",
+                        contentDescription = stringResource(
+                            if (showAttachment) R.string.close else R.string.add,
+                        ),
                         onClick = onToggleAttachment,
                         size = 36.dp,
                         iconSize = 24.dp,
@@ -324,7 +326,7 @@ internal fun ChatBottomArea(
                     ) {
                         Icon(
                             if (generating) Lucide.Square else Lucide.ArrowUp,
-                            if (generating) stringResource(R.string.stop) else "Send",
+                            if (generating) stringResource(R.string.stop) else stringResource(R.string.send),
                             Modifier.size(if (generating) 16.dp else 22.dp),
                             tint = if (generating || hasContent) MaterialTheme.colorScheme.onPrimary
                                    else MaterialTheme.colorScheme.onSurfaceVariant

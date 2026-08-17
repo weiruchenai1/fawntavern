@@ -44,21 +44,21 @@ fun AboutScreen(onBack: () -> Unit) {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.1"
         } catch (_: Exception) { "0.0.1" }
     }
-    val systemInfo = remember {
+    val deviceName = remember {
         val manufacturer = Build.MANUFACTURER.trim()
         val model = Build.MODEL.trim()
-        val deviceName = if (model.startsWith(manufacturer, ignoreCase = true)) {
+        if (model.startsWith(manufacturer, ignoreCase = true)) {
             model
         } else {
             "$manufacturer $model".trim()
         }
-        context.getString(
-            R.string.about_system_value,
-            deviceName,
-            Build.VERSION.RELEASE,
-            Build.VERSION.SDK_INT,
-        )
     }
+    val systemInfo = stringResource(
+        R.string.about_system_value,
+        deviceName,
+        Build.VERSION.RELEASE,
+        Build.VERSION.SDK_INT,
+    )
 
     BackHandler(onBack = onBack)
 

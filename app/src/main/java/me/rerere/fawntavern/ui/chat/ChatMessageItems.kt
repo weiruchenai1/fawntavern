@@ -121,7 +121,7 @@ internal fun UserMsg(
                         if (avatarBitmap != null) {
                             Image(
                                 bitmap = avatarBitmap.asImageBitmap(),
-                                contentDescription = "avatar",
+                                contentDescription = stringResource(R.string.character_avatar),
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop,
                             )

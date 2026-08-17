@@ -72,6 +72,40 @@ class GitHubReleaseCheckerTest {
     }
 
     @Test
+    fun selectsApkMatchingDeviceAbi() = runBlocking {
+        server.enqueue(
+            MockResponse.Builder()
+                .body(
+                    """
+                    {
+                      "tag_name": "v0.2.0",
+                      "html_url": "https://github.com/weiruchenai1/fawntavern/releases/tag/v0.2.0",
+                      "assets": [
+                        {
+                          "name": "FawnTavern-0.2.0-arm64-v8a.apk",
+                          "browser_download_url": "https://github.com/download/arm64.apk"
+                        },
+                        {
+                          "name": "FawnTavern-0.2.0-x86_64.apk",
+                          "browser_download_url": "https://github.com/download/x86_64.apk"
+                        }
+                      ]
+                    }
+                    """.trimIndent(),
+                )
+                .build(),
+        )
+        val checker = GitHubReleaseChecker(
+            latestReleaseUrl = server.url("/latest").toString(),
+            supportedAbis = listOf("x86_64"),
+        )
+
+        val result = checker.check("0.1.0") as UpdateCheckResult.Available
+
+        assertEquals("https://github.com/download/x86_64.apk", result.downloadUrl)
+    }
+
+    @Test
     fun stableReleaseIsNewerThanMatchingBeta() {
         val stable = SemanticVersion.parse("v0.2.0")!!
         val beta = SemanticVersion.parse("0.2.0-beta.1")!!

@@ -87,6 +87,9 @@
 
     <!-- Chat -->
     <string name="new_chat">New Chat</string>
+    <string name="menu">Menu</string>
+    <string name="send">Send</string>
+    <string name="remove">Remove</string>
     <string name="input_hint">Type a message…</string>
     <string name="select_model">Select Model</string>
     <string name="select_model_hint">Tap to select a model</string>

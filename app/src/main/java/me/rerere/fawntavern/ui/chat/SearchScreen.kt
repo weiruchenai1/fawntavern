@@ -119,7 +119,7 @@ fun SearchScreen(
             if (query.isNotEmpty()) {
                 AppIconButton(
                     icon = Lucide.X,
-                    contentDescription = "Clear",
+                    contentDescription = stringResource(R.string.clear),
                     onClick = { query = "" },
                     size = 32.dp,
                     iconSize = 20.dp,

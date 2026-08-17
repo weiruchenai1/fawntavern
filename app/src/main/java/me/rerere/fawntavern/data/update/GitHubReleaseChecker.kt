@@ -1,5 +1,6 @@
 package me.rerere.fawntavern.data.update
 
+import android.os.Build
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,6 +20,7 @@ internal sealed interface UpdateCheckResult {
 internal class GitHubReleaseChecker(
     private val client: OkHttpClient = Http.client,
     private val latestReleaseUrl: String = LATEST_RELEASE_URL,
+    private val supportedAbis: List<String>? = null,
 ) {
     suspend fun check(currentVersion: String): UpdateCheckResult = withContext(Dispatchers.IO) {
         val request = Request.Builder()
@@ -48,15 +50,27 @@ internal class GitHubReleaseChecker(
         val releasePage = release.optString("html_url")
             .takeIf(::isHttpsUrl)
             ?: throw IOException("Invalid release URL")
-        val assets = release.optJSONArray("assets")
-        var apkUrl: String? = null
-        if (assets != null) {
+        val apkAssets = buildList {
+            val assets = release.optJSONArray("assets") ?: return@buildList
             for (index in 0 until assets.length()) {
                 val asset = assets.optJSONObject(index) ?: continue
                 if (!asset.optString("name").endsWith(".apk", ignoreCase = true)) continue
-                apkUrl = asset.optString("browser_download_url").takeIf(::isHttpsUrl)
-                if (apkUrl != null) break
+                val url = asset.optString("browser_download_url").takeIf(::isHttpsUrl) ?: continue
+                add(asset.optString("name") to url)
             }
+        }
+        val knownAbis = listOf("arm64-v8a", "x86_64")
+        val deviceAbis = (supportedAbis ?: runCatching { Build.SUPPORTED_ABIS.toList() }.getOrDefault(emptyList()))
+        val hasAbiSpecificAssets = apkAssets.any { (name, _) ->
+            knownAbis.any { abi -> name.contains(abi, ignoreCase = true) }
+        }
+        val apkUrl = if (hasAbiSpecificAssets) {
+            deviceAbis.asSequence()
+                .filter { it in knownAbis }
+                .mapNotNull { abi -> apkAssets.firstOrNull { (name, _) -> name.contains(abi, ignoreCase = true) }?.second }
+                .firstOrNull()
+        } else {
+            apkAssets.firstOrNull()?.second
         }
         return UpdateCheckResult.Available(
             latestVersion = tag.removePrefix("v").removePrefix("V"),

@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -112,6 +113,7 @@ fun TranslatorScreen(
     fallbackModelSpec: String,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     val storedEntry = remember(context) {
@@ -142,7 +144,7 @@ fun TranslatorScreen(
     fun startTranslation() {
         val sourceText = inputText.text.toString()
         if (sourceText.isBlank()) {
-            Toast.makeText(context, context.getString(R.string.translator_input_required), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, resources.getString(R.string.translator_input_required), Toast.LENGTH_SHORT).show()
             return
         }
         val providerId = selectedModelSpec.substringBefore("::")
@@ -151,7 +153,7 @@ fun TranslatorScreen(
             it.id == providerId && it.enabled && it.model(modelId) != null
         }
         if (provider == null || modelId.isBlank()) {
-            Toast.makeText(context, context.getString(R.string.select_model_first), Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, resources.getString(R.string.select_model_first), Toast.LENGTH_SHORT).show()
             modelSelector.open()
             return
         }
@@ -191,7 +193,7 @@ fun TranslatorScreen(
             } catch (error: Exception) {
                 Toast.makeText(
                     context,
-                    context.getString(R.string.translator_failed, error.message.orEmpty()),
+                    resources.getString(R.string.translator_failed, error.message.orEmpty()),
                     Toast.LENGTH_LONG,
                 ).show()
             } finally {
@@ -336,7 +338,7 @@ fun TranslatorScreen(
                                     ClipEntry(ClipData.newPlainText("translation", translatedText))
                                 )
                             }
-                            Toast.makeText(context, context.getString(R.string.copied), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, resources.getString(R.string.copied), Toast.LENGTH_SHORT).show()
                         },
                     ) {
                         Icon(Lucide.Copy, null, Modifier.size(18.dp))

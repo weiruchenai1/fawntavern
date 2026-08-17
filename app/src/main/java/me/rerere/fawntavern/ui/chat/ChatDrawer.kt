@@ -533,7 +533,7 @@ private fun AvatarCircle(
         if (bitmap != null) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
-                contentDescription = "avatar",
+                contentDescription = stringResource(R.string.character_avatar),
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )

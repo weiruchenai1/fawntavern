@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -266,7 +267,12 @@ private fun BoxScope.RemoveAttachmentButton(onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Lucide.X, "Remove", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurface)
+        Icon(
+            Lucide.X,
+            stringResource(R.string.remove),
+            Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
