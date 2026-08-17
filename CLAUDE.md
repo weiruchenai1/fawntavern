@@ -70,14 +70,14 @@ FawnTavern 是一款轻量 AI 角色扮演聊天的 Android 客户端（Kotlin +
 Beta 预发布版本：
 
 ```bash
-git tag -a vX.Y.Z-beta.N -m "FawnTavern vX.Y.Z-beta.N"
+git tag -a vX.Y.Z-beta.N -m "vX.Y.Z-beta.N"
 git push origin vX.Y.Z-beta.N
 ```
 
 正式版本：
 
 ```bash
-git tag -a vX.Y.Z -m "FawnTavern vX.Y.Z"
+git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z
 ```
 

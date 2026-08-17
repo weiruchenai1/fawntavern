@@ -13,6 +13,14 @@
 
 FawnTavern is a lightweight AI role-playing chat client. It imports SillyTavern-compatible character cards, presets, and world books, connects to multiple LLM APIs, and lets you chat with your favorite characters anytime, anywhere.
 
+## Screenshots
+
+<div align="center">
+  <img src="./screenshots/1.jpg" width="240" alt="Screenshot 1" />
+  <img src="./screenshots/2.jpg" width="240" alt="Screenshot 2" />
+  <img src="./screenshots/3.jpg" width="240" alt="Screenshot 3" />
+</div>
+
 ## Features
 
 - Import and manage SillyTavern-compatible character cards, presets, and world books

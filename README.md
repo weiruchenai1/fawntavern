@@ -13,6 +13,14 @@
 
 FawnTavern 是一款轻量的 AI 角色扮演聊天客户端。支持导入 SillyTavern 兼容的角色卡、预设和世界书，可连接多种大模型 API，随时随地与喜欢的角色聊天。
 
+## 截图
+
+<div align="center">
+  <img src="./screenshots/1.jpg" width="240" alt="截图 1" />
+  <img src="./screenshots/2.jpg" width="240" alt="截图 2" />
+  <img src="./screenshots/3.jpg" width="240" alt="截图 3" />
+</div>
+
 ## 主要功能
 
 - 导入和管理 SillyTavern 兼容的角色卡、预设与世界书
