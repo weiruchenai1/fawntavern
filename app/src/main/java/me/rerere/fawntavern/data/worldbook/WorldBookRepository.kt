@@ -44,12 +44,32 @@ object WorldBookRepository {
         WorldBookParser.parse(json, name)
     }
 
+    /** 新建空世界书；名称非法字符会被清洗、重名自动加序号，返回落盘后的世界书 */
+    suspend fun create(context: Context, requestedName: String): WorldBook = withContext(Dispatchers.IO) {
+        val displayName = requestedName.trim()
+        require(displayName.isNotBlank()) { "世界书名称不能为空" }
+        writeMutex.withLock {
+            val fallback = "worldbook_${System.currentTimeMillis()}"
+            val name = JsonFileDir.uniqueName(context, WORLD_DIR, displayName, fallback)
+            JsonFileDir.atomicWriteText(
+                JsonFileDir.file(context, WORLD_DIR, name),
+                JSONObject().put("entries", JSONObject()).toString(2),
+            )
+            WorldBook(name = name)
+        }
+    }
+
     suspend fun delete(context: Context, name: String) =
         JsonFileDir.delete(context, WORLD_DIR, name)
 
     /** 重命名世界书，成功返回 true（目标名已存在或源不存在则失败） */
     suspend fun rename(context: Context, oldName: String, newName: String): Boolean =
         JsonFileDir.rename(context, WORLD_DIR, oldName, newName)
+
+    /** Export the original JSON bytes so unknown SillyTavern fields are preserved. */
+    suspend fun exportJsonBytes(context: Context, name: String): ByteArray = withContext(Dispatchers.IO) {
+        JsonFileDir.file(context, WORLD_DIR, name).readBytes()
+    }
 
     /** 保存条目（就地 patch 原文件条目，只覆盖编辑过的键，保留 ST 私有/扩展字段）。 */
     suspend fun saveEntries(context: Context, name: String, entries: List<WorldBookEntry>) = withContext(Dispatchers.IO) {

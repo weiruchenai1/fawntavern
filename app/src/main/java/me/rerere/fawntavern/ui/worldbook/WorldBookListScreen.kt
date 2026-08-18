@@ -35,6 +35,7 @@ import com.composables.icons.lucide.SlidersHorizontal
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.ui.components.AppIconButton
+import me.rerere.fawntavern.ui.components.CreateItemSpec
 import me.rerere.fawntavern.ui.components.ImportableListScreen
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
@@ -84,7 +85,15 @@ fun WorldBookListScreen(onBack: () -> Unit) {
         importItem = controller::import,
         renameItem = controller::rename,
         deleteItem = controller::delete,
+        exportItem = controller::exportJson,
         onOpen = { selectedBook = it },
+        createItem = CreateItemSpec(
+            titleRes = R.string.add_worldbook,
+            nameLabelRes = R.string.worldbook_name_label,
+            importLabelRes = R.string.import_worldbook,
+            createdToastRes = R.string.worldbook_created,
+            create = { controller.create(it) },
+        ),
         actions = {
             AppIconButton(
                 icon = Lucide.SlidersHorizontal,

@@ -43,13 +43,18 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.FilePlus
+import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
+import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.TriangleAlert
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.IOException
 import me.rerere.fawntavern.R
 
 private const val IMPORTABLE_LIST_TAG = "ImportableList"
@@ -80,6 +85,18 @@ internal suspend fun <T : Any> loadImportableItems(
 }
 
 /**
+ * 「新建条目」入口：传了它，FAB 就从「导入」变成「+」并弹出
+ * [AddItemSheet]（命名新建 / 导入二选一）。
+ */
+data class CreateItemSpec(
+    val titleRes: Int,
+    val nameLabelRes: Int,
+    val importLabelRes: Int,
+    val createdToastRes: Int,
+    val create: suspend (String) -> Unit,
+)
+
+/**
  * 可导入条目的通用列表页（预设/世界书）：顶栏 + 导入 FAB + 加载/空状态 +
  * 长按弹出重命名/删除菜单。数据操作全部由调用方以 suspend lambda 注入，
  * 本组件负责刷新时机与 Toast 提示。
@@ -100,10 +117,12 @@ fun <T : Any> ImportableListScreen(
     importItem: suspend (Uri) -> String,
     renameItem: suspend (oldName: String, newName: String) -> Boolean,
     deleteItem: suspend (String) -> Unit,
+    exportItem: (suspend (String) -> ByteArray)? = null,
     onOpen: (T) -> Unit,
     itemCard: @Composable (name: String, item: T, onClick: () -> Unit, onLongPress: () -> Unit) -> Unit,
     canRenameItem: (String) -> Boolean = { true },
     canDeleteItem: (String) -> Boolean = { true },
+    createItem: CreateItemSpec? = null,
     actions: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -114,10 +133,12 @@ fun <T : Any> ImportableListScreen(
     var failedItems by remember { mutableStateOf<Map<String, Exception>>(emptyMap()) }
     var loadError by remember { mutableStateOf<Exception?>(null) }
     var loading by remember { mutableStateOf(true) }
+    var showAddSheet by remember { mutableStateOf(false) }
 
     var longPressName by remember { mutableStateOf<String?>(null) }
     var showRenameDialog by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
+    var exportTarget by remember { mutableStateOf("") }
 
     fun refresh() {
         scope.launch {
@@ -163,6 +184,7 @@ fun <T : Any> ImportableListScreen(
         ActivityResultContracts.GetMultipleContents()
     ) { uris ->
         if (uris.isNotEmpty()) {
+            showAddSheet = false
             scope.launch {
                 var imported = 0
                 var failed = 0
@@ -184,6 +206,63 @@ fun <T : Any> ImportableListScreen(
             }
         }
     }
+
+    if (showAddSheet && createItem != null) {
+        AddItemSheet(
+            title = stringResource(createItem.titleRes),
+            nameLabel = stringResource(createItem.nameLabelRes),
+            importLabel = stringResource(createItem.importLabelRes),
+            onImport = { importLauncher.launch(importMimeType) },
+            onCreate = { name ->
+                scope.launch {
+                    try {
+                        createItem.create(name)
+                        showAddSheet = false
+                        Toast.makeText(context, resources.getString(createItem.createdToastRes), Toast.LENGTH_SHORT).show()
+                        refresh()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        SafeLog.error(IMPORTABLE_LIST_TAG, "item_create_failed", error)
+                        Toast.makeText(
+                            context,
+                            resources.getString(R.string.create_failed_fmt, error.message.orEmpty()),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
+            },
+            onDismiss = { showAddSheet = false },
+        )
+    }
+
+    fun writeExport(uri: Uri?) {
+        if (uri == null) return
+        val exporter = exportItem ?: return
+        val target = exportTarget
+        scope.launch {
+            try {
+                val bytes = exporter(target)
+                withContext(Dispatchers.IO) {
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: throw IOException("Unable to open the selected destination")
+                    output.use { it.write(bytes) }
+                }
+                Toast.makeText(context, resources.getString(R.string.toast_export_success), Toast.LENGTH_SHORT).show()
+            } catch (error: Exception) {
+                Toast.makeText(
+                    context,
+                    resources.getString(R.string.toast_export_failed_fmt, error.message.orEmpty()),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+
+    val exportJsonLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+        ::writeExport,
+    )
 
     showRenameDialog?.let { oldName ->
         RenameDialog(
@@ -223,8 +302,16 @@ fun <T : Any> ImportableListScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(stringResource(titleRes), onBack, actions) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { importLauncher.launch(importMimeType) }) {
-                Icon(Lucide.FilePlus, stringResource(R.string.import_label), Modifier.size(24.dp))
+            FloatingActionButton(
+                onClick = {
+                    if (createItem != null) showAddSheet = true else importLauncher.launch(importMimeType)
+                }
+            ) {
+                Icon(
+                    if (createItem != null) Lucide.Plus else Lucide.FilePlus,
+                    stringResource(createItem?.titleRes ?: R.string.import_label),
+                    Modifier.size(24.dp),
+                )
             }
         }
     ) { padding ->
@@ -253,7 +340,7 @@ fun <T : Any> ImportableListScreen(
                         if (item != null) {
                             itemCard(name, item,
                                 { onOpen(item) },
-                                { if (canRenameItem(name) || canDeleteItem(name)) longPressName = name })
+                                { if (canRenameItem(name) || exportItem != null || canDeleteItem(name)) longPressName = name })
                         } else {
                             FailedImportableItem(
                                 name = name,
@@ -271,6 +358,17 @@ fun <T : Any> ImportableListScreen(
                                     text = { Text(stringResource(R.string.rename)) },
                                     leadingIcon = { Icon(Lucide.Pencil, null, Modifier.size(18.dp)) },
                                     onClick = { longPressName = null; showRenameDialog = name })
+                            }
+                            if (exportItem != null && item != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.export_json)) },
+                                    leadingIcon = { Icon(Lucide.FileJson, null, Modifier.size(18.dp)) },
+                                    onClick = {
+                                        longPressName = null
+                                        exportTarget = name
+                                        exportJsonLauncher.launch("$name.json")
+                                    },
+                                )
                             }
                             if (canDeleteItem(name)) {
                                 DropdownMenuItem(

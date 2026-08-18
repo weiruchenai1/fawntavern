@@ -26,6 +26,7 @@
     <string name="backup_recovery_failed_fmt">Backup recovery failed. Your data has not been opened: %1$s</string>
     <string name="prompt_context_load_failed_fmt">Some prompt context could not be loaded: %1$s</string>
     <string name="list_load_failed_fmt">Could not load the list: %1$s</string>
+    <string name="create_failed_fmt">Could not create: %1$s</string>
     <string name="delete_failed_fmt">Delete failed: %1$s</string>
     <string name="item_load_failed">Could not load this item</string>
 
@@ -308,8 +309,13 @@
 
     <!-- World Books -->
     <string name="no_worldbooks_title">No world books</string>
-    <string name="no_worldbooks_desc">Tap + to import a world book JSON</string>
+    <string name="no_worldbooks_desc">Tap + to create or import a world book</string>
+    <string name="add_worldbook">Add world book</string>
+    <string name="worldbook_name_label">World book name</string>
+    <string name="import_worldbook">Import world book JSON</string>
+    <string name="worldbook_created">World book created</string>
     <string name="no_entries">No entries</string>
+    <string name="add_entry">Add Entry</string>
     <plurals name="entries_count_fmt"><item quantity="one">%1$d entry</item><item quantity="other">%1$d entries</item></plurals>
     <string name="entry_name_label">Name</string>
     <string name="entry_keys_label">Trigger words (comma separated)</string>

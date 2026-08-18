@@ -20,23 +20,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,7 +50,6 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.FilePlus
 import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Image
@@ -74,6 +66,7 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.character.CharacterCard
 import sh.calvin.reorderable.ReorderableItem
 import me.rerere.fawntavern.ui.components.rememberReorderableList
+import me.rerere.fawntavern.ui.components.AddItemSheet
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.appClickable
 import me.rerere.fawntavern.ui.components.draggableLiftScale
@@ -85,7 +78,6 @@ import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = {}) {
     val context = LocalContext.current
@@ -112,7 +104,6 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     var loading by remember { mutableStateOf(true) }
     var selectedChar by remember { mutableStateOf<CharacterCard?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }
-    var newCharacterName by remember { mutableStateOf("") }
 
     var longPressName by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
@@ -144,19 +135,13 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
 
     LaunchedEffect(Unit) { refresh() }
 
-    fun dismissAddSheet() {
-        showAddSheet = false
-        newCharacterName = ""
-    }
-
-    fun saveNewCharacter() {
-        val name = newCharacterName.trim()
+    fun saveNewCharacter(name: String) {
         if (name.isBlank()) return
         scope.launch {
             try {
                 controller.create(name)
                 Toast.makeText(context, resources.getString(R.string.character_created), Toast.LENGTH_SHORT).show()
-                dismissAddSheet()
+                showAddSheet = false
                 refresh()
             } catch (error: Exception) {
                 Toast.makeText(context, resources.getString(R.string.char_save_failed_fmt, error.message.orEmpty()), Toast.LENGTH_SHORT).show()
@@ -170,7 +155,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
             try {
                 controller.import(uri)
                 Toast.makeText(context, resources.getString(R.string.character_imported), Toast.LENGTH_SHORT).show()
-                dismissAddSheet()
+                showAddSheet = false
                 refresh()
             } catch (error: Exception) {
                 Toast.makeText(
@@ -183,47 +168,14 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     }
 
     if (showAddSheet) {
-        ModalBottomSheet(onDismissRequest = ::dismissAddSheet) {
-            Column(
-                Modifier.fillMaxWidth().imePadding()
-                    .padding(horizontal = Space16)
-                    .padding(bottom = Space16),
-                verticalArrangement = Arrangement.spacedBy(Space12),
-            ) {
-                Text(stringResource(R.string.add_character), style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(
-                    value = newCharacterName,
-                    onValueChange = { newCharacterName = it },
-                    label = { Text(stringResource(R.string.char_name_label)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedButton(
-                    onClick = { importLauncher.launch("*/*") },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Lucide.FilePlus, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(Space8))
-                    Text(stringResource(R.string.import_character_card))
-                }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Space8),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = ::dismissAddSheet, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                    Button(
-                        onClick = ::saveNewCharacter,
-                        enabled = newCharacterName.isNotBlank(),
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.save))
-                    }
-                }
-            }
-        }
+        AddItemSheet(
+            title = stringResource(R.string.add_character),
+            nameLabel = stringResource(R.string.char_name_label),
+            importLabel = stringResource(R.string.import_character_card),
+            onImport = { importLauncher.launch("*/*") },
+            onCreate = ::saveNewCharacter,
+            onDismiss = { showAddSheet = false },
+        )
     }
 
     // 导出启动器（SAF 另存为）

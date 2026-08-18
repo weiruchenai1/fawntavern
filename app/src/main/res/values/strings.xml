@@ -26,6 +26,7 @@
     <string name="backup_recovery_failed_fmt">备份恢复失败，数据尚未打开：%1$s</string>
     <string name="prompt_context_load_failed_fmt">部分 Prompt 上下文加载失败：%1$s</string>
     <string name="list_load_failed_fmt">列表加载失败：%1$s</string>
+    <string name="create_failed_fmt">新建失败：%1$s</string>
     <string name="delete_failed_fmt">删除失败：%1$s</string>
     <string name="item_load_failed">条目加载失败</string>
 
@@ -306,8 +307,13 @@
 
     <!-- World Books -->
     <string name="no_worldbooks_title">暂无世界书</string>
-    <string name="no_worldbooks_desc">点击右下角导入世界书 JSON</string>
+    <string name="no_worldbooks_desc">点击右下角新建或导入世界书</string>
+    <string name="add_worldbook">添加世界书</string>
+    <string name="worldbook_name_label">世界书名称</string>
+    <string name="import_worldbook">导入世界书 JSON</string>
+    <string name="worldbook_created">世界书已创建</string>
     <string name="no_entries">无条目</string>
+    <string name="add_entry">添加条目</string>
     <plurals name="entries_count_fmt"><item quantity="other">%1$d 个条目</item></plurals>
     <string name="entry_name_label">名称</string>
     <string name="entry_keys_label">触发词 (逗号分隔)</string>

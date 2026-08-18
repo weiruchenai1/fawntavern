@@ -55,4 +55,20 @@ class WorldBookRepositoryTest {
 
         assertEquals("Kivotos", WorldBookParser.parse(json).name)
     }
+
+    @Test
+    fun createWritesEmptyBookAndKeepsExistingOneOnNameClash() = runBlocking {
+        val first = WorldBookRepository.create(context, "Kivotos")
+        assertEquals("Kivotos", first.name)
+        assertEquals(emptyMap<Int, WorldBookEntry>(), WorldBookRepository.load(context, first.name).entries)
+
+        val entry = WorldBookEntry(id = 0, keys = listOf("Kivotos"), comment = "City", content = "text")
+        WorldBookRepository.saveEntries(context, first.name, listOf(entry))
+
+        // 同名再建走去重后缀，原世界书内容不受影响
+        val second = WorldBookRepository.create(context, "Kivotos")
+        assertEquals("Kivotos (2)", second.name)
+        assertEquals("text", WorldBookRepository.load(context, first.name).entries.getValue(0).content)
+        assertEquals(emptyMap<Int, WorldBookEntry>(), WorldBookRepository.load(context, second.name).entries)
+    }
 }

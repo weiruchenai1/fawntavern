@@ -63,6 +63,7 @@ import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
+import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -76,6 +77,7 @@ import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
+import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.noRippleClickable
 
 /** 位置下拉选项：展示用字符串资源 → (position, role)。at_depth 按 role 拆成三项。 */
@@ -153,16 +155,25 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
         }
     }
 
+    // 新条目 id 取现有最大值 +1：saveEntries 按 id patch 原文件，撞号会覆盖别的条目
+    fun newEntry() = WorldBookEntry(
+        id = (entries.maxOfOrNull { it.id } ?: -1) + 1,
+        keys = emptyList(),
+        comment = "",
+        content = "",
+    )
+
     editingEntry?.let { entry ->
         EntryEditDialog(
             entry = entry,
+            // 列表里没有这个 id = 从「添加条目」进来的新条目，保存时才真正入列
+            isNew = entries.none { it.id == entry.id },
             onDismiss = { editingEntry = null },
             onSave = { updated ->
                 val idx = entries.indexOfFirst { it.id == entry.id }
-                if (idx >= 0) {
-                    entries = entries.toMutableList().also { it[idx] = updated }
-                    saveBook()
-                }
+                entries = if (idx >= 0) entries.toMutableList().also { it[idx] = updated }
+                          else entries + updated
+                saveBook()
                 editingEntry = null
             },
         )
@@ -188,73 +199,89 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppTopBar(title = book.name, onBack = { leaveAfterSave() }) }
     ) { padding ->
-        if (entries.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.no_entries), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            LazyColumn(
-                Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(top = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(Space8),
-            ) {
-                itemsIndexed(entries, key = { _, e -> e.id }) { _, entry ->
-                    val expanded = expandedId == entry.id
-                    Column(
-                        Modifier.fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainer)
-                            .animateContentSize()
-                            .padding(Space12),
-                        verticalArrangement = Arrangement.spacedBy(Space8),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f).clickable {
-                                expandedId = if (expanded) null else entry.id
-                            }) {
-                                Text(entry.comment.ifBlank { "Entry ${entry.id}" },
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSurface)
-                                if (entry.keys.isNotEmpty()) {
-                                    Text(entry.keys.take(8).joinToString(" · "),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(top = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(Space8),
+        ) {
+            itemsIndexed(entries, key = { _, e -> e.id }) { _, entry ->
+                val expanded = expandedId == entry.id
+                Column(
+                    Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .animateContentSize()
+                        .padding(Space12),
+                    verticalArrangement = Arrangement.spacedBy(Space8),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f).clickable {
+                            expandedId = if (expanded) null else entry.id
+                        }) {
+                            Text(entry.comment.ifBlank { "Entry ${entry.id}" },
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface)
+                            if (entry.keys.isNotEmpty()) {
+                                Text(entry.keys.take(8).joinToString(" · "),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
-                            // 状态徽标（永久/向量化）
-                            statusBadge(entry)?.let { (label, color) ->
-                                Text(label, style = MaterialTheme.typography.labelSmall, color = color)
-                                Spacer(Modifier.width(Space8))
-                            }
-                            Text(if (entry.enabled) stringResource(R.string.enabled_status_on) else stringResource(R.string.enabled_status_off),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (entry.enabled) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant)
-                            AppIconButton(
-                                icon = Lucide.Pencil,
-                                contentDescription = stringResource(R.string.edit),
-                                onClick = { editingEntry = entry },
-                                size = 32.dp,
-                                iconSize = 16.dp,
-                            )
-                            AppIconButton(
-                                icon = Lucide.Trash2,
-                                contentDescription = stringResource(R.string.delete),
-                                onClick = { deletingEntry = entry },
-                                tint = MaterialTheme.colorScheme.error,
-                                size = 32.dp,
-                                iconSize = 16.dp,
-                            )
                         }
-                        if (expanded) {
-                            Text(entry.content, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // 状态徽标（永久/向量化）
+                        statusBadge(entry)?.let { (label, color) ->
+                            Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+                            Spacer(Modifier.width(Space8))
                         }
+                        Text(if (entry.enabled) stringResource(R.string.enabled_status_on) else stringResource(R.string.enabled_status_off),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (entry.enabled) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant)
+                        AppIconButton(
+                            icon = Lucide.Pencil,
+                            contentDescription = stringResource(R.string.edit),
+                            onClick = { editingEntry = entry },
+                            size = 32.dp,
+                            iconSize = 16.dp,
+                        )
+                        AppIconButton(
+                            icon = Lucide.Trash2,
+                            contentDescription = stringResource(R.string.delete),
+                            onClick = { deletingEntry = entry },
+                            tint = MaterialTheme.colorScheme.error,
+                            size = 32.dp,
+                            iconSize = 16.dp,
+                        )
+                    }
+                    if (expanded) {
+                        Text(entry.content, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                item { Spacer(Modifier.height(16.dp)) }
             }
+            if (entries.isEmpty()) {
+                item {
+                    Text(
+                        stringResource(R.string.no_entries),
+                        Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+            item {
+                Row(
+                    Modifier.fillMaxWidth().clickable { editingEntry = newEntry() }.padding(Space16),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Lucide.Plus, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(Space8))
+                    Text(stringResource(R.string.add_entry), color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            item { Spacer(Modifier.height(16.dp)) }
         }
     }
 }
@@ -268,7 +295,12 @@ private fun statusBadge(entry: WorldBookEntry): Pair<String, androidx.compose.ui
 }
 
 @Composable
-private fun EntryEditDialog(entry: WorldBookEntry, onDismiss: () -> Unit, onSave: (WorldBookEntry) -> Unit) {
+private fun EntryEditDialog(
+    entry: WorldBookEntry,
+    isNew: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (WorldBookEntry) -> Unit,
+) {
     var eComment by remember(entry) { mutableStateOf(entry.comment) }
     val eContent = remember(entry) { TextFieldState(entry.content) }
     var eKeys by remember(entry) { mutableStateOf(entry.keys.joinToString(", ")) }
@@ -321,7 +353,8 @@ private fun EntryEditDialog(entry: WorldBookEntry, onDismiss: () -> Unit, onSave
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                     ) {
                         Text(
-                            stringResource(R.string.edit_entry), style = MaterialTheme.typography.titleMedium,
+                            stringResource(if (isNew) R.string.add_entry else R.string.edit_entry),
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
                         )
