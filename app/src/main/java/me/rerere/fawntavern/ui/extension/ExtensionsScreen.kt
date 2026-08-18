@@ -100,6 +100,9 @@ fun ExtensionsScreen(onBack: () -> Unit) {
 private fun ExtensionsList(onBack: () -> Unit, onOpenSettings: (String) -> Unit) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
+    val pluginInstallFailedMessage = stringResource(R.string.plugin_install_failed)
+    val pluginOpenFailedMessage = stringResource(R.string.plugin_open_failed)
+    val pluginUninstallFailedMessage = stringResource(R.string.plugin_uninstall_failed)
     val scope = rememberCoroutineScope()
     val extensions by ExtensionHost.extensions.collectAsState()
     val pluginRecords by PluginManager.plugins.collectAsState()
@@ -114,7 +117,7 @@ private fun ExtensionsList(onBack: () -> Unit, onOpenSettings: (String) -> Unit)
         busy = true
         scope.launch {
             runCatching { block() }
-                .onFailure { errorMessage = it.message ?: context.getString(R.string.plugin_install_failed) }
+                .onFailure { errorMessage = it.message ?: pluginInstallFailedMessage }
             busy = false
         }
     }
@@ -122,7 +125,7 @@ private fun ExtensionsList(onBack: () -> Unit, onOpenSettings: (String) -> Unit)
     val zipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) runInstall {
             context.contentResolver.openInputStream(uri)?.use { PluginManager.installFromZip(it) }
-                ?: error(context.getString(R.string.plugin_open_failed))
+                ?: error(pluginOpenFailedMessage)
         }
     }
 
@@ -216,7 +219,7 @@ private fun ExtensionsList(onBack: () -> Unit, onOpenSettings: (String) -> Unit)
                         busy = true
                         scope.launch {
                             runCatching { PluginManager.uninstall(pluginId) }
-                                .onFailure { errorMessage = it.message ?: context.getString(R.string.plugin_uninstall_failed) }
+                                .onFailure { errorMessage = it.message ?: pluginUninstallFailedMessage }
                             busy = false
                         }
                     },
