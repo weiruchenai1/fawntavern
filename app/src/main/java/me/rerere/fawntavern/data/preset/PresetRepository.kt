@@ -166,8 +166,8 @@ object PresetRepository {
         }
         root.put("prompt_order", orderArr)
 
-        // Preset-scoped regex follows SillyTavern's extensions.regex_scripts layout.
-        // Patch the extensions object in place so data owned by other extensions survives a save.
+        // 预设私有正则遵循 SillyTavern 的 extensions.regex_scripts 结构。
+        // 原位修改 extensions 对象，确保其他扩展拥有的数据在保存时不丢失。
         val regexArr = JSONArray()
         preset.regexScripts.forEach { regexArr.put(PresetParser.serializeRegexScript(it)) }
         val extensions = root.optJSONObject("extensions") ?: JSONObject()

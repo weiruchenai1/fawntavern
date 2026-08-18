@@ -58,8 +58,8 @@ object PresetParser {
             }
         }
 
-        // SillyTavern stores preset-scoped scripts in extensions.regex_scripts.
-        // Keep reading the old FawnTavern root field so existing local presets remain usable.
+        // SillyTavern 将预设私有正则存放在 extensions.regex_scripts。
+        // 同时兼容旧版 FawnTavern 的根级字段，确保已有本地预设仍可使用。
         val regexScripts = parseRegexScripts(
             json.optJSONObject("extensions")?.optJSONArray("regex_scripts")
                 ?: json.optJSONArray("regex_scripts")
