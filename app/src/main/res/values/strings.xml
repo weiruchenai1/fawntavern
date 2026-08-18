@@ -519,6 +519,19 @@
 
     <!-- Extensions -->
     <string name="extensions">扩展</string>
+    <string name="extension_no_description">暂无描述</string>
+    <string name="plugin_install">安装插件</string>
+    <string name="plugin_install_github">从 GitHub 安装</string>
+    <string name="plugin_install_zip">从本地 ZIP 安装</string>
+    <string name="plugin_github_url">GitHub 仓库地址</string>
+    <string name="plugin_install_failed">插件安装失败</string>
+    <string name="plugin_open_failed">无法读取插件文件</string>
+    <string name="plugin_uninstall">卸载插件</string>
+    <string name="plugin_uninstall_confirm_fmt">确定卸载“%1$s”吗？</string>
+    <string name="plugin_uninstall_failed">插件卸载失败</string>
+    <string name="plugin_operation_failed">插件操作失败</string>
+    <string name="plugin_version_fmt">版本 %1$s</string>
+    <string name="plugin_incompatible">与当前应用版本不兼容</string>
     <string name="ext_summarize">对话摘要</string>
     <string name="ext_summarize_desc">把较早的对话压缩成摘要注入提示，缓解长对话超出上下文。</string>
     <string name="ext_quickreply">快捷回复</string>

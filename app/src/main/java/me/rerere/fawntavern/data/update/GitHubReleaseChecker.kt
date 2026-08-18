@@ -86,7 +86,7 @@ internal class GitHubReleaseChecker(
     }
 }
 
-internal data class SemanticVersion(
+data class SemanticVersion(
     private val numbers: List<Int>,
     private val preRelease: List<String>,
 ) : Comparable<SemanticVersion> {

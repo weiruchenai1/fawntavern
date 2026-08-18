@@ -521,6 +521,19 @@
 
     <!-- Extensions -->
     <string name="extensions">Extensions</string>
+    <string name="extension_no_description">No description</string>
+    <string name="plugin_install">Install plugin</string>
+    <string name="plugin_install_github">Install from GitHub</string>
+    <string name="plugin_install_zip">Install local ZIP</string>
+    <string name="plugin_github_url">GitHub repository URL</string>
+    <string name="plugin_install_failed">Plugin installation failed</string>
+    <string name="plugin_open_failed">Unable to read the plugin file</string>
+    <string name="plugin_uninstall">Uninstall plugin</string>
+    <string name="plugin_uninstall_confirm_fmt">Uninstall “%1$s”?</string>
+    <string name="plugin_uninstall_failed">Plugin uninstallation failed</string>
+    <string name="plugin_operation_failed">Plugin operation failed</string>
+    <string name="plugin_version_fmt">Version %1$s</string>
+    <string name="plugin_incompatible">Not compatible with this app version</string>
     <string name="ext_summarize">Summarize</string>
     <string name="ext_summarize_desc">Condense earlier conversation into a summary injected into the prompt.</string>
     <string name="ext_quickreply">Quick Reply</string>

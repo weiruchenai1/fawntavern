@@ -103,6 +103,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        aidl = true
     }
 
     kotlin {
@@ -166,6 +167,10 @@ dependencies {
     // TTS 悬浮窗
     implementation(libs.floatingx)
 
+    // 第三方插件 JS 运行时（QuickJS）：仅 Android 变体打包 .so；JVM 单测跑不了 Android native，
+    // 官方文档要求用 -jvm 变体替换（见下方 configurations 块）
+    implementation(libs.quickjs.kt)
+
     // 聊天记录存储：Room + Paging；alts 列用 kotlinx.serialization 编码
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
@@ -184,6 +189,14 @@ dependencies {
 
     androidTestImplementation(composeBom)
     androidTestImplementation(libs.androidx.ui.test.junit4)
+}
+
+// quickjs-kt 官方要求：桌面 JVM 无法加载 Android native 库，JVM 单元测试需把 android 变体替换成 -jvm 变体
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    resolutionStrategy.dependencySubstitution {
+        substitute(module("io.github.dokar3:quickjs-kt-android"))
+            .using(module("io.github.dokar3:quickjs-kt-jvm:${libs.versions.quickjsKt.get()}"))
+    }
 }
 
 googleServices {

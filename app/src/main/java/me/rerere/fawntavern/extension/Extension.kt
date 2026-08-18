@@ -11,8 +11,8 @@ import me.rerere.fawntavern.data.chat.ChatSession
  *   消费方用 `filterIsInstance<T>()` 取用。官方扩展与第三方走同一套接口（dogfood）。
  * - **分层**：本文件只放纯逻辑契约（无 Android/Compose 依赖），产出的是可直接喂给
  *   [me.rerere.fawntavern.domain.PromptBuilder] 的中性数据。
- * - **Phase 2**：第三方 JS 扩展（QuickJS）通过桥接实现同样的能力接口；因该运行时无
- *   Promise/异步，[ExtensionServices] 的 suspend 方法会在 JS 线程上以同步阻塞方式适配。
+ * - 第三方 JS 插件在隔离进程运行，通过 Binder 桥接成同样的能力接口。可能跨进程调用的
+ *   能力使用 suspend 契约，避免在生成线程上同步阻塞。
  */
 interface Extension {
     val info: ExtensionInfo
@@ -39,7 +39,7 @@ data class ExtensionInfo(
  * 不参与历史的 token 预算裁剪（摘要块因此天然不会被从新到旧裁掉）。
  */
 interface PromptContributor {
-    fun contribute(ctx: PromptContext): PromptContribution
+    suspend fun contribute(ctx: PromptContext): PromptContribution
 }
 
 /** 提示贡献上下文。[extState] 为本扩展在当前会话的状态 blob（JSON 串，空 = 无）。 */

@@ -26,6 +26,7 @@ robolectric = "4.16.1"
 firebaseBom = "34.17.0"
 googleServices = "4.5.0"
 firebaseCrashlyticsPlugin = "3.0.7"
+quickjsKt = "1.0.0-alpha13"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -78,3 +79,5 @@ robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }
+quickjs-kt = { group = "io.github.dokar3", name = "quickjs-kt", version.ref = "quickjsKt" }
+quickjs-kt-jvm = { group = "io.github.dokar3", name = "quickjs-kt-jvm", version.ref = "quickjsKt" }

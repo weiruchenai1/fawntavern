@@ -28,16 +28,17 @@ internal class ChatPostGenerationCoordinator(
         scope.launch {
             val services = HostServices(context, apiConfig)
             var ran = false
+            var latest = ChatRepository.get(context, session.id) ?: session
             for (extension in ExtensionStore.enabledExtensions(context)) {
                 if (extension !is GenerationLifecycle) continue
                 ran = true
                 try {
                     extension.onGenerationComplete(
                         GenerationContext(
-                            session = session,
+                            session = latest,
                             charName = characterName,
                             userName = userName,
-                            extState = session.extState[extension.info.id].orEmpty(),
+                            extState = latest.extState[extension.info.id].orEmpty(),
                             config = ExtensionStore.getConfig(context, extension.info.id),
                         ),
                         services,
@@ -45,6 +46,7 @@ internal class ChatPostGenerationCoordinator(
                 } catch (error: Exception) {
                     SafeLog.warn(TAG, "extension_generation_hook_failed", error)
                 }
+                latest = ChatRepository.get(context, session.id) ?: latest
             }
             if (ran && isCurrent()) {
                 ChatRepository.get(context, session.id)?.let(onSessionRefreshed)

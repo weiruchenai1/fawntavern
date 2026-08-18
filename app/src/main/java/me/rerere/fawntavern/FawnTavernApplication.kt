@@ -1,6 +1,11 @@
 package me.rerere.fawntavern
 
 import android.app.Application
+import android.app.ActivityManager
+import android.content.Context
+import android.os.Build
+import android.os.Process
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -14,6 +19,7 @@ import me.rerere.fawntavern.core.diagnostics.CrashReportStore
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import me.rerere.fawntavern.data.diagnostics.RemoteDiagnostics
 import me.rerere.fawntavern.data.settings.AppStatisticsStore
+import me.rerere.fawntavern.plugin.PluginManager
 
 class FawnTavernApplication : Application() {
     sealed interface RecoveryState {
@@ -29,6 +35,8 @@ class FawnTavernApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // 隔离插件进程只运行 PluginWorkerService；不得初始化数据库、备份、统计或网络诊断。
+        if (currentProcessName().endsWith(PLUGIN_PROCESS_SUFFIX)) return
         AppStatisticsStore.incrementLaunchCount(this)
         val versionName = runCatching {
             packageManager.getPackageInfo(packageName, 0).versionName
@@ -45,10 +53,26 @@ class FawnTavernApplication : Application() {
         recoveryJob = applicationScope.launch {
             _recoveryState.value = try {
                 AppBackup.recoverInterruptedImport(this@FawnTavernApplication)
+                PluginManager.initialize(this@FawnTavernApplication)
                 RecoveryState.Ready
             } catch (error: Throwable) {
                 RecoveryState.Failed(error)
             }
         }
+    }
+
+    private fun currentProcessName(): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return Application.getProcessName()
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return manager.runningAppProcesses
+            ?.firstOrNull { it.pid == Process.myPid() }
+            ?.processName
+            ?: runCatching {
+                File("/proc/self/cmdline").readText().trimEnd('\u0000')
+            }.getOrDefault("")
+    }
+
+    private companion object {
+        const val PLUGIN_PROCESS_SUFFIX = ":plugin_worker"
     }
 }

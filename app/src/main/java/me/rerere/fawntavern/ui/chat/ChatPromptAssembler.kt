@@ -46,7 +46,7 @@ internal class ChatPromptAssembler(
         val variableState: MacroVariableState,
     )
 
-    fun assemble(request: Request): Result {
+    suspend fun assemble(request: Request): Result {
         val extraPre = mutableListOf<PromptBuilder.Piece>()
         val extraPost = mutableListOf<PromptBuilder.Piece>()
         val extraDepth = mutableListOf<PromptBuilder.DepthPiece>()

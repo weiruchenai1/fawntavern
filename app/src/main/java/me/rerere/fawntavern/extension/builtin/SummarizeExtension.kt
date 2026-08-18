@@ -85,7 +85,7 @@ object SummarizeExtension : Extension, PromptContributor, GenerationLifecycle {
         .put("modelId", c.modelId)
         .toString()
 
-    override fun contribute(ctx: PromptContext): PromptContribution {
+    override suspend fun contribute(ctx: PromptContext): PromptContribution {
         val state = parseState(ctx.extState)
         val summary = state.summary
         if (summary.isBlank()) return PromptContribution.EMPTY
