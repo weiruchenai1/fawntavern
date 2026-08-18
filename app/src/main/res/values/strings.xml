@@ -248,6 +248,7 @@
     <string name="no_characters_title">暂无角色</string>
     <string name="add_tag">添加标签</string>
     <string name="tag_label">标签</string>
+    <string name="tag_already_exists">标签已存在</string>
     <string name="add_button">添加</string>
     <string name="add_greeting">添加开场白</string>
     <string name="edit_greeting">编辑开场白</string>

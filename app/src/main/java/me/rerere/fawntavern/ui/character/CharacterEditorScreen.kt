@@ -115,7 +115,14 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     val depthPromptText = rememberTextFieldState(card.depthPrompt?.prompt ?: "")
     var depthPromptDepth by remember { mutableStateOf((card.depthPrompt?.depth ?: 4).toString()) }
     var depthPromptRole by remember { mutableStateOf(card.depthPrompt?.role ?: "system") }
-    var tags by remember { mutableStateOf(card.tags) }
+    var tags by remember {
+        mutableStateOf(
+            card.tags
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .distinctBy { it.lowercase() },
+        )
+    }
     var enabledWb by remember { mutableStateOf(card.enabledWorldBooks) }
     var linkedPreset by remember { mutableStateOf(card.linkedPreset) }
     var streaming by remember { mutableStateOf(card.streaming) }
@@ -272,18 +279,36 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
 
     if (showAddTagDialog) {
         var newTag by remember { mutableStateOf("") }
+        val normalizedTag = newTag.trim()
+        val tagExists = tags.any { it.equals(normalizedTag, ignoreCase = true) }
         AlertDialog(
             onDismissRequest = { showAddTagDialog = false },
             title = { Text(stringResource(R.string.add_tag)) },
             text = {
-                OutlinedTextField(value = newTag, onValueChange = { newTag = it },
-                    label = { Text(stringResource(R.string.tag_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = newTag,
+                    onValueChange = { newTag = it },
+                    label = { Text(stringResource(R.string.tag_label)) },
+                    singleLine = true,
+                    isError = tagExists,
+                    supportingText = if (tagExists) {
+                        { Text(stringResource(R.string.tag_already_exists)) }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    if (newTag.isNotBlank()) tags = tags + newTag.trim()
-                    showAddTagDialog = false
-                }) { Text(stringResource(R.string.add_button)) }
+                TextButton(
+                    onClick = {
+                        if (tags.none { it.equals(normalizedTag, ignoreCase = true) }) {
+                            tags = tags + normalizedTag
+                        }
+                        showAddTagDialog = false
+                    },
+                    enabled = normalizedTag.isNotEmpty() && !tagExists,
+                ) { Text(stringResource(R.string.add_button)) }
             },
             dismissButton = { TextButton(onClick = { showAddTagDialog = false }) { Text(stringResource(R.string.cancel)) } }
         )

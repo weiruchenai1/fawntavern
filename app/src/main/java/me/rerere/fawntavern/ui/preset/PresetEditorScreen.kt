@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -43,6 +45,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -133,6 +136,15 @@ fun PresetEditorScreen(
     // 系统返回键：编辑弹窗打开时不拦截（交给弹窗自身），否则保存并返回
     BackHandler(enabled = !state.hasOpenModal) { saveAndBack() }
     val tabs = listOf(stringResource(R.string.basic_params), stringResource(R.string.prompts), stringResource(R.string.regex_tab))
+    val pagerState = rememberPagerState(
+        initialPage = state.selectedTab,
+        pageCount = { tabs.size },
+    )
+    LaunchedEffect(pagerState.settledPage) {
+        if (state.selectedTab != pagerState.settledPage) {
+            dispatch(PresetEditorAction.SelectTab(pagerState.settledPage))
+        }
+    }
 
     Scaffold(
         modifier = Modifier.imePadding(),
@@ -141,7 +153,7 @@ fun PresetEditorScreen(
             Column {
                 AppTopBar(preset.name, onBack = { saveAndBack() })
                 PrimaryScrollableTabRow(
-                    selectedTabIndex = state.selectedTab,
+                    selectedTabIndex = pagerState.currentPage,
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.primary,
                     edgePadding = 16.dp,
@@ -153,8 +165,8 @@ fun PresetEditorScreen(
                             else -> null
                         }
                         Tab(
-                            selected = i == state.selectedTab,
-                            onClick = { dispatch(PresetEditorAction.SelectTab(i)) },
+                            selected = i == pagerState.currentPage,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
                         ) {
                             Text(
                                 if (count != null) "$title $count" else title,
@@ -167,8 +179,12 @@ fun PresetEditorScreen(
             }
         }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            when (state.selectedTab) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize().padding(padding),
+            key = { it },
+        ) { page ->
+            when (page) {
                 0 -> BasicParamsTab(state.draft) {
                     dispatch(PresetEditorAction.UpdateDraft(it))
                 }
@@ -485,15 +501,24 @@ private fun RegexEditDialog(
                         Modifier.fillMaxWidth()
                             .background(MaterialTheme.colorScheme.surface)
                             .statusBarsPadding()
-                            .padding(horizontal = 4.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                     ) {
-                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                         Text(
                             stringResource(R.string.edit_regex), style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f), textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
                         )
+                    }
+                },
+                bottomBar = {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+                    ) {
+                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                         Button(onClick = {
                             val placement = buildList {
                                 if (onUser) add(1)

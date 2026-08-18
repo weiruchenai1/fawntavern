@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -226,7 +228,8 @@ private fun ProviderDetailScreen(
     onChange: (ApiProvider) -> Unit = {},
 ) {
     var prov by remember { mutableStateOf(provider) }
-    var tab by remember { mutableIntStateOf(0) }
+    val pagerState = key(provider.id) { rememberPagerState(pageCount = { 2 }) }
+    val scope = rememberCoroutineScope()
     val isNew = provider.name.isBlank()
 
     BackHandler(onBack = onBack)
@@ -263,20 +266,28 @@ private fun ProviderDetailScreen(
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 NavigationBarItem(
-                    selected = tab == 0, onClick = { tab = 0 },
+                    selected = pagerState.currentPage == 0,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
                     icon = { Icon(Lucide.Settings, null) },
                     label = { Text(stringResource(R.string.config_tab)) })
                 NavigationBarItem(
-                    selected = tab == 1, onClick = { tab = 1 },
+                    selected = pagerState.currentPage == 1,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
                     icon = { Icon(Lucide.Package, null) },
                     label = { Text(stringResource(R.string.models_tab)) })
             }
         }
     ) { padding ->
-        when (tab) {
-            // 配置项仅改动草稿（prov），点“保存”才落盘；模型页无保存按钮，改动即时落盘
-            0 -> ProviderConfigTab(prov, { prov = it }, onSave, onDelete, isNew, Modifier.padding(padding))
-            1 -> ProviderModelTab(prov, { prov = it; onChange(it) }, Modifier.padding(padding))
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize().padding(padding),
+            key = { it },
+        ) { page ->
+            when (page) {
+                // 配置项仅改动草稿（prov），点“保存”才落盘；模型页无保存按钮，改动即时落盘
+                0 -> ProviderConfigTab(prov, { prov = it }, onSave, onDelete, isNew)
+                1 -> ProviderModelTab(prov, { prov = it; onChange(it) })
+            }
         }
     }
 }

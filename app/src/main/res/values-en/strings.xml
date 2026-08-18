@@ -250,6 +250,7 @@
     <string name="no_characters_title">No characters</string>
     <string name="add_tag">Add Tag</string>
     <string name="tag_label">Tag</string>
+    <string name="tag_already_exists">Tag already exists</string>
     <string name="add_button">Add</string>
     <string name="add_greeting">Add Greeting</string>
     <string name="edit_greeting">Edit Greeting</string>
