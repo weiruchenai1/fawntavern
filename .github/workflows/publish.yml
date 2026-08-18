@@ -182,7 +182,6 @@ jobs:
             "$X86_64_APK"
             app/build/outputs/SHA256SUMS.txt
             --generate-notes
-            --title "FawnTavern $GITHUB_REF_NAME"
           )
           if [[ "$IS_PRERELEASE" == "true" ]]; then
             RELEASE_ARGS+=(--prerelease)
