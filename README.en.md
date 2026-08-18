@@ -28,6 +28,7 @@ FawnTavern is a lightweight AI role-playing chat client. It imports SillyTavern-
 - Stream responses, edit messages, regenerate replies, and switch response versions
 - Use web search, text-to-speech, image attachments, and file attachments
 - Configure prompts, quick replies, and chat interface preferences
+- Run third-party plugins in an isolated QuickJS process
 - Keep conversations, characters, and settings on the device
 - Back up and restore local data and check for updates in the app
 
@@ -54,15 +55,17 @@ Most phones should use `arm64-v8a`. FawnTavern does not publish packages through
 - Conversations, character cards, presets, world books, and attachments are stored locally by default.
 - API, search, and TTS credentials are encrypted with an AES-GCM key protected by Android Keystore.
 - Model requests are sent to the API provider you configure. Review that provider's privacy policy as well.
+- On first launch, you must review the Privacy Policy and User Agreement. Statistics and remote diagnostics are not initialized before consent.
 
 ## Information Collection Disclosure
 
 FawnTavern runs no backend of its own. Conversations, character cards, presets, world books, and attachments are stored locally by default. Apart from the cases below, the app does not collect or upload any data:
 
-- **Model services**: Chat content is sent to the model API provider you configure and processed there. Review that provider's privacy policy as well.
+- **Model, TTS, and image services**: When you initiate a request, the text, context, attachments, parameters, and credentials required for that request are sent to the provider you configured.
 - **Web search**: When web search is enabled, search queries are sent to the search provider you configure.
-- **Remote diagnostics (enabled by default; can be disabled in settings)**: To improve stability, the app collects crash logs and app-start events via Tencent Bugly (mainland China) or Google Firebase (other regions), including crash stacks, build type, and version name, and calls a Cloudflare endpoint to determine your region for choosing the diagnostics service (cached for 24 hours). Bugly does not collect device identifiers or privacy information. No diagnostic data is uploaded once disabled in settings.
-- **Update checks**: Update checks only query the GitHub Releases API for the latest version, along with the device CPU architecture to match the correct package; no personal data is involved.
+- **Remote diagnostics (enabled by default after privacy consent; can be disabled in settings)**: Depending on region, Tencent Bugly (mainland China) or Google Firebase (other regions) processes crash reports and app-start events. Data may include app instance identifiers, device identifiers, device/system/network information, IP address, app version and build type, crash stack traces, thread and runtime state, and diagnostic logs. The app also calls Cloudflare to select a regional diagnostics service and caches the result for 24 hours. Chat content, attachment contents, and API keys are not intentionally included as diagnostics fields.
+- **Plugins**: Plugin scripts run in an isolated process on the device by default. If a plugin makes a network request, data is sent to the destination selected by that plugin.
+- **Update checks**: A standard HTTPS request is sent to the GitHub Releases API. GitHub receives the IP address, request time, User-Agent, and network metadata. The current version and device CPU architecture are evaluated locally when selecting a package.
 
 ## Disclaimer
 
