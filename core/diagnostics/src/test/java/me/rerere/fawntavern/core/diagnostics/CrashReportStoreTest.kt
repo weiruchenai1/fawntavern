@@ -1,7 +1,6 @@
 package me.rerere.fawntavern.core.diagnostics
 
 import java.nio.file.Files
-import java.util.TimeZone
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,10 +9,10 @@ import org.junit.Test
 
 class CrashReportStoreTest {
     @Test
-    fun crashTimeUsesDeviceTimeZone() {
+    fun crashTimeUsesUtc() {
         assertEquals(
-            "1970-01-01T09:00:00+09:00",
-            CrashReportStore.deviceTimestamp(0L, TimeZone.getTimeZone("Asia/Tokyo")),
+            "1970-01-01T00:00:00Z",
+            CrashReportStore.deviceTimestamp(0L),
         )
     }
 

@@ -123,12 +123,9 @@ object CrashReportStore {
         }
     }
 
-    internal fun deviceTimestamp(
-        timestampMillis: Long,
-        deviceTimeZone: TimeZone = TimeZone.getDefault(),
-    ): String =
+    internal fun deviceTimestamp(timestampMillis: Long): String =
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
-            .apply { timeZone = deviceTimeZone }
+            .apply { timeZone = TimeZone.getTimeZone("UTC") }
             .format(Date(timestampMillis))
 
     private fun safeThreadName(value: String): String = value

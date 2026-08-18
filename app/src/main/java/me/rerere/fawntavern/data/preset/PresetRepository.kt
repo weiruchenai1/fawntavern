@@ -166,10 +166,14 @@ object PresetRepository {
         }
         root.put("prompt_order", orderArr)
 
-        // 预设私有正则脚本：全量覆盖 regex_scripts（编辑器就地增删改，退出时随预设一起落盘）
+        // Preset-scoped regex follows SillyTavern's extensions.regex_scripts layout.
+        // Patch the extensions object in place so data owned by other extensions survives a save.
         val regexArr = JSONArray()
         preset.regexScripts.forEach { regexArr.put(PresetParser.serializeRegexScript(it)) }
-        root.put("regex_scripts", regexArr)
+        val extensions = root.optJSONObject("extensions") ?: JSONObject()
+        extensions.put("regex_scripts", regexArr)
+        root.put("extensions", extensions)
+        root.remove("regex_scripts")
 
         JsonFileDir.atomicWriteText(file, root.toString(2))
         }

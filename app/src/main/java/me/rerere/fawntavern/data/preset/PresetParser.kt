@@ -58,13 +58,12 @@ object PresetParser {
             }
         }
 
-        // 预设私有正则脚本（自定义字段 regex_scripts，ST 原生预设无此字段，纯附加）
-        val regexScripts = mutableListOf<RegexScript>()
-        json.optJSONArray("regex_scripts")?.let { arr ->
-            for (i in 0 until arr.length()) {
-                arr.optJSONObject(i)?.let { regexScripts.add(parseRegexScript(it)) }
-            }
-        }
+        // SillyTavern stores preset-scoped scripts in extensions.regex_scripts.
+        // Keep reading the old FawnTavern root field so existing local presets remain usable.
+        val regexScripts = parseRegexScripts(
+            json.optJSONObject("extensions")?.optJSONArray("regex_scripts")
+                ?: json.optJSONArray("regex_scripts")
+        )
 
         // 根据对应的 source 字段推导当前使用的模型名
         val source = json.optString("chat_completion_source", "openai")
@@ -167,6 +166,15 @@ object PresetParser {
             trimStrings = trimStrings,
             substituteRegex = substituteRegex,
         )
+    }
+
+    private fun parseRegexScripts(array: JSONArray?): List<RegexScript> {
+        if (array == null) return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                array.optJSONObject(i)?.let { add(parseRegexScript(it)) }
+            }
+        }
     }
 
     /** 将正则脚本序列化回 ST 兼容 JSON（用于写入预设的 regex_scripts）。 */
