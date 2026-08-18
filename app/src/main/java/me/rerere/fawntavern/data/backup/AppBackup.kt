@@ -339,11 +339,20 @@ object AppBackup {
         recoverInterruptedImportInternal(context)
     }
 
+    fun hasInterruptedImport(context: Context): Boolean =
+        restoreTransactionRoots(context).any { root ->
+            root.listFiles()?.any { it.isDirectory } == true
+        }
+
     private suspend fun recoverInterruptedImportInternal(context: Context) {
-        recoverTransactionRoot(context, File(context.noBackupFilesDir, RESTORE_TXN_DIR))
-        // Older builds stored journals under filesDir, where Android Backup could include secrets.
-        recoverTransactionRoot(context, File(context.filesDir, RESTORE_TXN_DIR))
+        restoreTransactionRoots(context).forEach { recoverTransactionRoot(context, it) }
     }
+
+    private fun restoreTransactionRoots(context: Context): List<File> = listOf(
+        File(context.noBackupFilesDir, RESTORE_TXN_DIR),
+        // Older builds stored journals under filesDir, where Android Backup could include secrets.
+        File(context.filesDir, RESTORE_TXN_DIR),
+    )
 
     private suspend fun recoverTransactionRoot(context: Context, root: File) {
         root.listFiles()?.filter { it.isDirectory }?.forEach { transactionDir ->

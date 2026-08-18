@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:sans-serif;font-size:16px;line-height:1.75;color:#171717;padding:22px 20px 48px;margin:0;background:#fff}
+    h2{font-size:34px;text-align:center;margin:16px 0 28px}
+    h3{font-size:21px;margin:28px 0 8px}
+    p{margin:8px 0}
+    ul{padding-left:22px;margin:8px 0}
+    li{margin:5px 0}
+    .item{border-top:1px solid #d0d0d0;padding-top:12px}
+    .label{font-weight:700}
+  </style>
+</head>
+<body>
+<h2>Third-Party Information Sharing List</h2>
+<p><b>Last updated:</b> August 18, 2026<br><b>Effective date:</b> August 18, 2026</p>
+<ul>
+  <li>The app transmits information to a relevant service only when you use a network feature or after consent when remote diagnostics and statistics are enabled.</li>
+  <li>The local libraries listed below implement app features. Merely including a library does not provide your data to that library's developers.</li>
+  <li>Third-party processing may change with versions, configuration, or service rules. The app does not include external links to these providers.</li>
+</ul>
+
+<h3>User-Configured AI, Search, TTS, and Image Services</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> Input text, conversation context, images, files, search terms, text to synthesize, model and request parameters, API keys, request addresses, IP address, and network metadata.</li>
+<li><span class="label">Purpose:</span> Complete AI, search, speech synthesis, and image requests you initiate.</li>
+<li><span class="label">Scenario:</span> When you configure a service and send, search, synthesize, or load a remote image.</li>
+<li><span class="label">Third party:</span> The relevant provider selected and configured by you.</li>
+<li><span class="label">Method:</span> The app sends a network request. The provider determines retention and further processing.</li>
+</ul></div>
+
+<h3>Built-In Search Services</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> Search terms, request address, IP address, request time, and network metadata.</li>
+<li><span class="label">Purpose:</span> Retrieve and parse search results.</li>
+<li><span class="label">Scenario:</span> When you enable web search and submit a search request.</li>
+<li><span class="label">Third party:</span> Bing or DuckDuckGo, depending on your search configuration.</li>
+<li><span class="label">Method:</span> The app uses OkHttp and Jsoup to request and parse results. Jsoup parses returned content locally.</li>
+</ul></div>
+
+<h3>Firebase Analytics</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> App instance identifiers, device and system information, app version, build type, and app start events.</li>
+<li><span class="label">Purpose:</span> Usage statistics and stability analysis.</li>
+<li><span class="label">Scenario:</span> In configured release builds outside mainland China, after privacy consent and while remote diagnostics are enabled.</li>
+<li><span class="label">Third party:</span> Google LLC.</li>
+<li><span class="label">Method:</span> Transmitted by the Firebase Analytics SDK. Chat content is not included.</li>
+</ul></div>
+
+<h3>Firebase Crashlytics</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> Crash stack traces, device and system information, app version, build type, runtime state, and diagnostic logs.</li>
+<li><span class="label">Purpose:</span> Analyze crashes and diagnose stability issues.</li>
+<li><span class="label">Scenario:</span> In configured release builds outside mainland China, after privacy consent and while remote diagnostics are enabled.</li>
+<li><span class="label">Third party:</span> Google LLC.</li>
+<li><span class="label">Method:</span> Processed by the Firebase Crashlytics SDK. Chat content is not intentionally uploaded.</li>
+</ul></div>
+
+<h3>Bugly CrashReport</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> Crash stack traces, device identifiers, device and system information, app version, build type, runtime state, and privacy-related diagnostic information.</li>
+<li><span class="label">Purpose:</span> Analyze crashes, device state, and runtime issues.</li>
+<li><span class="label">Scenario:</span> In mainland China when a release build has a Bugly app ID configured, after privacy consent and while remote diagnostics are enabled.</li>
+<li><span class="label">Third party:</span> Tencent Bugly.</li>
+<li><span class="label">Method:</span> Processed by the Bugly SDK. Chat content is not intentionally uploaded.</li>
+</ul></div>
+
+<h3>Cloudflare Region Detection</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> IP address, request time, network metadata, and the country or region code returned for the request.</li>
+<li><span class="label">Purpose:</span> Select a regional remote diagnostics service and cache the region result.</li>
+<li><span class="label">Scenario:</span> After privacy consent, while remote diagnostics are enabled, when the app needs to refresh region detection.</li>
+<li><span class="label">Third party:</span> Cloudflare, Inc.</li>
+<li><span class="label">Method:</span> The app retrieves region information through an HTTPS request.</li>
+</ul></div>
+
+<h3>OkHttp</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> Request addresses, headers, request bodies, response status, and network metadata.</li>
+<li><span class="label">Purpose:</span> Provide HTTP, SSE, search, update, and remote image communication.</li>
+<li><span class="label">Scenario:</span> When the app or a plugin makes a network request.</li>
+<li><span class="label">Third party:</span> Maintainers of the Square open-source project.</li>
+<li><span class="label">Method:</span> OkHttp performs network communication locally. Data is sent to the request destination, not to OkHttp maintainers.</li>
+</ul></div>
+
+<h3>Coil</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> Remote image or icon URLs, request status, and network metadata.</li>
+<li><span class="label">Purpose:</span> Load avatars, character images, icons, and other remote images.</li>
+<li><span class="label">Scenario:</span> When the interface needs to display a remote image.</li>
+<li><span class="label">Third party:</span> Maintainers of the Coil open-source project.</li>
+<li><span class="label">Method:</span> Coil calls OkHttp locally. Image requests go to the server identified by the URL, not to Coil maintainers.</li>
+</ul></div>
+
+<h3>Jsoup</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> Web page HTML received locally and parsed results.</li>
+<li><span class="label">Purpose:</span> Parse search results and message HTML locally.</li>
+<li><span class="label">Scenario:</span> When a search returns a web page or chat content needs HTML parsing.</li>
+<li><span class="label">Third party:</span> Maintainers of the Jsoup open-source project.</li>
+<li><span class="label">Method:</span> Jsoup parses data locally and does not transmit it to its maintainers.</li>
+</ul></div>
+
+<h3>AndroidX Room / Paging</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> Local chat database, conversation indexes, and paging state.</li>
+<li><span class="label">Purpose:</span> Store, query, and display chat data locally.</li>
+<li><span class="label">Scenario:</span> When the app reads or updates the local workspace.</li>
+<li><span class="label">Third party:</span> Maintainers of the Google AndroidX open-source project.</li>
+<li><span class="label">Method:</span> Processed only on the device, with no network transmission to maintainers.</li>
+</ul></div>
+
+<h3>QuickJS Kotlin</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> Installed plugin scripts, manifests, configuration, and input passed to plugins.</li>
+<li><span class="label">Purpose:</span> Run JavaScript plugins in an isolated local plugin process.</li>
+<li><span class="label">Scenario:</span> When you install and enable a plugin or the app invokes it.</li>
+<li><span class="label">Third party:</span> Maintainers of the QuickJS Kotlin open-source project.</li>
+<li><span class="label">Method:</span> The runtime processes data locally. If a plugin makes its own network request, the relevant network service receives that request data.</li>
+</ul></div>
+
+<h3>GitHub Update Check</h3>
+<div class="item"><ul>
+<li><span class="label">Information involved:</span> Request IP address, request time, app-identifying User-Agent, and network metadata. The current version is compared locally.</li>
+<li><span class="label">Purpose:</span> Check whether a newer app version is available.</li>
+<li><span class="label">Scenario:</span> When you open the update check feature.</li>
+<li><span class="label">Third party:</span> GitHub, Inc.</li>
+<li><span class="label">Method:</span> The app retrieves version information over the network and does not upload chat content or API keys.</li>
+</ul></div>
+
+<p>This list is not a complete statement of each provider's service. Before configuring or enabling a third-party service, evaluate its actual rules and decide whether to use it.</p>
+</body>
+</html>

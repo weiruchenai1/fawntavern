@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:sans-serif;font-size:16px;line-height:1.7;color:#171717;padding:22px 20px 48px;margin:0;background:#fff}
+    h2{font-size:34px;text-align:center;margin:16px 0 28px}
+    p{margin:8px 0}
+    .table-wrap{overflow-x:auto;margin-top:16px}
+    table{width:100%;min-width:760px;border-collapse:collapse;table-layout:fixed}
+    th,td{border:1px solid #b8b8b8;padding:10px;vertical-align:top;text-align:left;word-break:break-word}
+    th{background:#f2f2f2;font-weight:700}
+    th:nth-child(1){width:18%}th:nth-child(2){width:24%}th:nth-child(3){width:18%}th:nth-child(4){width:40%}
+  </style>
+</head>
+<body>
+<h2>Personal Information Collection List</h2>
+<p><b>Last updated:</b> August 18, 2026<br><b>Effective date:</b> August 18, 2026</p>
+<p>This list describes information processed by FawnTavern in different feature scenarios. The app does not intentionally collect information not described here. Third-party services you configure may process additional information under their own rules.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Scenario</th><th>Purpose</th><th>Collection Method</th><th>Information Type</th></tr></thead>
+<tbody>
+<tr><td>Chat and local workspace</td><td>Create conversations, save and display chat history, and construct prompts</td><td>Entered, imported, or saved by the user</td><td>Chat text, conversation titles, character cards, lorebooks, presets, user nickname, avatar, and related local configuration</td></tr>
+<tr><td>Sending AI requests</td><td>Submit requests to the AI service you selected and receive responses</td><td>Processed after the user taps Send</td><td>Input text, conversation context, character and preset content, model name, request parameters, and images or files you attach</td></tr>
+<tr><td>Search and text-to-speech</td><td>Complete search or TTS requests you initiate</td><td>Processed after user input or a feature action</td><td>Search terms, text to synthesize, language and audio settings, request parameters, and network request metadata</td></tr>
+<tr><td>Images, attachments, and files</td><td>Send message attachments, display character or remote images, and import or export data</td><td>Selected, captured, imported, or exported by the user</td><td>Images, file contents, file names, file types, file sizes, and local file paths</td></tr>
+<tr><td>API and service configuration</td><td>Connect to AI, search, TTS, or image services you select</td><td>Entered or modified by the user</td><td>Service addresses, model names, request parameters, access keys, and related settings</td></tr>
+<tr><td>Backup, recovery, and data management</td><td>Export, import, recover, or delete the local workspace</td><td>Initiated by the user</td><td>Character cards, presets, lorebooks, chat history, attachments, configuration, and avatars contained in backup files</td></tr>
+<tr><td>Plugin execution</td><td>Load installed plugins and execute plugin features</td><td>Processed after the user installs or enables a plugin</td><td>Plugin manifests, scripts, configuration, and input passed to plugins; a plugin may also process its own network request data</td></tr>
+<tr><td>App compatibility and local diagnostics</td><td>Adapt the interface, diagnose local errors, and support app operation</td><td>Read or generated while the app runs</td><td>Android version, device model, app version, runtime state, local crash stack traces, and security logs</td></tr>
+<tr><td>Remote diagnostics and usage statistics</td><td>Record app start events, analyze crashes, and improve stability</td><td>Processed by SDKs after privacy consent and while remote diagnostics are enabled</td><td>App instance identifiers, device and system information, app version, build type, crash stack traces, runtime state, and diagnostic logs; Bugly may process device identifiers and privacy-related diagnostic information</td></tr>
+<tr><td>Network communication and region detection</td><td>Complete network requests, select a regional diagnostics service, and check for updates</td><td>Generated automatically by network communication</td><td>IP address, request time, destination address, headers, network type, response status, and other network metadata</td></tr>
+</tbody>
+</table>
+</div>
+<p>Local information is stored on the device by default. Information sent to an AI, search, TTS, image, or update service you select is processed under that provider's rules.</p>
+</body>
+</html>

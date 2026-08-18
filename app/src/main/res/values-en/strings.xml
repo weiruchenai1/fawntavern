@@ -62,6 +62,20 @@
     <string name="about_github_value">weiruchenai1/fawntavern</string>
     <string name="about_license">License</string>
     <string name="about_license_value">GNU AGPL v3.0</string>
+    <string name="privacy_documents">Privacy &amp; agreements</string>
+    <string name="privacy_document_view">View details</string>
+    <string name="privacy_consent_agree">Agree and continue</string>
+    <string name="privacy_consent_decline">Decline and exit</string>
+    <string name="privacy_tagline">Agree to chat with your favorite characters</string>
+    <string name="privacy_skip">Skip</string>
+    <string name="privacy_consent_prefix">I have read and agree to the&#160;</string>
+    <string name="privacy_consent_and">&#160;and&#160;</string>
+    <string name="privacy_policy_title">Privacy Policy</string>
+    <!-- Full document is rendered from assets/privacy/*.html. -->
+    <string name="user_agreement_title">User Agreement</string>
+    <!-- Full document is rendered from assets/privacy/*.html. -->
+    <string name="personal_info_list_title">Personal Information Collection List</string>
+    <string name="third_party_sharing_list_title">Third-party Information Sharing List</string>
 
     <!-- Prompt debug log -->
     <string name="logs">Logs</string>
@@ -716,6 +730,7 @@
 
     <string name="crash_feedback">Crash reports</string>
     <string name="crash_feedback_remote_title">Automatically upload crash reports</string>
+    <string name="crash_feedback_remote_summary">Information that may be uploaded: device identifiers, device and system information, IP address, app version, build type, app start events, crash stack traces, runtime state, and diagnostic logs. Chat content, attachments, and API keys are not intentionally uploaded.</string>
     <string name="crash_feedback_empty">No crash reports</string>
     <string name="crash_feedback_share">Share</string>
     <string name="crash_feedback_subject">FawnTavern crash report</string>

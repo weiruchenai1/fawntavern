@@ -112,7 +112,7 @@ object RemoteDiagnostics {
         }
     }
 
-    @Suppress("DEPRECATION") // Bugly provides no replacement for explicitly disabling device ID collection.
+    @Suppress("DEPRECATION") // The bundled Bugly SDK still exposes device ID collection through this API.
     private fun applyBuglyCollectionState(context: Context, enabled: Boolean) {
         if (!BuildConfig.BUGLY_ENABLED || BuildConfig.BUGLY_APP_ID.isBlank()) return
 
@@ -124,8 +124,8 @@ object RemoteDiagnostics {
 
         CrashReport.enableBugly(true)
         if (buglyInitialized.compareAndSet(false, true)) {
-            CrashReport.enableObtainId(context, false)
-            CrashReport.setCollectPrivacyInfo(context, false)
+            CrashReport.enableObtainId(context, true)
+            CrashReport.setCollectPrivacyInfo(context, true)
             val strategy = CrashReport.UserStrategy(context).apply {
                 appVersion = BuildConfig.VERSION_NAME
                 appChannel = "mainland-china"

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:sans-serif;font-size:16px;line-height:1.7;color:#171717;padding:22px 20px 48px;margin:0;background:#fff}
+    h2{font-size:34px;text-align:center;margin:16px 0 28px}
+    p{margin:8px 0}
+    .table-wrap{overflow-x:auto;margin-top:16px}
+    table{width:100%;min-width:760px;border-collapse:collapse;table-layout:fixed}
+    th,td{border:1px solid #b8b8b8;padding:10px;vertical-align:top;text-align:left;word-break:break-word}
+    th{background:#f2f2f2;font-weight:700}
+    th:nth-child(1){width:18%}th:nth-child(2){width:24%}th:nth-child(3){width:18%}th:nth-child(4){width:40%}
+  </style>
+</head>
+<body>
+<h2>个人信息收集清单</h2>
+<p><b>更新日期：</b>2026年8月18日<br><b>生效日期：</b>2026年8月18日</p>
+<p>本清单列明 FawnTavern 在不同功能场景中处理的信息。未列明的信息不会被应用主动收集；你主动配置的第三方服务可能按照其自身规则处理额外信息。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>收集场景</th><th>使用目的</th><th>收集方式</th><th>个人信息类型</th></tr></thead>
+<tbody>
+<tr><td>聊天和本地工作空间</td><td>创建会话、保存和展示聊天记录，构建提示内容</td><td>用户主动输入、导入或保存</td><td>聊天文本、会话标题、角色卡、世界书、预设、用户昵称、头像及相关本地配置</td></tr>
+<tr><td>发送 AI 请求</td><td>向你选择的 AI 服务提交请求并接收回复</td><td>用户点击发送后处理</td><td>输入文本、对话上下文、角色和预设内容、模型名称、请求参数，以及你主动附加的图片和文件</td></tr>
+<tr><td>搜索和语音合成</td><td>完成你主动发起的搜索或 TTS 请求</td><td>用户主动输入或点击功能后处理</td><td>搜索关键词、待合成文本、语言和音频设置、请求参数及网络请求元数据</td></tr>
+<tr><td>图片、附件和文件</td><td>发送消息附件、显示角色或远程图片、执行导入导出</td><td>用户主动选择、拍摄、导入或导出</td><td>图片、文件内容、文件名、文件类型、文件大小和本地文件路径</td></tr>
+<tr><td>API 和服务配置</td><td>连接你选择的 AI、搜索、TTS 或图片服务</td><td>用户主动填写或修改</td><td>服务地址、模型名称、请求参数、访问密钥和相关开关</td></tr>
+<tr><td>备份、恢复和数据管理</td><td>导出、导入、恢复或删除本地工作空间</td><td>用户主动操作</td><td>备份文件中的角色卡、预设、世界书、聊天记录、附件、配置和头像</td></tr>
+<tr><td>插件运行</td><td>加载已安装插件并执行插件功能</td><td>用户安装、启用插件后处理</td><td>插件清单、脚本、插件配置和传给插件的输入；插件自行发起网络请求时还可能处理其请求数据</td></tr>
+<tr><td>应用适配和本地故障诊断</td><td>适配界面、定位本地错误和保障应用运行</td><td>应用运行时读取或生成</td><td>Android 版本、设备型号、应用版本、运行状态、本地崩溃堆栈和安全日志</td></tr>
+<tr><td>远程诊断和使用统计</td><td>统计启动事件、分析崩溃并改进稳定性</td><td>取得隐私同意且远程诊断开关启用后由 SDK 处理</td><td>应用实例标识、设备和系统信息、应用版本、构建类型、崩溃堆栈、运行状态及诊断日志；Bugly 可能处理设备标识和隐私相关诊断信息</td></tr>
+<tr><td>网络通信和地区判断</td><td>完成网络请求、选择远程诊断服务区域、检查更新</td><td>网络请求自动产生</td><td>IP 地址、请求时间、目标地址、请求头、网络类型、响应状态和其他网络元数据</td></tr>
+</tbody>
+</table>
+</div>
+<p>本地信息默认保存在设备上。发送给你选择的 AI、搜索、TTS、图片或更新服务的信息，由相应服务商按照其规则处理。</p>
+</body>
+</html>

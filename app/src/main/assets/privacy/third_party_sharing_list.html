@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{font-family:sans-serif;font-size:16px;line-height:1.75;color:#171717;padding:22px 20px 48px;margin:0;background:#fff}
+    h2{font-size:34px;text-align:center;margin:16px 0 28px}
+    h3{font-size:21px;margin:28px 0 8px}
+    p{margin:8px 0}
+    ul{padding-left:22px;margin:8px 0}
+    li{margin:5px 0}
+    .item{border-top:1px solid #d0d0d0;padding-top:12px}
+    .label{font-weight:700}
+  </style>
+</head>
+<body>
+<h2>第三方信息共享清单</h2>
+<p><b>更新日期：</b>2026年8月18日<br><b>生效日期：</b>2026年8月18日</p>
+<ul>
+  <li>应用只在你主动使用网络功能，或在取得同意后启用远程诊断和统计时，向相应服务传输信息。</li>
+  <li>下列本地库负责实现应用功能，不会因为被应用引用就把数据提供给库的开发者。</li>
+  <li>第三方服务的处理范围可能随其版本、配置和服务规则变化；应用内没有提供这些服务商的外部跳转链接。</li>
+</ul>
+
+<h3>用户自行配置的 AI、搜索、TTS 和图片服务</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>输入文本、对话上下文、图片、文件、搜索关键词、待合成文本、模型和请求参数、API 密钥、请求地址、IP 地址及网络元数据。</li>
+<li><span class="label">使用目的：</span>完成你主动发起的 AI、搜索、语音合成和图片请求。</li>
+<li><span class="label">使用场景：</span>你填写服务配置并点击发送、搜索、合成或加载远程图片时。</li>
+<li><span class="label">第三方主体：</span>由你选择和配置的相应服务商。</li>
+<li><span class="label">收集方式：</span>应用通过网络请求发送；具体保存期限和处理方式由相应服务商决定。</li>
+</ul></div>
+
+<h3>内置搜索服务</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>搜索关键词、请求地址、IP 地址、请求时间和网络元数据。</li>
+<li><span class="label">使用目的：</span>获取并解析搜索结果。</li>
+<li><span class="label">使用场景：</span>你主动打开联网搜索并提交搜索请求时。</li>
+<li><span class="label">第三方主体：</span>Bing 或 DuckDuckGo，具体取决于你的搜索配置。</li>
+<li><span class="label">收集方式：</span>应用通过 OkHttp 和 Jsoup 发起并解析网络请求；Jsoup 只在本地解析返回内容。</li>
+</ul></div>
+
+<h3>Firebase Analytics</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>应用实例标识、设备和系统信息、应用版本、构建类型和启动事件。</li>
+<li><span class="label">使用目的：</span>应用使用统计和稳定性分析。</li>
+<li><span class="label">使用场景：</span>发布版、非中国大陆地区且你同意隐私政策并启用远程诊断时。</li>
+<li><span class="label">第三方主体：</span>Google LLC。</li>
+<li><span class="label">收集方式：</span>Firebase Analytics SDK 传输；不包含聊天正文。</li>
+</ul></div>
+
+<h3>Firebase Crashlytics</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>崩溃堆栈、设备和系统信息、应用版本、构建类型、运行状态和诊断日志。</li>
+<li><span class="label">使用目的：</span>分析崩溃和定位稳定性问题。</li>
+<li><span class="label">使用场景：</span>发布版、非中国大陆地区且你同意隐私政策并启用远程诊断时。</li>
+<li><span class="label">第三方主体：</span>Google LLC。</li>
+<li><span class="label">收集方式：</span>Firebase Crashlytics SDK 处理；不主动上传聊天正文。</li>
+</ul></div>
+
+<h3>Bugly CrashReport</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>崩溃堆栈、设备标识、设备和系统信息、应用版本、构建类型、运行状态及隐私相关诊断信息。</li>
+<li><span class="label">使用目的：</span>分析崩溃、设备状态和运行问题。</li>
+<li><span class="label">使用场景：</span>中国大陆地区、发布版已配置 Bugly 应用标识，且你同意隐私政策并启用远程诊断时。</li>
+<li><span class="label">第三方主体：</span>腾讯 Bugly。</li>
+<li><span class="label">收集方式：</span>Bugly SDK 处理；不主动上传聊天正文。</li>
+</ul></div>
+
+<h3>Cloudflare 地区判断服务</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>IP 地址、请求时间和网络请求元数据，以及根据请求返回的国家或地区代码。</li>
+<li><span class="label">使用目的：</span>选择远程诊断服务区域并缓存地区判断结果。</li>
+<li><span class="label">使用场景：</span>你同意隐私政策并启用远程诊断，且应用需要刷新地区判断时。</li>
+<li><span class="label">第三方主体：</span>Cloudflare, Inc.。</li>
+<li><span class="label">收集方式：</span>应用通过 HTTPS 请求获取地区信息。</li>
+</ul></div>
+
+<h3>OkHttp</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>请求地址、请求头、请求体、响应状态和网络元数据。</li>
+<li><span class="label">使用目的：</span>提供应用的 HTTP、SSE、搜索、更新和远程图片通信能力。</li>
+<li><span class="label">使用场景：</span>应用或插件发起网络请求时。</li>
+<li><span class="label">第三方主体：</span>Square 开源项目维护者。</li>
+<li><span class="label">收集方式：</span>OkHttp 在本地执行网络通信；数据实际发送给请求目标服务，不会发送给 OkHttp 维护者。</li>
+</ul></div>
+
+<h3>Coil</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>远程图片或图标 URL、请求状态和网络元数据。</li>
+<li><span class="label">使用目的：</span>加载头像、角色图片、图标和其他远程图片。</li>
+<li><span class="label">使用场景：</span>界面需要显示远程图片时。</li>
+<li><span class="label">第三方主体：</span>Coil 开源项目维护者。</li>
+<li><span class="label">收集方式：</span>Coil 在本地调用 OkHttp；图片请求实际发送给 URL 对应的服务器，不会发送给 Coil 维护者。</li>
+</ul></div>
+
+<h3>Jsoup</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>本地接收的网页 HTML 和解析结果。</li>
+<li><span class="label">使用目的：</span>在本地解析搜索结果和消息 HTML。</li>
+<li><span class="label">使用场景：</span>搜索请求返回网页，或聊天内容需要 HTML 解析时。</li>
+<li><span class="label">第三方主体：</span>Jsoup 开源项目维护者。</li>
+<li><span class="label">收集方式：</span>Jsoup 仅在本地解析数据，不向其维护者传输信息。</li>
+</ul></div>
+
+<h3>AndroidX Room / Paging</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>本地聊天数据库、会话索引和分页状态。</li>
+<li><span class="label">使用目的：</span>本地保存、查询和分页展示聊天数据。</li>
+<li><span class="label">使用场景：</span>应用读取或更新本地工作空间时。</li>
+<li><span class="label">第三方主体：</span>Google AndroidX 开源项目维护者。</li>
+<li><span class="label">收集方式：</span>仅在设备本地处理，不联网、不向维护者传输数据。</li>
+</ul></div>
+
+<h3>QuickJS Kotlin</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>已安装插件的脚本、清单、配置和传给插件的输入。</li>
+<li><span class="label">使用目的：</span>在隔离的本地插件进程中运行 JavaScript 插件。</li>
+<li><span class="label">使用场景：</span>你安装并启用插件，或插件被应用调用时。</li>
+<li><span class="label">第三方主体：</span>QuickJS Kotlin 开源项目维护者。</li>
+<li><span class="label">收集方式：</span>运行时在设备本地处理；插件自行发起网络请求时，数据由相应网络服务接收。</li>
+</ul></div>
+
+<h3>GitHub 更新检查</h3>
+<div class="item"><ul>
+<li><span class="label">涉及的信息类型：</span>更新请求的 IP 地址、请求时间、应用标识 User-Agent 和网络元数据；当前版本只在设备本地比较。</li>
+<li><span class="label">使用目的：</span>检查是否存在新的应用版本。</li>
+<li><span class="label">使用场景：</span>你主动打开更新检查功能时。</li>
+<li><span class="label">第三方主体：</span>GitHub, Inc.。</li>
+<li><span class="label">收集方式：</span>应用通过网络请求获取版本信息，不上传聊天正文和 API 密钥。</li>
+</ul></div>
+
+<p>本清单不构成第三方服务商对其服务的完整说明。你配置或启用第三方服务前，应结合其实际规则判断是否使用。</p>
+</body>
+</html>

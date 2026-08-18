@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.ScrollState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
@@ -31,11 +32,12 @@ fun SettingsSubPage(
     onBack: () -> Unit,
     spacing: Dp = Space16,
     scrollable: Boolean = true,
+    scrollState: ScrollState? = null,
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
     actions: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val scrollState = rememberScrollState()
+    val contentScrollState = scrollState ?: rememberScrollState()
     Scaffold(
         // 全局 enableEdgeToEdge 后窗口不再随键盘缩放，必须自己让出 IME 高度：
         // 否则滚动视口底部一直在键盘后面，点击时 bringIntoView 会把光标滚到被遮挡的位置
@@ -46,7 +48,7 @@ fun SettingsSubPage(
         Column(
             Modifier.fillMaxSize().padding(padding)
                 .padding(horizontal = Space16)
-                .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier)
+                .then(if (scrollable) Modifier.verticalScroll(contentScrollState) else Modifier)
                 .padding(top = Space16),
             horizontalAlignment = horizontalAlignment,
             verticalArrangement = Arrangement.spacedBy(spacing),

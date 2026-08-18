@@ -17,7 +17,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,14 +35,26 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Github
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Scale
+import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.Smartphone
 import com.composables.icons.lucide.Tag
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.ui.components.SettingsSubPage
+import me.rerere.fawntavern.ui.privacy.PrivacyDocument
+import me.rerere.fawntavern.ui.privacy.PrivacyDocumentScreen
 
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val aboutScrollState = rememberScrollState()
+    var openDocument by remember { mutableStateOf<PrivacyDocument?>(null) }
+    openDocument?.let { document ->
+        PrivacyDocumentScreen(
+            document = document,
+            onBack = { openDocument = null },
+        )
+        return
+    }
     val versionName = remember {
         try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.1"
@@ -62,7 +78,12 @@ fun AboutScreen(onBack: () -> Unit) {
 
     BackHandler(onBack = onBack)
 
-    SettingsSubPage(stringResource(R.string.about), onBack, horizontalAlignment = Alignment.CenterHorizontally) {
+    SettingsSubPage(
+        title = stringResource(R.string.about),
+        onBack = onBack,
+        scrollState = aboutScrollState,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         // ── 品牌图标 ──
         Image(
             painter = painterResource(R.drawable.brand_logo),
@@ -112,7 +133,18 @@ fun AboutScreen(onBack: () -> Unit) {
                 },
             )
         }
+        PrefSection(stringResource(R.string.privacy_documents)) {
+            PrivacyDocument.entries.forEach { document ->
+                AboutInfoRow(
+                    icon = Lucide.ScrollText,
+                    label = stringResource(document.titleRes),
+                    value = stringResource(R.string.privacy_document_view),
+                    onClick = { openDocument = document },
+                )
+            }
+        }
     }
+
 }
 
 private const val GITHUB_URL = "https://github.com/weiruchenai1/fawntavern"

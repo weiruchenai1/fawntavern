@@ -90,6 +90,12 @@ fun CrashReportScreen(onBack: () -> Unit) {
                     },
                 )
             }
+            Text(
+                text = stringResource(R.string.crash_feedback_remote_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
         val currentReport = report
         if (currentReport == null) {

@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -33,12 +35,17 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.svg.SvgDecoder
 import me.rerere.fawntavern.data.api.Http
 import me.rerere.fawntavern.data.settings.LanguageStore
+import me.rerere.fawntavern.data.settings.PrivacyConsentStore
 import me.rerere.fawntavern.data.settings.PreferencesStore
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.data.settings.ThemeStore
 import me.rerere.fawntavern.ui.chat.ChatScreen
 import me.rerere.fawntavern.ui.components.HapticGate
 import me.rerere.fawntavern.ui.components.clearFocusOnTap
+import me.rerere.fawntavern.ui.privacy.PrivacyConsentBottomSheet
+import me.rerere.fawntavern.ui.privacy.PrivacyConsentScreen
+import me.rerere.fawntavern.ui.privacy.PrivacyDocument
+import me.rerere.fawntavern.ui.privacy.PrivacyDocumentScreen
 import me.rerere.fawntavern.ui.theme.FawnTavernTheme
 import java.util.Locale
 
@@ -86,30 +93,96 @@ class MainActivity : ComponentActivity() {
             val initialPrefs = remember { PreferencesStore.get(this) }
             var solidBackground by remember { mutableStateOf(initialPrefs.solidBackground) }
             val app = application as FawnTavernApplication
+            var privacyMode by remember {
+                mutableStateOf(
+                    if (PrivacyConsentStore.isAccepted(this)) PrivacyMode.ACCEPTED else PrivacyMode.REQUIRED,
+                )
+            }
+            var showConsentSheet by remember { mutableStateOf(false) }
+            var openPrivacyDocument by remember { mutableStateOf<PrivacyDocument?>(null) }
+            var returnToConsentSheet by remember { mutableStateOf(false) }
             val recoveryState by app.recoveryState.collectAsState()
             FawnTavernTheme(themeMode = themeMode, solidBackground = solidBackground) {
                 // 长按触觉闸门：按"长按触觉反馈"偏好过滤系统 LongPress 触觉（角色卡片/会话长按等）
                 HapticGate {
                     Box(Modifier.fillMaxSize().clearFocusOnTap()) {
-                        when (val state = recoveryState) {
-                            FawnTavernApplication.RecoveryState.Recovering -> RecoveryLoading()
-                            FawnTavernApplication.RecoveryState.Ready -> ChatScreen(
-                                themeMode = themeMode,
-                                onThemeModeChange = { mode ->
-                                    themeMode = mode
-                                    ThemeStore.setMode(this@MainActivity, mode)
+                        val document = openPrivacyDocument
+                        if (document != null) {
+                            PrivacyDocumentScreen(
+                                document = document,
+                                onBack = {
+                                    openPrivacyDocument = null
+                                    if (returnToConsentSheet) showConsentSheet = true
+                                    returnToConsentSheet = false
                                 },
-                                solidBackground = solidBackground,
-                                onSolidBackgroundChange = { value ->
-                                    solidBackground = value
-                                    PreferencesStore.update(this@MainActivity) { it.copy(solidBackground = value) }
+                            )
+                        } else if (privacyMode == PrivacyMode.REQUIRED) {
+                            PrivacyConsentScreen(
+                                onSkip = {
+                                    app.enterLimitedMode()
+                                    privacyMode = PrivacyMode.SKIPPED
                                 },
-                                startAtSettings = startAtSettings,
+                                onAgree = {
+                                    app.acceptPrivacyConsent()
+                                    privacyMode = PrivacyMode.ACCEPTED
+                                },
+                                onDecline = { finishAffinity() },
+                                onOpenDocument = {
+                                    returnToConsentSheet = false
+                                    openPrivacyDocument = it
+                                },
                             )
-                            is FawnTavernApplication.RecoveryState.Failed -> RecoveryFailure(
-                                message = state.error.message.orEmpty(),
-                                onRetry = app::retryRecovery,
-                            )
+                        } else {
+                            when (val state = recoveryState) {
+                                FawnTavernApplication.RecoveryState.AwaitingConsent -> Unit
+                                FawnTavernApplication.RecoveryState.Recovering -> RecoveryLoading()
+                                FawnTavernApplication.RecoveryState.Ready -> ChatScreen(
+                                    themeMode = themeMode,
+                                    onThemeModeChange = { mode ->
+                                        themeMode = mode
+                                        ThemeStore.setMode(this@MainActivity, mode)
+                                    },
+                                    solidBackground = solidBackground,
+                                    onSolidBackgroundChange = { value ->
+                                        solidBackground = value
+                                        PreferencesStore.update(this@MainActivity) { it.copy(solidBackground = value) }
+                                    },
+                                    startAtSettings = startAtSettings,
+                                )
+                                is FawnTavernApplication.RecoveryState.Failed -> RecoveryFailure(
+                                    message = state.error.message.orEmpty(),
+                                    onRetry = app::retryRecovery,
+                                )
+                            }
+
+                            if (privacyMode == PrivacyMode.SKIPPED) {
+                                val interactionSource = remember { MutableInteractionSource() }
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .clickable(
+                                            interactionSource = interactionSource,
+                                            indication = null,
+                                            onClick = { showConsentSheet = true },
+                                        ),
+                                )
+                                if (showConsentSheet) {
+                                    PrivacyConsentBottomSheet(
+                                        onDismiss = { showConsentSheet = false },
+                                        onAgree = {
+                                            app.acceptPrivacyConsent()
+                                            privacyMode = PrivacyMode.ACCEPTED
+                                            showConsentSheet = false
+                                        },
+                                        onDecline = { finishAffinity() },
+                                        onOpenDocument = {
+                                            showConsentSheet = false
+                                            returnToConsentSheet = true
+                                            openPrivacyDocument = it
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -117,6 +190,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+private enum class PrivacyMode { REQUIRED, SKIPPED, ACCEPTED }
 
 @androidx.compose.runtime.Composable
 private fun RecoveryLoading() {
