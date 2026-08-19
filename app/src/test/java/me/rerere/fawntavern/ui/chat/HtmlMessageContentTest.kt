@@ -54,9 +54,9 @@ class HtmlMessageContentTest {
     @Test
     fun replaceViewportHeightUnitsUsesParentViewportVariable() {
         assertEquals(
-            ".full{min-height:var(--TH-viewport-height);}.half{min-height:calc(var(--TH-viewport-height) * 0.5);}",
+            ".full{min-height:var(--TH-viewport-height);}.half{max-height:calc(var(--TH-viewport-height) * 0.5);}.fixed{height:calc(var(--TH-viewport-height) * 0.7);}",
             replaceViewportHeightUnits(
-                ".full{min-height:100vh;}.half{min-height:50vh;}",
+                ".full{min-height:100vh;}.half{max-height:50vh;}.fixed{height:70vh;}",
             ),
         )
     }

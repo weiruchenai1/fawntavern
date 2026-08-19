@@ -455,11 +455,11 @@ private fun iframeDocument(source: String): String {
     return document.outerHtml()
 }
 
-private val minHeightVh = Regex(
-    """(?i)(min-height\s*:\s*)([^;{}]*?)(\d+(?:\.\d+)?)vh(?=\s*[;}])""",
+private val viewportHeightUnit = Regex(
+    """(?i)((?:min-|max-)?height\s*:\s*)([^;{}]*?)(\d+(?:\.\d+)?)vh(?=\s*[;}])""",
 )
 
-internal fun replaceViewportHeightUnits(source: String): String = minHeightVh.replace(source) { match ->
+internal fun replaceViewportHeightUnits(source: String): String = viewportHeightUnit.replace(source) { match ->
     val amount = match.groupValues[3].toDoubleOrNull() ?: return@replace match.value
     val replacement = if (amount == 100.0) {
         "var(--TH-viewport-height)"
@@ -472,7 +472,7 @@ internal fun replaceViewportHeightUnits(source: String): String = minHeightVh.re
 private val iframeRuntime = """
 (function(){
 let resizeRaf=0;
-function viewport(){document.documentElement.style.setProperty('--TH-viewport-height',(window.parent.innerHeight||window.innerHeight)+'px')}
+function viewport(){const h=window.screen?.availHeight||window.screen?.height||window.innerHeight;document.documentElement.style.setProperty('--TH-viewport-height',h+'px')}
 function resize(){resizeRaf=0;const b=document.body,d=document.documentElement;if(!b||!d)return;const h=Math.max(1,Math.ceil(Math.max(b.scrollHeight,b.offsetHeight,d.scrollHeight,d.offsetHeight)));if(frameElement)frameElement.style.setProperty('height',h+'px','important')}
 function schedule(){if(!resizeRaf)resizeRaf=requestAnimationFrame(resize)}
 function notifyParent(){schedule();requestAnimationFrame(()=>{try{window.parent.__fawnStructureChanged()}catch(_){}})}
@@ -548,6 +548,8 @@ pre{margin:0;overflow-x:auto;padding:.75em;background:${surface.css()};white-spa
 </style></head><body><textarea id="send_textarea" aria-hidden="true"></textarea><div id="content"></div><script>
 const content=document.getElementById('content'),sendTextarea=document.getElementById('send_textarea');
 let pageHeightRaf=0;
+function syncViewportHeight(){const h=window.screen?.availHeight||window.screen?.height||window.innerHeight;document.documentElement.style.setProperty('--TH-viewport-height',h+'px')}
+syncViewportHeight();window.addEventListener('resize',syncViewportHeight);
 function reportPageHeight(){pageHeightRaf=0;const h=Math.max(1,Math.ceil(Math.max(content.scrollHeight,content.getBoundingClientRect().height)));FawnBridge.reportPageHeight(h)}
 function schedulePageHeight(){if(!pageHeightRaf)pageHeightRaf=requestAnimationFrame(reportPageHeight)}
 window.__fawnStructureChanged=function(){requestAnimationFrame(schedulePageHeight)};
