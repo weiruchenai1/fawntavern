@@ -190,6 +190,9 @@ internal fun AIMsg(
     autoCollapseThinking: Boolean = true,
     thinkingMarkdown: Boolean = true,
     renderPrefs: RenderPrefs = RenderPrefs(),
+    chatMessagesJson: String = "[]",
+    onSetInputText: (String) -> Unit = {},
+    onSetChatMessage: (Int, String) -> Unit = { _, _ -> },
 ) {
     val s8 = (Space8.value * scale).dp
     val iconSz = (18f * scale).dp
@@ -239,6 +242,9 @@ internal fun AIMsg(
                 userName = userName,
                 charName = charName,
                 renderPrefs = renderPrefs,
+                chatMessagesJson = chatMessagesJson,
+                onSetInputText = onSetInputText,
+                onSetChatMessage = onSetChatMessage,
             )
         }
         // 引用胶囊卡：流式结束后显示在正文之后，点击弹出来源列表。

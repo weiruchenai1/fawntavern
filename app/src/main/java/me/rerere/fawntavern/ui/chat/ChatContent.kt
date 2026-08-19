@@ -56,6 +56,8 @@ import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.settings.NavButtonsMode
@@ -396,6 +398,21 @@ internal fun ChatContent(
                 val allowOverlayAppend = !usePaging || append.endOfPaginationReached ||
                     append is LoadState.Loading || lazyMessages.loadState.refresh is LoadState.Loading
                 val msgs = mergeMessageWindow(pagedBase, overlays, allowOverlayAppend)
+                val webViewMessages = remember(msgs, vm.userName, vm.session?.charName) {
+                    JSONArray().apply {
+                        msgs.forEachIndexed { index, message ->
+                            put(JSONObject().apply {
+                                put("message_id", index)
+                                put("name", if (message.role == "user") vm.userName else vm.session?.charName.orEmpty())
+                                put("role", message.role)
+                                put("is_hidden", false)
+                                put("message", message.content)
+                                put("data", JSONObject())
+                                put("extra", JSONObject())
+                            })
+                        }
+                    }.toString()
+                }
                 // rememberUpdatedState：快照 Flow 的 collect lambda 里引用 msgs，需要始终读到最新值
                 val msgsNow by rememberUpdatedState(msgs)
                 // overlay 收敛：分页已把该 ts 的最终内容补齐、且该行不在生成中时撤下 overlay
@@ -549,6 +566,14 @@ internal fun ChatContent(
                                         autoCollapseThinking = prefs.autoCollapseThinking,
                                         thinkingMarkdown = prefs.thinkingMarkdown,
                                         renderPrefs = renderPrefs,
+                                        chatMessagesJson = webViewMessages,
+                                        onSetInputText = { vm.inputText = it },
+                                        onSetChatMessage = { messageId, value ->
+                                            val index = if (messageId < 0) msgs.size + messageId else messageId
+                                            msgs.getOrNull(index)?.let { target ->
+                                                vm.updateMessage(target.ts, value)
+                                            }
+                                        },
                                     )
                                 }
                             }

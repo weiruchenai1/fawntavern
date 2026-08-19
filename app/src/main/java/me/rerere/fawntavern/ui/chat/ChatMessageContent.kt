@@ -109,6 +109,9 @@ fun MessageContent(
     userName: String = "",
     charName: String = "",
     renderPrefs: RenderPrefs = RenderPrefs(),
+    chatMessagesJson: String = "[]",
+    onSetInputText: (String) -> Unit = {},
+    onSetChatMessage: (Int, String) -> Unit = { _, _ -> },
     /** 是否撑满可用宽度。AI 消息用 true（整行宽）；用户气泡内传 false 让气泡拥抱内容 */
     fillWidth: Boolean = true,
 ) {
@@ -147,6 +150,26 @@ fun MessageContent(
 
     // 流式输出经常在结束围栏抵达前停留数帧。临时补齐结束围栏，代码从第一行起就按代码块
     // 测量和显示；真实结束围栏到达后补丁自然消失，不会改变最终存储内容。
+    // Fenced role-card output is one document: styles, scripts, body, and iframes must stay in the
+    // same WebView. Removing fences and then running Markdown segmentation would split that runtime.
+    val wholeHtmlPage = remember(processed, isStreaming) {
+        if (isStreaming) null else {
+            extractFencedHtmlMessage(processed)
+                ?: processed.takeIf(::isBareHtmlFragment)
+        }
+    }
+    if (wholeHtmlPage != null) {
+        HtmlMessageContent(
+            html = wholeHtmlPage,
+            textStyle = textStyle,
+            modifier = if (fillWidth) modifier.fillMaxWidth() else modifier,
+            chatMessagesJson = chatMessagesJson,
+            onSetInputText = onSetInputText,
+            onSetChatMessage = onSetChatMessage,
+        )
+        return
+    }
+
     val streamSafe = remember(processed, isStreaming) {
         if (isStreaming) MessageContentParser.closeOpenCodeFence(processed) else processed
     }
@@ -164,6 +187,9 @@ fun MessageContent(
                                 html = segment.text,
                                 textStyle = textStyle,
                                 modifier = Modifier.fillMaxWidth(),
+                                chatMessagesJson = chatMessagesJson,
+                                onSetInputText = onSetInputText,
+                                onSetChatMessage = onSetChatMessage,
                             )
                         }
                     } else {
