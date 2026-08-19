@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -79,6 +80,7 @@ internal fun HtmlMessageContent(
 ) {
     val density = LocalDensity.current
     val uriHandler = LocalUriHandler.current
+    var previewImage by remember { mutableStateOf<String?>(null) }
     val textColor = MaterialTheme.colorScheme.onSurface
     val mutedColor = MaterialTheme.colorScheme.onSurfaceVariant
     val surface = MaterialTheme.colorScheme.surfaceContainerLow
@@ -137,6 +139,7 @@ internal fun HtmlMessageContent(
                     onSetInputText = onSetInputText,
                     onSetChatMessage = onSetChatMessage,
                     onSelectChatMessageSwipe = onSelectChatMessageSwipe,
+                    onOpenImage = { previewImage = it },
                     onOpenLink = { url -> runCatching { uriHandler.openUri(url) } },
                 )
             },
@@ -147,6 +150,7 @@ internal fun HtmlMessageContent(
                     onSetInputText = onSetInputText,
                     onSetChatMessage = onSetChatMessage,
                     onSelectChatMessageSwipe = onSelectChatMessageSwipe,
+                    onOpenImage = { previewImage = it },
                     onOpenLink = { url -> runCatching { uriHandler.openUri(url) } },
                 )
                 it.updateFragment(fragment)
@@ -161,6 +165,9 @@ internal fun HtmlMessageContent(
             onRelease = { it.destroySafely() },
         )
     }
+    previewImage?.let { image ->
+        ImagePreviewDialog(model = image, onDismiss = { previewImage = null })
+    }
 }
 
 @SuppressLint("SetJavaScriptEnabled", "ViewConstructor")
@@ -173,6 +180,7 @@ private class MessageWebView(
     onSetInputText: (String) -> Unit,
     onSetChatMessage: (Int, String) -> Unit,
     onSelectChatMessageSwipe: (Int, Int) -> Unit,
+    onOpenImage: (String) -> Unit,
     onOpenLink: (String) -> Unit,
 ) : WebView(context) {
     @Volatile private var active = true
@@ -181,6 +189,7 @@ private class MessageWebView(
     private var onSetInputText: (String) -> Unit = onSetInputText
     private var onSetChatMessage: (Int, String) -> Unit = onSetChatMessage
     private var onSelectChatMessageSwipe: (Int, Int) -> Unit = onSelectChatMessageSwipe
+    private var onOpenImage: (String) -> Unit = onOpenImage
     private var onOpenLink: (String) -> Unit = onOpenLink
     private var ready = false
     private var latestFragment = initialFragment
@@ -217,6 +226,7 @@ private class MessageWebView(
                 selectSwipe = { index, swipeId ->
                     dispatchToMain { this@MessageWebView.onSelectChatMessageSwipe(index, swipeId) }
                 },
+                showImage = { source -> dispatchToMain { this@MessageWebView.onOpenImage(source) } },
             ),
             "FawnBridge",
         )
@@ -255,6 +265,7 @@ private class MessageWebView(
         onSetInputText: (String) -> Unit,
         onSetChatMessage: (Int, String) -> Unit,
         onSelectChatMessageSwipe: (Int, Int) -> Unit,
+        onOpenImage: (String) -> Unit,
         onOpenLink: (String) -> Unit,
     ) {
         active = true
@@ -268,6 +279,7 @@ private class MessageWebView(
         this.onSetInputText = onSetInputText
         this.onSetChatMessage = onSetChatMessage
         this.onSelectChatMessageSwipe = onSelectChatMessageSwipe
+        this.onOpenImage = onOpenImage
         this.onOpenLink = onOpenLink
     }
 
@@ -338,6 +350,7 @@ private class TavernBridge(
     private val setInput: (String) -> Unit,
     private val setMessage: (Int, String) -> Unit,
     private val selectSwipe: (Int, Int) -> Unit,
+    private val showImage: (String) -> Unit,
 ) {
     @JavascriptInterface
     fun getChatMessages(): String = messages()
@@ -353,6 +366,9 @@ private class TavernBridge(
 
     @JavascriptInterface
     fun selectChatMessageSwipe(index: Int, swipeId: Int) = selectSwipe(index, swipeId)
+
+    @JavascriptInterface
+    fun openImage(source: String) = showImage(source)
 }
 
 /**
@@ -504,7 +520,7 @@ function viewport(){const h=window.screen?.availHeight||window.screen?.height||w
 function resize(){resizeRaf=0;const b=document.body,d=document.documentElement;if(!b||!d)return;const h=Math.max(1,Math.ceil(Math.max(b.scrollHeight,b.offsetHeight,d.scrollHeight,d.offsetHeight)));if(frameElement)frameElement.style.setProperty('height',h+'px','important')}
 function schedule(){if(!resizeRaf)resizeRaf=requestAnimationFrame(resize)}
 function notifyParent(){schedule();requestAnimationFrame(()=>{try{window.parent.__fawnStructureChanged()}catch(_){}})}
-function start(){viewport();schedule();new ResizeObserver(schedule).observe(document.body);new MutationObserver(schedule).observe(document.body,{subtree:true,childList:true,attributes:true});document.querySelectorAll('img,video').forEach(x=>{x.addEventListener('load',schedule);x.addEventListener('error',schedule)});document.addEventListener('click',notifyParent,true);document.addEventListener('toggle',notifyParent,true)}
+function start(){viewport();schedule();new ResizeObserver(schedule).observe(document.body);new MutationObserver(schedule).observe(document.body,{subtree:true,childList:true,attributes:true});document.querySelectorAll('img,video').forEach(x=>{x.addEventListener('load',schedule);x.addEventListener('error',schedule)});document.addEventListener('click',event=>{const image=event.target&&event.target.closest?event.target.closest('img'):null;if(image){event.preventDefault();try{window.parent.__fawnOpenImage(image.currentSrc||image.src)}catch(_){}}notifyParent()},true);document.addEventListener('toggle',notifyParent,true)}
 window.addEventListener('resize',()=>{viewport();schedule()});if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
 """.trimIndent()
@@ -586,6 +602,7 @@ sendTextarea.addEventListener('input',bridgeInput);sendTextarea.addEventListener
 window.setInputText=function(value){const text=String(value??'');sendTextarea.value=text;FawnBridge.setInputText(text)};
 window.getChatMessages=function(range){let messages=[];try{messages=JSON.parse(FawnBridge.getChatMessages())}catch(_){}if(range===undefined||range===null)return messages;if(typeof range==='number'){const i=range<0?messages.length+range:range;return i>=0&&i<messages.length?[messages[i]]:[]}const match=String(range).match(/^(-?\d+)(?:-(-?\d+))?$/);if(!match)return messages;const index=x=>{const n=Number(x);return n<0?messages.length+n:n};const start=index(match[1]),end=index(match[2]??match[1]);return messages.slice(Math.max(0,Math.min(start,end)),Math.min(messages.length,Math.max(start,end)+1))};
 window.setChatMessage=function(fields,messageId,options){const id=Number(messageId);const swipeId=options&&Number(options.swipe_id);if(Number.isInteger(swipeId)&&swipeId>=0){FawnBridge.selectChatMessageSwipe(id,swipeId);return Promise.resolve()}const value=typeof fields==='string'?fields:(fields&&fields.message);if(value!==undefined)FawnBridge.setChatMessage(id,String(value));return Promise.resolve()};
+window.__fawnOpenImage=function(source){if(source)FawnBridge.openImage(String(source))};
 function activateScripts(root){root.querySelectorAll('script').forEach(old=>{const next=document.createElement('script');[...old.attributes].forEach(a=>next.setAttribute(a.name,a.value));next.text=old.textContent;old.replaceWith(next)})}
 const observedFrames=new WeakSet();
 function fitFrame(frame){
@@ -595,7 +612,7 @@ function fitFrame(frame){
 }
 function activateFrames(root){root.querySelectorAll('iframe').forEach(fitFrame)}
 new MutationObserver(records=>records.forEach(record=>{record.addedNodes.forEach(node=>{if(node.nodeType!==1)return;if(node.matches&&node.matches('iframe'))fitFrame(node);if(node.querySelectorAll)activateFrames(node)})})).observe(content,{subtree:true,childList:true});
-content.addEventListener('click',()=>requestAnimationFrame(schedulePageHeight),true);content.addEventListener('toggle',()=>requestAnimationFrame(schedulePageHeight),true);
+content.addEventListener('click',event=>{const image=event.target&&event.target.closest?event.target.closest('img'):null;if(image){event.preventDefault();window.__fawnOpenImage(image.currentSrc||image.src)}requestAnimationFrame(schedulePageHeight)},true);content.addEventListener('toggle',()=>requestAnimationFrame(schedulePageHeight),true);
 window.__fawnUpdate=function(html){const details=[...content.querySelectorAll('details')].map(x=>x.open);content.innerHTML=html;content.querySelectorAll('details').forEach((x,i)=>{if(i<details.length)x.open=details[i]});activateFrames(content);activateScripts(content);activateFrames(content);schedulePageHeight()};
 </script></body></html>
 """.trimIndent()
