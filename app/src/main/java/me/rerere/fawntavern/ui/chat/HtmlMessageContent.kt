@@ -248,6 +248,11 @@ private class MessageWebView(
         onOpenLink: (String) -> Unit,
     ) {
         active = true
+        // A recycled WebView may have been detached while Android is traversing focus.
+        // Restore normal focus behavior only after it is attached to its new owner.
+        descendantFocusability = View.FOCUS_AFTER_DESCENDANTS
+        isFocusable = true
+        isFocusableInTouchMode = true
         this.chatMessagesJson = chatMessagesJson
         this.onPageHeight = onPageHeight
         this.onSetInputText = onSetInputText
@@ -257,6 +262,15 @@ private class MessageWebView(
 
     fun deactivate() {
         active = false
+        // LazyColumn can remove this AndroidView while the platform is resolving focus.
+        // Drop focus and pending callbacks before detachment to avoid ComposeRuntimeError
+        // in CompositionImpl.drainPendingModificationsForCompositionLocked (Android 10).
+        mainHandler.removeCallbacksAndMessages(null)
+        stopLoading()
+        clearFocus()
+        descendantFocusability = View.FOCUS_BLOCK_DESCENDANTS
+        isFocusable = false
+        isFocusableInTouchMode = false
         parent?.requestDisallowInterceptTouchEvent(false)
     }
 
@@ -299,9 +313,8 @@ private class MessageWebView(
     }
 
     fun destroySafely() {
-        parent?.requestDisallowInterceptTouchEvent(false)
+        deactivate()
         removeJavascriptInterface("FawnBridge")
-        stopLoading()
         destroy()
     }
 
