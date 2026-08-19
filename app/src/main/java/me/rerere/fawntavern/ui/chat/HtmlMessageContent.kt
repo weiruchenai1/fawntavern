@@ -203,6 +203,13 @@ private class MessageWebView(
         isHorizontalScrollBarEnabled = false
         overScrollMode = View.OVER_SCROLL_NEVER
         isNestedScrollingEnabled = false
+        // A focused platform view transfers focus back to AndroidComposeView when LazyColumn
+        // removes it. On Android 10 that synchronously starts beyond-bounds composition while
+        // changes are being applied and crashes Compose. Message HTML remains touch/JS enabled;
+        // it simply never participates in the platform focus chain.
+        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        isFocusable = false
+        isFocusableInTouchMode = false
         settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = false
@@ -269,11 +276,6 @@ private class MessageWebView(
         onOpenLink: (String) -> Unit,
     ) {
         active = true
-        // A recycled WebView may have been detached while Android is traversing focus.
-        // Restore normal focus behavior only after it is attached to its new owner.
-        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-        isFocusable = true
-        isFocusableInTouchMode = true
         this.chatMessagesJson = chatMessagesJson
         this.onPageHeight = onPageHeight
         this.onSetInputText = onSetInputText

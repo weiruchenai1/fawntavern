@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.svg.SvgDecoder
 import me.rerere.fawntavern.data.api.Http
@@ -48,6 +50,7 @@ import me.rerere.fawntavern.ui.privacy.PrivacyDocument
 import me.rerere.fawntavern.ui.privacy.PrivacyDocumentScreen
 import me.rerere.fawntavern.ui.theme.FawnTavernTheme
 import java.util.Locale
+import okio.Path.Companion.toOkioPath
 
 class MainActivity : ComponentActivity() {
 
@@ -82,6 +85,17 @@ class MainActivity : ComponentActivity() {
             // 网络请求复用全局 OkHttp 连接池
             setSingletonImageLoaderFactory { context ->
                 ImageLoader.Builder(context)
+                    .memoryCache {
+                        MemoryCache.Builder()
+                            .maxSizePercent(context, 0.20)
+                            .build()
+                    }
+                    .diskCache {
+                        DiskCache.Builder()
+                            .directory(context.cacheDir.resolve("coil_image_cache").toOkioPath())
+                            .maxSizeBytes(128L * 1024L * 1024L)
+                            .build()
+                    }
                     .components {
                         add(SvgDecoder.Factory(scaleToDensity = true))
                         add(OkHttpNetworkFetcherFactory(callFactory = { Http.client }))
