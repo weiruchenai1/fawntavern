@@ -432,6 +432,13 @@ internal fun ChatContent(
                                 put("role", message.role)
                                 put("is_hidden", false)
                                 put("message", message.content)
+                                put("swipe_id", message.altIdx)
+                                put("swipes", JSONArray().apply {
+                                    val alternatives = message.alts.ifEmpty {
+                                        listOf(me.rerere.fawntavern.data.chat.MsgAlt(content = message.content))
+                                    }
+                                    alternatives.forEach { put(it.content) }
+                                })
                                 put("data", JSONObject())
                                 put("extra", JSONObject())
                             })
@@ -597,6 +604,14 @@ internal fun ChatContent(
                                             val index = if (messageId < 0) msgs.size + messageId else messageId
                                             msgs.getOrNull(index)?.let { target ->
                                                 vm.updateMessage(target.ts, value)
+                                            }
+                                        },
+                                        onSelectChatMessageSwipe = { messageId, swipeId ->
+                                            val index = if (messageId < 0) msgs.size + messageId else messageId
+                                            msgs.getOrNull(index)?.let { target ->
+                                                if (swipeId in target.alts.indices) {
+                                                    vm.switchAlt(target.ts, swipeId - target.altIdx)
+                                                }
                                             }
                                         },
                                     )

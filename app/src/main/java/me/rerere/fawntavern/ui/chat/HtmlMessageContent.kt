@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -74,6 +75,7 @@ internal fun HtmlMessageContent(
     chatMessagesJson: String = "[]",
     onSetInputText: (String) -> Unit = {},
     onSetChatMessage: (Int, String) -> Unit = { _, _ -> },
+    onSelectChatMessageSwipe: (Int, Int) -> Unit = { _, _ -> },
 ) {
     val density = LocalDensity.current
     val uriHandler = LocalUriHandler.current
@@ -134,6 +136,7 @@ internal fun HtmlMessageContent(
                     onPageHeight = onPageHeight,
                     onSetInputText = onSetInputText,
                     onSetChatMessage = onSetChatMessage,
+                    onSelectChatMessageSwipe = onSelectChatMessageSwipe,
                     onOpenLink = { url -> runCatching { uriHandler.openUri(url) } },
                 )
             },
@@ -143,6 +146,7 @@ internal fun HtmlMessageContent(
                     onPageHeight = onPageHeight,
                     onSetInputText = onSetInputText,
                     onSetChatMessage = onSetChatMessage,
+                    onSelectChatMessageSwipe = onSelectChatMessageSwipe,
                     onOpenLink = { url -> runCatching { uriHandler.openUri(url) } },
                 )
                 it.updateFragment(fragment)
@@ -168,6 +172,7 @@ private class MessageWebView(
     onPageHeight: (Int) -> Unit,
     onSetInputText: (String) -> Unit,
     onSetChatMessage: (Int, String) -> Unit,
+    onSelectChatMessageSwipe: (Int, Int) -> Unit,
     onOpenLink: (String) -> Unit,
 ) : WebView(context) {
     @Volatile private var active = true
@@ -175,6 +180,7 @@ private class MessageWebView(
     private var onPageHeight: (Int) -> Unit = onPageHeight
     private var onSetInputText: (String) -> Unit = onSetInputText
     private var onSetChatMessage: (Int, String) -> Unit = onSetChatMessage
+    private var onSelectChatMessageSwipe: (Int, Int) -> Unit = onSelectChatMessageSwipe
     private var onOpenLink: (String) -> Unit = onOpenLink
     private var ready = false
     private var latestFragment = initialFragment
@@ -207,6 +213,9 @@ private class MessageWebView(
                 setInput = { value -> dispatchToMain { this@MessageWebView.onSetInputText(value) } },
                 setMessage = { index, value ->
                     dispatchToMain { this@MessageWebView.onSetChatMessage(index, value) }
+                },
+                selectSwipe = { index, swipeId ->
+                    dispatchToMain { this@MessageWebView.onSelectChatMessageSwipe(index, swipeId) }
                 },
             ),
             "FawnBridge",
@@ -245,18 +254,20 @@ private class MessageWebView(
         onPageHeight: (Int) -> Unit,
         onSetInputText: (String) -> Unit,
         onSetChatMessage: (Int, String) -> Unit,
+        onSelectChatMessageSwipe: (Int, Int) -> Unit,
         onOpenLink: (String) -> Unit,
     ) {
         active = true
         // A recycled WebView may have been detached while Android is traversing focus.
         // Restore normal focus behavior only after it is attached to its new owner.
-        descendantFocusability = View.FOCUS_AFTER_DESCENDANTS
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         isFocusable = true
         isFocusableInTouchMode = true
         this.chatMessagesJson = chatMessagesJson
         this.onPageHeight = onPageHeight
         this.onSetInputText = onSetInputText
         this.onSetChatMessage = onSetChatMessage
+        this.onSelectChatMessageSwipe = onSelectChatMessageSwipe
         this.onOpenLink = onOpenLink
     }
 
@@ -268,7 +279,7 @@ private class MessageWebView(
         mainHandler.removeCallbacksAndMessages(null)
         stopLoading()
         clearFocus()
-        descendantFocusability = View.FOCUS_BLOCK_DESCENDANTS
+        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
         isFocusable = false
         isFocusableInTouchMode = false
         parent?.requestDisallowInterceptTouchEvent(false)
@@ -326,6 +337,7 @@ private class TavernBridge(
     private val reportHeight: (Int) -> Unit,
     private val setInput: (String) -> Unit,
     private val setMessage: (Int, String) -> Unit,
+    private val selectSwipe: (Int, Int) -> Unit,
 ) {
     @JavascriptInterface
     fun getChatMessages(): String = messages()
@@ -338,6 +350,9 @@ private class TavernBridge(
 
     @JavascriptInterface
     fun setChatMessage(index: Int, value: String) = setMessage(index, value)
+
+    @JavascriptInterface
+    fun selectChatMessageSwipe(index: Int, swipeId: Int) = selectSwipe(index, swipeId)
 }
 
 /**
@@ -570,7 +585,7 @@ function bridgeInput(){FawnBridge.setInputText(sendTextarea.value)}
 sendTextarea.addEventListener('input',bridgeInput);sendTextarea.addEventListener('change',bridgeInput);
 window.setInputText=function(value){const text=String(value??'');sendTextarea.value=text;FawnBridge.setInputText(text)};
 window.getChatMessages=function(range){let messages=[];try{messages=JSON.parse(FawnBridge.getChatMessages())}catch(_){}if(range===undefined||range===null)return messages;if(typeof range==='number'){const i=range<0?messages.length+range:range;return i>=0&&i<messages.length?[messages[i]]:[]}const match=String(range).match(/^(-?\d+)(?:-(-?\d+))?$/);if(!match)return messages;const index=x=>{const n=Number(x);return n<0?messages.length+n:n};const start=index(match[1]),end=index(match[2]??match[1]);return messages.slice(Math.max(0,Math.min(start,end)),Math.min(messages.length,Math.max(start,end)+1))};
-window.setChatMessage=function(fields,messageId){const value=typeof fields==='string'?fields:(fields&&fields.message);if(value!==undefined)FawnBridge.setChatMessage(Number(messageId),String(value));return Promise.resolve()};
+window.setChatMessage=function(fields,messageId,options){const id=Number(messageId);const swipeId=options&&Number(options.swipe_id);if(Number.isInteger(swipeId)&&swipeId>=0){FawnBridge.selectChatMessageSwipe(id,swipeId);return Promise.resolve()}const value=typeof fields==='string'?fields:(fields&&fields.message);if(value!==undefined)FawnBridge.setChatMessage(id,String(value));return Promise.resolve()};
 function activateScripts(root){root.querySelectorAll('script').forEach(old=>{const next=document.createElement('script');[...old.attributes].forEach(a=>next.setAttribute(a.name,a.value));next.text=old.textContent;old.replaceWith(next)})}
 const observedFrames=new WeakSet();
 function fitFrame(frame){

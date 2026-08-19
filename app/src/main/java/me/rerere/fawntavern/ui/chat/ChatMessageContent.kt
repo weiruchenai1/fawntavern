@@ -112,6 +112,7 @@ fun MessageContent(
     chatMessagesJson: String = "[]",
     onSetInputText: (String) -> Unit = {},
     onSetChatMessage: (Int, String) -> Unit = { _, _ -> },
+    onSelectChatMessageSwipe: (Int, Int) -> Unit = { _, _ -> },
     /** 是否撑满可用宽度。AI 消息用 true（整行宽）；用户气泡内传 false 让气泡拥抱内容 */
     fillWidth: Boolean = true,
 ) {
@@ -166,6 +167,7 @@ fun MessageContent(
             chatMessagesJson = chatMessagesJson,
             onSetInputText = onSetInputText,
             onSetChatMessage = onSetChatMessage,
+            onSelectChatMessageSwipe = onSelectChatMessageSwipe,
         )
         return
     }
@@ -190,6 +192,7 @@ fun MessageContent(
                                 chatMessagesJson = chatMessagesJson,
                                 onSetInputText = onSetInputText,
                                 onSetChatMessage = onSetChatMessage,
+                                onSelectChatMessageSwipe = onSelectChatMessageSwipe,
                             )
                         }
                     } else {
