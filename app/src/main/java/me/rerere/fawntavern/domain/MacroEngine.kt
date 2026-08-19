@@ -118,7 +118,8 @@ internal data class MacroRenderPolicy(
 internal object MacroEngine {
     private const val MAX_DEPTH = 32
     private const val MAX_EXPANSIONS = 2_000
-    private const val MAX_OUTPUT_CHARS = 1_000_000
+    /** 展开最多能在原文之上追加的字符数：卡的是宏自身的膨胀，正文再长也不该因此被判超限 */
+    private const val MAX_GROWTH_CHARS = 1_000_000
 
     val registry = MacroRegistry(builtIns())
 
@@ -128,19 +129,32 @@ internal object MacroEngine {
         policy: MacroRenderPolicy = MacroRenderPolicy.ALL,
     ): String {
         if (text.isEmpty() || ('{' !in text && '<' !in text && '\\' !in text)) return text
-        return Renderer(context, policy).render(text)
+        // 触顶只可能是宏递归失控。显示侧由 ChatMessageContent 在 composition 内同步调用，
+        // 异常会直接崩掉主线程，因此降级为原文透传而不是抛出。
+        return try {
+            Renderer(context, policy, text.length + MAX_GROWTH_CHARS.toLong()).render(text)
+        } catch (_: MacroLimitException) {
+            text
+        }
+    }
+
+    private class MacroLimitException(message: String) : RuntimeException(message)
+
+    private inline fun limit(value: Boolean, message: () -> String) {
+        if (!value) throw MacroLimitException(message())
     }
 
     private class Renderer(
         private val context: MacroContext,
         private val policy: MacroRenderPolicy,
+        private val maxOutputChars: Long,
     ) {
         private var expansions = 0
 
         fun render(text: String): String = renderText(text, 0)
 
         private fun renderText(text: String, depth: Int): String {
-            check(depth <= MAX_DEPTH) { "Macro nesting exceeds $MAX_DEPTH levels" }
+            limit(depth <= MAX_DEPTH) { "Macro nesting exceeds $MAX_DEPTH levels" }
             val tokens = lex(normalizeLegacy(text))
             return renderRange(tokens, 0, tokens.size, depth).limitOutput()
         }
@@ -167,7 +181,7 @@ internal object MacroEngine {
                             if (!policy.allows(macroName)) out.append(token.source)
                             else {
                                 expansions++
-                                check(expansions <= MAX_EXPANSIONS) { "Macro expansion count exceeds $MAX_EXPANSIONS" }
+                                limit(expansions <= MAX_EXPANSIONS) { "Macro expansion count exceeds $MAX_EXPANSIONS" }
                                 out.append(renderVariable(header.variable, token.offset, depth))
                             }
                         } else {
@@ -204,7 +218,7 @@ internal object MacroEngine {
                                     },
                                 )
                                 expansions++
-                                check(expansions <= MAX_EXPANSIONS) { "Macro expansion count exceeds $MAX_EXPANSIONS" }
+                                limit(expansions <= MAX_EXPANSIONS) { "Macro expansion count exceeds $MAX_EXPANSIONS" }
                                 out.append(MacroRuntime(context, token.offset, policy.allowVariableMutations)
                                     .definitionEvaluate(definition, invocation))
                                 if (closeIndex != null) index = closeIndex
@@ -212,7 +226,7 @@ internal object MacroEngine {
                         }
                     }
                 }
-                check(out.length <= MAX_OUTPUT_CHARS) { "Macro output exceeds $MAX_OUTPUT_CHARS characters" }
+                limit(out.length <= maxOutputChars) { "Macro output exceeds $maxOutputChars characters" }
                 index++
             }
             return out.toString()
@@ -224,7 +238,7 @@ internal object MacroEngine {
         }
 
         private fun String.limitOutput(): String {
-            check(length <= MAX_OUTPUT_CHARS) { "Macro output exceeds $MAX_OUTPUT_CHARS characters" }
+            limit(length <= maxOutputChars) { "Macro output exceeds $maxOutputChars characters" }
             return this
         }
     }

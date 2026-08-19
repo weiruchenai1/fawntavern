@@ -234,4 +234,27 @@ class MacroEngineTest {
         assertEquals("1", MacroEngine.render("{{.counter++}}", sharedContext))
         assertEquals(mapOf("counter" to "1"), state.localVariables())
     }
+
+    @Test
+    fun longMessageBodyIsNotMistakenForRunawayExpansion() {
+        // 正文自身超过百万字符不算宏膨胀：显示侧在 composition 内同步渲染，抛异常会崩掉主线程
+        val bulk = "长文本 <x> {单花括号} ".repeat(80_000)
+        assertTrue(bulk.length > 1_000_000)
+
+        assertEquals(
+            "$bulk Alice",
+            MacroEngine.render("$bulk {{user}}", context, MacroRenderPolicy.MESSAGE_DISPLAY),
+        )
+    }
+
+    @Test
+    fun runawayMacroExpansionFallsBackToSourceText() {
+        val source = "{{user}}".repeat(2_001)
+
+        assertEquals(source, MacroEngine.render(source, context))
+        assertEquals(
+            "{{reverse::".repeat(40) + "x" + "}}".repeat(40),
+            MacroEngine.render("{{reverse::".repeat(40) + "x" + "}}".repeat(40), context),
+        )
+    }
 }
