@@ -55,7 +55,9 @@ import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import me.rerere.fawntavern.R
@@ -104,6 +106,7 @@ internal fun ChatContent(
     // 删除前确认：偏好开启时把待执行的删除存这里，弹框确认后执行
     var pendingDeleteCurrentVersion by remember { mutableStateOf<(() -> Unit)?>(null) }
     var pendingDeleteAllVersions by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var txtSaveContent by remember { mutableStateOf<String?>(null) }
 
     val ctx = LocalContext.current
     val mediaInput = remember(ctx) { ChatMediaInput(ctx) }
@@ -153,6 +156,28 @@ internal fun ChatContent(
     }
 
     // ── 附件选取 launcher（相册/文件均可多选；文件里选到图片按 MIME 归为图片）──
+    val saveTxtLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri ->
+        val text = txtSaveContent
+        txtSaveContent = null
+        if (uri != null && text != null) {
+            scope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        ctx.contentResolver.openOutputStream(uri)?.use { output ->
+                            output.write(text.toByteArray(Charsets.UTF_8))
+                        } ?: error("Unable to open TXT output stream")
+                    }.isSuccess
+                }
+                Toast.makeText(
+                    ctx,
+                    resources.getString(if (saved) R.string.file_saved else R.string.file_save_failed),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         uris.forEach { uri -> vm.attachments = vm.attachments + Attachment(uri, isImage = true) }
     }
@@ -617,7 +642,25 @@ internal fun ChatContent(
         MessageMenu(
             onDismiss = { menuTargetIdx = null },
             onSelectCopy = {
-                copyPanel = CopyPanel(resources.getString(R.string.select_copy), menuMsg.content)
+                val sessionMessages = vm.session?.messages.orEmpty()
+                val messageIndex = sessionMessages.indexOfFirst { it.ts == menuMsg.ts }
+                val previewMessages = if (messageIndex >= 0) {
+                    sessionMessages.toMutableList().also { it[messageIndex] = menuMsg }
+                } else {
+                    sessionMessages + menuMsg
+                }
+                val previewIndex = previewMessages.indexOfFirst { it.ts == menuMsg.ts }
+                copyPanel = CopyPanel(
+                    title = resources.getString(R.string.select_copy),
+                    text = menuMsg.content,
+                    preview = TextCopyPreview(
+                        applyDisplayTransforms = menuMsg.role == "assistant",
+                        regexScripts = if (menuMsg.role == "assistant") vm.displayRegexScripts else emptyList(),
+                        depth = previewMessages.lastIndex - previewIndex,
+                        userName = vm.userName,
+                        charName = vm.currentCard?.name ?: vm.session?.charName.orEmpty(),
+                    ),
+                )
                 menuTargetIdx = null
             },
             onEdit = {
@@ -656,11 +699,17 @@ internal fun ChatContent(
                 copyText(currentText)
                 copyPanel = null
             },
+            onSaveAsTxt = if (panel.preview != null) { currentText ->
+                txtSaveContent = currentText
+                saveTxtLauncher.launch("FawnTavern-content.txt")
+                copyPanel = null
+            } else null,
             onDismiss = { currentText ->
                 if (panel.editable) vm.inputText = currentText
                 copyPanel = null
             },
             editable = panel.editable,
+            preview = panel.preview,
         )
     }
 
@@ -772,6 +821,11 @@ internal fun ChatContent(
 }
 
 /** 全屏底部面板的内容（消息全文 / 输入框全文共用同一面板）；editable = 输入框展开，正文可直接编辑 */
-private data class CopyPanel(val title: String, val text: String, val editable: Boolean = false)
+private data class CopyPanel(
+    val title: String,
+    val text: String,
+    val editable: Boolean = false,
+    val preview: TextCopyPreview? = null,
+)
 
 /** 状态栏高度（px），用于把悬浮窗初始位置放到顶栏之下 */

@@ -430,9 +430,12 @@
     <string name="no_model_selected">未选择模型</string>
     <string name="select_model_first">请先选择模型</string>
     <string name="copied">已复制</string>
+    <string name="save_as_txt">保存 TXT</string>
     <string name="copy_all">复制全部</string>
     <string name="editing_in_progress">编辑中</string>
     <string name="input_content">输入内容</string>
+    <string name="copy_view_original">原始内容</string>
+    <string name="copy_view_actual">实际内容</string>
     <string name="cot_deep_thinking">深度思考</string>
     <string name="cot_web_search_fmt">网络搜索：%1$s</string>
     <plurals name="cot_citations_fmt"><item quantity="other">%1$d个引用</item></plurals>

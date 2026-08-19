@@ -1,5 +1,6 @@
 package me.rerere.fawntavern.ui.chat
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,15 +27,34 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.data.character.CharRegex
+import me.rerere.fawntavern.data.character.RegexEngine
+import me.rerere.fawntavern.ui.components.noRippleClickable
+
+internal data class TextCopyPreview(
+    val applyDisplayTransforms: Boolean = true,
+    val regexScripts: List<CharRegex> = emptyList(),
+    val depth: Int? = null,
+    val userName: String = "",
+    val charName: String = "",
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,15 +62,39 @@ internal fun TextCopySheet(
     title: String,
     text: String,
     onCopyAll: (String) -> Unit,
+    onSaveAsTxt: ((String) -> Unit)? = null,
     onDismiss: (String) -> Unit,
     editable: Boolean = false,
+    preview: TextCopyPreview? = null,
 ) {
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
         enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
     )
     val editState = if (editable) remember(text) { TextFieldState(text) } else null
-    val currentText = { editState?.text?.toString() ?: text }
+    var actualView by rememberSaveable { mutableStateOf(false) }
+    val actualText = remember(text, preview) {
+        preview?.let {
+            if (it.applyDisplayTransforms) {
+                RegexEngine.applyForDisplay(
+                    content = text,
+                    scripts = it.regexScripts,
+                    depth = it.depth,
+                    userName = it.userName,
+                    charName = it.charName,
+                )
+            } else {
+                text
+            }
+        }
+    }
+    val currentText = {
+        when {
+            editState != null -> editState.text.toString()
+            actualView && actualText != null -> actualText
+            else -> text
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = { onDismiss(currentText()) },
@@ -72,6 +116,18 @@ internal fun TextCopySheet(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.weight(1f))
+                if (onSaveAsTxt != null) {
+                    TextButton(onClick = { onSaveAsTxt(currentText()) }) {
+                        Icon(
+                            Lucide.FileText,
+                            null,
+                            Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.save_as_txt))
+                    }
+                }
                 TextButton(onClick = { onCopyAll(currentText()) }) {
                     Icon(
                         Lucide.Copy,
@@ -81,6 +137,11 @@ internal fun TextCopySheet(
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(stringResource(R.string.copy_all))
+                }
+            }
+            if (preview != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextCopyViewToggle(actual = actualView, onChange = { actualView = it })
                 }
             }
             if (editState != null) {
@@ -93,6 +154,17 @@ internal fun TextCopySheet(
                     lineLimits = TextFieldLineLimits.MultiLine(),
                     modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 24.dp),
                 )
+            } else if (actualView && actualText != null && preview != null) {
+                SelectionContainer(Modifier.fillMaxWidth().weight(1f)) {
+                    Text(
+                        text = actualText,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(bottom = 24.dp),
+                    )
+                }
             } else {
                 SelectionContainer(Modifier.fillMaxWidth().weight(1f)) {
                     Text(
@@ -106,5 +178,33 @@ internal fun TextCopySheet(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TextCopyViewToggle(actual: Boolean, onChange: (Boolean) -> Unit) {
+    @Composable
+    fun Segment(label: String, selected: Boolean, onClick: () -> Unit) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (selected) MaterialTheme.colorScheme.surface else Color.Transparent)
+                .noRippleClickable(onClick = onClick)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+    }
+
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(2.dp),
+    ) {
+        Segment(stringResource(R.string.copy_view_original), !actual) { onChange(false) }
+        Segment(stringResource(R.string.copy_view_actual), actual) { onChange(true) }
     }
 }

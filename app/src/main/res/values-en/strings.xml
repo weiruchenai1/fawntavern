@@ -432,9 +432,12 @@
     <string name="no_model_selected">No model selected</string>
     <string name="select_model_first">Please select a model first</string>
     <string name="copied">Copied</string>
+    <string name="save_as_txt">Save TXT</string>
     <string name="copy_all">Copy all</string>
     <string name="editing_in_progress">Editing</string>
     <string name="input_content">Input content</string>
+    <string name="copy_view_original">Original</string>
+    <string name="copy_view_actual">Actual</string>
     <string name="cot_deep_thinking">Deep thinking</string>
     <string name="cot_web_search_fmt">Web search: %1$s</string>
     <plurals name="cot_citations_fmt"><item quantity="one">%1$d citation</item><item quantity="other">%1$d citations</item></plurals>
