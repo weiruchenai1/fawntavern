@@ -12,6 +12,7 @@ import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.MsgAlt
 import me.rerere.fawntavern.data.chat.MsgSearch
 import me.rerere.fawntavern.data.chat.PersistedGeneratedImage
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -81,6 +82,42 @@ class GenerationControllerTest {
         assertEquals("{\"items\":[\"result\"]}", toolRound.toolCalls.single().result)
         assertEquals("final answer", result.content)
         assertTrue(result.generationMs > 0)
+    }
+
+    @Test
+    fun toolExecutionFailureIsReturnedAsValidJson() = runBlocking {
+        val requests = mutableListOf<List<ApiMessage>>()
+        val client = GenerationStreamClient { _, _, messages, _, _, _, _ ->
+            requests += messages
+            if (requests.size == 1) {
+                StreamEnd(toolCalls = listOf(ApiToolCall("call-1", "search_web", "{}")))
+            } else {
+                StreamEnd()
+            }
+        }
+        val executor = object : GenerationController.ToolExecutor {
+            override fun describe(call: ApiToolCall): MsgSearch? = null
+
+            override suspend fun execute(call: ApiToolCall): Pair<String, MsgSearch?> {
+                throw IllegalStateException("bad \"query\"\nretry")
+            }
+        }
+
+        GenerationController(client).run(
+            apiMessages = listOf(ApiMessage("user", "question")),
+            genMessage = ChatMessage(role = "assistant"),
+            provider = ApiProvider(id = "provider"),
+            modelId = "model",
+            built = PromptBuilder.Built(),
+            streaming = false,
+            tools = listOf(ToolSpec("search_web", "search", "{\"type\":\"object\"}")),
+            toolExecutor = executor,
+            errorText = { it.message.orEmpty() },
+            onUpdate = {},
+        )
+
+        val result = requests[1].last().toolCalls.single().result
+        assertEquals("bad \"query\"\nretry", JSONObject(result).getString("error"))
     }
 
     @Test

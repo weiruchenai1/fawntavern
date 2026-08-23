@@ -65,29 +65,35 @@ internal object GoogleAdapter : ProviderAdapter {
                 if (imageConfig.length() > 0) cfg.put("imageConfig", imageConfig)
             }
             if (cfg.length() > 0) put("generationConfig", cfg)
-            // 函数工具与服务端内置工具互斥（Gemini 不允许 googleSearch 与 functionDeclarations 并存），
-            // 内置工具开启时以它为准，直接原样下发 googleSearch / urlContext
-            if (model.tools.isNotEmpty()) {
-                put("tools", JSONArray().apply {
-                    if (BuiltInTool.SEARCH in model.tools) put(JSONObject().put("googleSearch", JSONObject()))
-                    if (BuiltInTool.URL_CONTEXT in model.tools) put(JSONObject().put("urlContext", JSONObject()))
-                })
-            } else if (tools.isNotEmpty()) {
-                put("tools", JSONArray().put(JSONObject().put("functionDeclarations", JSONArray().apply {
+            val encodedTools = JSONArray()
+            if (BuiltInTool.SEARCH in model.tools) encodedTools.put(JSONObject().put("googleSearch", JSONObject()))
+            if (BuiltInTool.URL_CONTEXT in model.tools) encodedTools.put(JSONObject().put("urlContext", JSONObject()))
+            if (tools.isNotEmpty()) {
+                encodedTools.put(JSONObject().put("functionDeclarations", JSONArray().apply {
                     tools.forEach { t ->
                         put(JSONObject()
                             .put("name", t.name)
                             .put("description", t.description)
                             .put("parameters", JSONObject(t.parametersSchema)))
                     }
-                })))
+                }))
+            }
+            if (encodedTools.length() > 0) put("tools", encodedTools)
+            if (tools.isNotEmpty() && params?.toolChoice != ToolChoice.AUTO) {
+                put("toolConfig", JSONObject().put("functionCallingConfig", JSONObject().apply {
+                    put("mode", when (params?.toolChoice) {
+                        ToolChoice.REQUIRED -> "ANY"
+                        ToolChoice.NONE -> "NONE"
+                        else -> "AUTO"
+                    })
+                }))
             }
             put("contents", JSONArray().apply {
                 merged.forEach { m -> encodeContents(m).forEach { put(it) } }
             })
             applyCustomBodies(model)
         }
-        val toolCalls = mutableListOf<ApiToolCall>()
+        val toolCalls = linkedMapOf<String, ApiToolCall>()
         val generatedImages = mutableListOf<GeneratedImage>()
         var promptTokens = 0
         var completionTokens = 0
@@ -116,12 +122,27 @@ internal object GoogleAdapter : ProviderAdapter {
                 val part = parts.optJSONObject(i) ?: continue
                 // 函数调用整块到达（不分片）；thoughtSignature 挂在同一 part 上，回传必须回显
                 part.optJSONObject("functionCall")?.let { fc ->
-                    toolCalls += ApiToolCall(
-                        id = "fc_${toolCalls.size}",
-                        name = fc.optString("name"),
-                        arguments = (fc.optJSONObject("args") ?: JSONObject()).toString(),
-                        extra = part.strOr("thoughtSignature"),
-                    )
+                    val name = fc.optString("name")
+                    if (name.isNotBlank()) {
+                        val key = part.strOr("id").ifBlank { "$name#$i" }
+                        val previous = toolCalls[key]
+                        val args = fc.optJSONObject("args") ?: JSONObject()
+                        val mergedArgs = runCatching {
+                            JSONObject(previous?.arguments ?: "{}").apply {
+                                val keys = args.keys()
+                                while (keys.hasNext()) {
+                                    val k = keys.next()
+                                    put(k, args.opt(k))
+                                }
+                            }
+                        }.getOrDefault(args)
+                        toolCalls[key] = ApiToolCall(
+                            id = previous?.id ?: "fc_${toolCalls.size}",
+                            name = name,
+                            arguments = mergedArgs.toString(),
+                            extra = part.strOr("thoughtSignature").ifBlank { previous?.extra.orEmpty() },
+                        )
+                    }
                 }
                 val text = part.strOr("text")
                 part.optJSONObject("inlineData")?.let { decodeGeneratedImage(it)?.let(generatedImages::add) }
@@ -132,7 +153,7 @@ internal object GoogleAdapter : ProviderAdapter {
             }
         }
         return StreamEnd(
-            toolCalls = toolCalls,
+            toolCalls = toolCalls.values.toList(),
             promptTokens = promptTokens,
             completionTokens = completionTokens,
             cachedTokens = cachedTokens,

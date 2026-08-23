@@ -796,6 +796,8 @@ internal fun ChatContent(
     if (showImageGenerationSettings) {
         ImageGenerationSettingsSheet(
             current = vm.imageGeneration,
+            useOpenAiSizes = displayProv?.type.equals("openai", ignoreCase = true) &&
+                displayModelId.startsWith("gpt-image", ignoreCase = true),
             onChange = vm::updateImageGeneration,
             onDismiss = { showImageGenerationSettings = false },
         )
@@ -820,11 +822,13 @@ internal fun ChatContent(
             searchEnabled = vm.searchEnabled,
             builtInSearchAvailable = vm.builtInSearchAvailable,
             builtInSearchEnabled = vm.builtInSearchEnabled,
+            toolChoice = vm.toolChoice,
             services = searchServices,
             // 用 VM 的响应式下标做高亮；配置页删过提供商后可能越界，收敛回有效范围
             selectedIndex = vm.searchProviderIndex.coerceIn(0, searchServices.lastIndex.coerceAtLeast(0)),
             onToggleSearch = { vm.toggleSearch() },
             onToggleBuiltInSearch = { vm.toggleBuiltInSearch() },
+            onSelectToolChoice = vm::updateToolChoice,
             onSelectProvider = { vm.selectSearchProvider(it) },
             onOpenConfig = {
                 showSearch = false

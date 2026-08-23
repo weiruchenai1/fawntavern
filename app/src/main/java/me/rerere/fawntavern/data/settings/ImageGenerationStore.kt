@@ -17,6 +17,7 @@ object ImageGenerationStore {
             count = item.optInt("count", 1).coerceIn(1, 5),
             aspectRatio = item.optString("aspectRatio", "2:3").takeIf { it in ASPECT_RATIOS } ?: "2:3",
             resolution = item.optString("resolution", "1k").takeIf { it in RESOLUTIONS } ?: "1k",
+            quality = item.optString("quality", "auto").takeIf { it in QUALITIES } ?: "auto",
         )
     }
 
@@ -26,12 +27,14 @@ object ImageGenerationStore {
             count = settings.count.coerceIn(1, 5),
             aspectRatio = settings.aspectRatio.takeIf { it in ASPECT_RATIOS } ?: "2:3",
             resolution = settings.resolution.takeIf { it in RESOLUTIONS } ?: "1k",
+            quality = settings.quality.takeIf { it in QUALITIES } ?: "auto",
         )
         val root = read(context)
         root.put(modelKey, JSONObject()
             .put("count", clean.count)
             .put("aspectRatio", clean.aspectRatio)
-            .put("resolution", clean.resolution))
+            .put("resolution", clean.resolution)
+            .put("quality", clean.quality))
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit { putString(KEY_SETTINGS, root.toString()) }
     }
@@ -47,4 +50,5 @@ object ImageGenerationStore {
         "4:5", "5:4", "21:9", "19.5:9", "9:19.5", "20:9", "9:20",
     )
     val RESOLUTIONS = listOf("1k", "2k", "4k")
+    val QUALITIES = listOf("auto", "low", "medium", "high")
 }

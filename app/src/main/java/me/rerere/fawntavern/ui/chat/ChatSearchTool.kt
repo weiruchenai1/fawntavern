@@ -41,9 +41,9 @@ internal class ChatSearchTool(private val context: Context) {
         }
 
         override suspend fun execute(call: ApiToolCall): Pair<String, MsgSearch?> {
-            if (call.name != "search_web") return """{"error":"unknown tool"}""" to null
+            if (call.name != "search_web") return JSONObject().put("error", "unknown tool").toString() to null
             val query = queryOf(call)
-            if (query.isBlank()) return """{"error":"missing query"}""" to null
+            if (query.isBlank()) return JSONObject().put("error", "missing query").toString() to null
             val options = SearchStore.getSelected(context)
             val result = createSearchService(options)
                 .search(query, SearchCommonOptions(SearchStore.getResultSize(context)), options)

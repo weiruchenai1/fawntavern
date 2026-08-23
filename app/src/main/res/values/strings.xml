@@ -452,8 +452,13 @@
     <string name="thinking_budget">思考预算</string>
     <string name="image_generation_settings">图片生成设置</string>
     <string name="image_generation_count_value">生成数量：%1$d</string>
-    <string name="image_generation_aspect_ratio">图片尺寸</string>
+    <string name="image_generation_aspect_ratio">宽高比</string>
+    <string name="image_generation_size">图片尺寸</string>
     <string name="image_generation_resolution">分辨率</string>
+    <string name="image_generation_quality">图片质量</string>
+    <string name="image_generation_quality_low">低</string>
+    <string name="image_generation_quality_medium">中</string>
+    <string name="image_generation_quality_high">高</string>
     <string name="image_generation_auto">自动</string>
     <string name="thinking_budget_hint">按模型分别记忆。仅推理模型支持，对普通模型调档可能导致请求失败。</string>
     <string name="reasoning_off">关闭</string>
@@ -600,6 +605,11 @@
     <string name="search_service">搜索服务</string>
     <string name="web_search_enabled">已开启</string>
     <string name="web_search_disabled">已关闭</string>
+    <string name="tool_choice_title">函数调用方式</string>
+    <string name="tool_choice_hint">控制模型如何使用由应用执行的工具</string>
+    <string name="tool_choice_auto">自动</string>
+    <string name="tool_choice_required">必须</string>
+    <string name="tool_choice_none">禁止</string>
     <string name="search_open_config">服务设置</string>
     <string name="search_provider">搜索提供商</string>
     <string name="search_add_provider">添加搜索服务</string>

@@ -194,6 +194,13 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
             encodedTools.put(JSONObject().put("type", "web_search"))
         }
         if (encodedTools.length() > 0) put("tools", encodedTools)
+        if (tools.isNotEmpty()) {
+            when (params?.toolChoice) {
+                ToolChoice.REQUIRED -> put("tool_choice", "required")
+                ToolChoice.NONE -> put("tool_choice", "none")
+                else -> Unit
+            }
+        }
         applyCustomBodies(model)
     }
 

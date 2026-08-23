@@ -9,6 +9,7 @@ import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.api.ReasoningLevel
+import me.rerere.fawntavern.data.api.ToolChoice
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.chat.ChatMessage
@@ -39,6 +40,7 @@ internal class ChatGenerationRunner(
         val promptRegex: List<CharRegex>,
         val reasoning: ReasoningLevel,
         val imageGeneration: ImageGenerationSettings,
+        val toolChoice: ToolChoice,
         val searchEnabled: Boolean,
     )
 
@@ -91,8 +93,13 @@ internal class ChatGenerationRunner(
             )
         )
         val built = assembled.built.copy(
-            genParams = assembled.built.genParams?.copy(imageGeneration = request.imageGeneration)
-                ?: me.rerere.fawntavern.data.api.GenParams(imageGeneration = request.imageGeneration),
+            genParams = assembled.built.genParams?.copy(
+                imageGeneration = request.imageGeneration,
+                toolChoice = request.toolChoice,
+            ) ?: me.rerere.fawntavern.data.api.GenParams(
+                imageGeneration = request.imageGeneration,
+                toolChoice = request.toolChoice,
+            ),
         )
         val variableState = assembled.variableState
         val localChanged = commitVariables && variableState.localChanged()

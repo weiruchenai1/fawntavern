@@ -17,6 +17,24 @@ class ProviderAdapterEncodingTest {
     )
 
     @Test
+    fun openAiImageSizeUsesOfficialDiscreteSizes() {
+        assertEquals("1024x1024", OpenAiAdapter.openAiImageSize("1:1"))
+        assertEquals("1536x1024", OpenAiAdapter.openAiImageSize("21:9"))
+        assertEquals("1024x1536", OpenAiAdapter.openAiImageSize("2:3"))
+        assertEquals(null, OpenAiAdapter.openAiImageSize("auto"))
+        assertEquals(null, OpenAiAdapter.openAiImageSize("invalid"))
+    }
+
+    @Test
+    fun openAiImageQualityAcceptsOnlySupportedExplicitValues() {
+        assertEquals("low", OpenAiAdapter.openAiImageQuality("LOW"))
+        assertEquals("medium", OpenAiAdapter.openAiImageQuality("medium"))
+        assertEquals("high", OpenAiAdapter.openAiImageQuality("high"))
+        assertEquals(null, OpenAiAdapter.openAiImageQuality("auto"))
+        assertEquals(null, OpenAiAdapter.openAiImageQuality("ultra"))
+    }
+
+    @Test
     fun openAiEncodesAssistantCallAndToolResult() {
         val encoded = OpenAiAdapter.encodeMessage(ApiMessage("assistant", "", toolCalls = listOf(call)))
 
@@ -94,6 +112,33 @@ class ProviderAdapterEncodingTest {
         assertEquals("signature", callPart.getString("thoughtSignature"))
         assertEquals("search_web", callPart.getJSONObject("functionCall").getString("name"))
         assertTrue(encoded[1].getJSONArray("parts").getJSONObject(0).has("functionResponse"))
+    }
+
+    @Test
+    fun openAiToolChoiceUsesRequired() {
+        val body = OpenAiResponsesAdapter.buildRequestBody(
+            provider = ApiProvider(baseUrl = "https://api.openai.com/v1"),
+            model = ModelInfo("gpt-test"),
+            messages = listOf(ApiMessage("user", "hello")),
+            params = GenParams(toolChoice = ToolChoice.REQUIRED),
+            tools = listOf(ToolSpec("search_web", "Search", "{\"type\":\"object\"}")),
+            stream = true,
+        )
+        assertEquals("required", body.getString("tool_choice"))
+    }
+
+    @Test
+    fun openAiResponsesOmitsToolChoiceWithoutCustomTools() {
+        val body = OpenAiResponsesAdapter.buildRequestBody(
+            provider = ApiProvider(baseUrl = "https://api.openai.com/v1"),
+            model = ModelInfo("gpt-test"),
+            messages = listOf(ApiMessage("user", "hello")),
+            params = GenParams(toolChoice = ToolChoice.REQUIRED),
+            tools = emptyList(),
+            stream = true,
+        )
+
+        assertTrue(!body.has("tool_choice"))
     }
 
     @Test

@@ -5,6 +5,7 @@ import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ModelInfo
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.api.ReasoningLevel
+import me.rerere.fawntavern.data.api.ToolChoice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -60,11 +61,25 @@ class ChatModelControllerTest {
         assertNull(controller.resolveProvider(null, ApiConfig(listOf(enabled), "provider::missing")))
     }
 
+    @Test
+    fun toolChoiceIsRememberedPerModel() {
+        val source = FakeChatModelDataSource()
+        val controller = ChatModelController(source)
+
+        assertEquals(ToolChoice.AUTO, controller.toolChoice("provider::first"))
+        controller.saveToolChoice("provider::first", ToolChoice.REQUIRED)
+        controller.saveToolChoice("provider::second", ToolChoice.NONE)
+
+        assertEquals(ToolChoice.REQUIRED, controller.toolChoice("provider::first"))
+        assertEquals(ToolChoice.NONE, controller.toolChoice("provider::second"))
+    }
+
     private class FakeChatModelDataSource : ChatModelDataSource {
         val characterModels = mutableMapOf<String, String>()
         var defaultModel = ""
         val reasoningByModel = mutableMapOf<String, ReasoningLevel>()
         val imageGenerationByModel = mutableMapOf<String, ImageGenerationSettings>()
+        val toolChoiceByModel = mutableMapOf<String, ToolChoice>()
 
         override fun characterModel(characterName: String): String = characterModels[characterName].orEmpty()
         override fun saveCharacterModel(characterName: String, modelSpec: String) {
@@ -81,6 +96,11 @@ class ChatModelControllerTest {
             imageGenerationByModel[modelSpec] ?: ImageGenerationSettings()
         override fun saveImageGeneration(modelSpec: String, settings: ImageGenerationSettings) {
             imageGenerationByModel[modelSpec] = settings
+        }
+        override fun toolChoice(modelSpec: String): ToolChoice =
+            toolChoiceByModel[modelSpec] ?: ToolChoice.AUTO
+        override fun saveToolChoice(modelSpec: String, choice: ToolChoice) {
+            toolChoiceByModel[modelSpec] = choice
         }
     }
 

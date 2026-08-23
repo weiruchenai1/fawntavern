@@ -134,6 +134,7 @@ internal fun ReasoningPickerSheet(
 @Composable
 internal fun ImageGenerationSettingsSheet(
     current: ImageGenerationSettings,
+    useOpenAiSizes: Boolean,
     onChange: (ImageGenerationSettings) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -166,19 +167,58 @@ internal fun ImageGenerationSettingsSheet(
                 )
             }
         }
-        ImageGenerationOptionFlow(
-            label = stringResource(R.string.image_generation_aspect_ratio),
-            value = current.aspectRatio,
-            options = ImageGenerationStore.ASPECT_RATIOS,
-            onSelect = { onChange(current.copy(aspectRatio = it)) },
-        )
-        ImageGenerationOptionFlow(
-            label = stringResource(R.string.image_generation_resolution),
-            value = current.resolution,
-            options = ImageGenerationStore.RESOLUTIONS,
-            onSelect = { onChange(current.copy(resolution = it)) },
-        )
+        if (useOpenAiSizes) {
+            ImageGenerationOptionFlow(
+                label = stringResource(R.string.image_generation_size),
+                value = openAiDisplaySize(current.aspectRatio),
+                options = OPENAI_IMAGE_SIZES,
+                onSelect = { size ->
+                    onChange(current.copy(aspectRatio = openAiAspectRatio(size)))
+                },
+            )
+            ImageGenerationOptionFlow(
+                label = stringResource(R.string.image_generation_quality),
+                value = current.quality,
+                options = ImageGenerationStore.QUALITIES,
+                onSelect = { onChange(current.copy(quality = it)) },
+            )
+        } else {
+            ImageGenerationOptionFlow(
+                label = stringResource(R.string.image_generation_aspect_ratio),
+                value = current.aspectRatio,
+                options = ImageGenerationStore.ASPECT_RATIOS,
+                onSelect = { onChange(current.copy(aspectRatio = it)) },
+            )
+            ImageGenerationOptionFlow(
+                label = stringResource(R.string.image_generation_resolution),
+                value = current.resolution,
+                options = ImageGenerationStore.RESOLUTIONS,
+                onSelect = { onChange(current.copy(resolution = it)) },
+            )
+        }
     }
+}
+
+private val OPENAI_IMAGE_SIZES = listOf("auto", "1024x1024", "1536x1024", "1024x1536")
+
+private fun openAiDisplaySize(aspectRatio: String): String {
+    if (aspectRatio.equals("auto", ignoreCase = true)) return "auto"
+    val parts = aspectRatio.split(':', limit = 2)
+    val width = parts.getOrNull(0)?.toDoubleOrNull() ?: return "auto"
+    val height = parts.getOrNull(1)?.toDoubleOrNull() ?: return "auto"
+    return when {
+        width <= 0.0 || height <= 0.0 -> "auto"
+        width == height -> "1024x1024"
+        width > height -> "1536x1024"
+        else -> "1024x1536"
+    }
+}
+
+private fun openAiAspectRatio(size: String): String = when (size) {
+    "1024x1024" -> "1:1"
+    "1536x1024" -> "3:2"
+    "1024x1536" -> "2:3"
+    else -> "auto"
 }
 
 @Composable
@@ -216,7 +256,7 @@ private fun ImageGenerationOptionFlow(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            if (option == "auto") stringResource(R.string.image_generation_auto) else option,
+                            imageGenerationOptionLabel(option),
                             style = MaterialTheme.typography.bodySmall,
                             color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
                             else MaterialTheme.colorScheme.onSurface,
@@ -226,6 +266,15 @@ private fun ImageGenerationOptionFlow(
             }
         }
     }
+}
+
+@Composable
+private fun imageGenerationOptionLabel(option: String): String = when (option) {
+    "auto" -> stringResource(R.string.image_generation_auto)
+    "low" -> stringResource(R.string.image_generation_quality_low)
+    "medium" -> stringResource(R.string.image_generation_quality_medium)
+    "high" -> stringResource(R.string.image_generation_quality_high)
+    else -> option
 }
 
 @Composable

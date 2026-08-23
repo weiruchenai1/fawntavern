@@ -16,6 +16,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +30,7 @@ import com.composables.icons.lucide.Bolt
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.data.api.ToolChoice
 import me.rerere.fawntavern.data.search.SearchServiceOptions
 import me.rerere.fawntavern.ui.api.ProviderIcon
 
@@ -40,10 +44,12 @@ internal fun SearchPickerSheet(
     searchEnabled: Boolean,
     builtInSearchAvailable: Boolean,
     builtInSearchEnabled: Boolean,
+    toolChoice: ToolChoice,
     services: List<SearchServiceOptions>,
     selectedIndex: Int,
     onToggleSearch: () -> Unit,
     onToggleBuiltInSearch: () -> Unit,
+    onSelectToolChoice: (ToolChoice) -> Unit,
     onSelectProvider: (Int) -> Unit,
     onOpenConfig: () -> Unit,
     onDismiss: () -> Unit,
@@ -118,6 +124,46 @@ internal fun SearchPickerSheet(
                 }
 
                 // 可选搜索服务商卡片：图标 + 名称，点击选中
+                if (searchEnabled) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            stringResource(R.string.tool_choice_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            stringResource(R.string.tool_choice_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            ToolChoice.entries.forEachIndexed { index, choice ->
+                                SegmentedButton(
+                                    selected = toolChoice == choice,
+                                    onClick = { onSelectToolChoice(choice) },
+                                    shape = SegmentedButtonDefaults.itemShape(
+                                        index = index,
+                                        count = ToolChoice.entries.size,
+                                    ),
+                                ) {
+                                    Text(
+                                        stringResource(
+                                            when (choice) {
+                                                ToolChoice.AUTO -> R.string.tool_choice_auto
+                                                ToolChoice.REQUIRED -> R.string.tool_choice_required
+                                                ToolChoice.NONE -> R.string.tool_choice_none
+                                            },
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(1),
                     verticalArrangement = Arrangement.spacedBy(8.dp),

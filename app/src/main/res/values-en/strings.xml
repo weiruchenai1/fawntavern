@@ -455,7 +455,12 @@
     <string name="image_generation_settings">Image generation</string>
     <string name="image_generation_count_value">Images: %1$d</string>
     <string name="image_generation_aspect_ratio">Aspect ratio</string>
+    <string name="image_generation_size">Size</string>
     <string name="image_generation_resolution">Resolution</string>
+    <string name="image_generation_quality">Quality</string>
+    <string name="image_generation_quality_low">Low</string>
+    <string name="image_generation_quality_medium">Medium</string>
+    <string name="image_generation_quality_high">High</string>
     <string name="image_generation_auto">Auto</string>
     <string name="thinking_budget_hint">Remembered per model. Reasoning models only — raising it on a regular model may make requests fail.</string>
     <string name="reasoning_off">Off</string>
@@ -602,6 +607,11 @@
     <string name="search_service">Search service</string>
     <string name="web_search_enabled">Enabled</string>
     <string name="web_search_disabled">Disabled</string>
+    <string name="tool_choice_title">Function calling</string>
+    <string name="tool_choice_hint">Control how the model uses tools executed by the app</string>
+    <string name="tool_choice_auto">Auto</string>
+    <string name="tool_choice_required">Required</string>
+    <string name="tool_choice_none">Off</string>
     <string name="search_open_config">Service settings</string>
     <string name="search_provider">Search provider</string>
     <string name="search_add_provider">Add search service</string>

@@ -1,7 +1,6 @@
 package me.rerere.fawntavern.data.api
 
 import java.util.Base64
-import kotlin.math.roundToInt
 import me.rerere.fawntavern.data.api.SseClient.strOr
 import okhttp3.Request
 import org.json.JSONArray
@@ -45,6 +44,11 @@ internal object OpenAiAdapter : ProviderAdapter {
                             .put("parameters", JSONObject(t.parametersSchema))))
                     }
                 })
+                when (params?.toolChoice) {
+                    ToolChoice.REQUIRED -> put("tool_choice", "required")
+                    ToolChoice.NONE -> put("tool_choice", "none")
+                    else -> Unit
+                }
             }
             put("messages", JSONArray().apply {
                 messages.forEach { m -> encodeMessage(m).forEach { put(it) } }
@@ -124,8 +128,8 @@ internal object OpenAiAdapter : ProviderAdapter {
             put("prompt", prompt)
             val settings = params?.imageGeneration
             if (settings != null) {
-                // Both APIs support n. xAI uses its native aspect_ratio/resolution fields;
-                // OpenAI's Image API expresses the same controls through size.
+                // 两种接口都支持 n；xAI 使用原生 aspect_ratio/resolution 字段，
+                // GPT Image 只接受固定的方形、横向或竖向尺寸。
                 settings.count.let { put("n", it) }
                 if (xaiImageModel) {
                     settings.aspectRatio
@@ -133,8 +137,11 @@ internal object OpenAiAdapter : ProviderAdapter {
                         ?.let { put("aspect_ratio", it) }
                     settings.resolution.let { put("resolution", it) }
                 } else {
-                    openAiImageSize(settings.aspectRatio, settings.resolution)
+                    openAiImageSize(settings.aspectRatio)
                         ?.let { put("size", it) }
+                    if (model.id.startsWith("gpt-image", ignoreCase = true)) {
+                        openAiImageQuality(settings.quality)?.let { put("quality", it) }
+                    }
                 }
             }
             if (xaiImageModel && sourceImages.isNotEmpty()) {
@@ -194,7 +201,7 @@ internal object OpenAiAdapter : ProviderAdapter {
     internal fun isImageGenerationModel(model: ModelInfo): Boolean =
         Modality.IMAGE in model.outputModalities
 
-    /** 图片生成提示词保持用户原文；数量、比例和分辨率仅由设置面板控制。 */
+    /** 图片提示词保持用户原文；结构化图片设置通过 API 字段单独下发。 */
     internal fun imageGenerationPrompt(messages: List<ApiMessage>): String =
         messages.lastOrNull { it.role == "user" && it.content.isNotBlank() }?.content
             ?: messages.lastOrNull { it.content.isNotBlank() }?.content.orEmpty()
@@ -211,24 +218,22 @@ internal object OpenAiAdapter : ProviderAdapter {
             runCatching { java.net.URI(provider.baseUrl).host?.endsWith("x.ai", ignoreCase = true) == true }
                 .getOrDefault(false)
 
-    /** Convert the app's ratio/scale controls to an OpenAI Image API size. */
-    internal fun openAiImageSize(aspectRatio: String, resolution: String): String? {
+    /** 将应用中的任意宽高比映射到 GPT Image 接受的三种固定尺寸。 */
+    internal fun openAiImageSize(aspectRatio: String): String? {
         if (aspectRatio.equals("auto", ignoreCase = true)) return null
         val parts = aspectRatio.split(':', limit = 2)
         val widthRatio = parts.getOrNull(0)?.toDoubleOrNull() ?: return null
         val heightRatio = parts.getOrNull(1)?.toDoubleOrNull() ?: return null
         if (widthRatio <= 0.0 || heightRatio <= 0.0) return null
-        val longEdge = when {
-            resolution.equals("4k", ignoreCase = true) -> 3840
-            resolution.equals("2k", ignoreCase = true) -> 2048
-            else -> 1024
+        return when {
+            widthRatio == heightRatio -> "1024x1024"
+            widthRatio > heightRatio -> "1536x1024"
+            else -> "1024x1536"
         }
-        val scale = longEdge / maxOf(widthRatio, heightRatio)
-        fun dimension(value: Double): Int = (value * scale / 16.0).roundToInt() * 16
-        val width = dimension(widthRatio).coerceIn(16, 3840)
-        val height = dimension(heightRatio).coerceIn(16, 3840)
-        return "${width}x${height}"
     }
+
+    internal fun openAiImageQuality(quality: String): String? =
+        quality.lowercase().takeIf { it in OPENAI_IMAGE_QUALITIES && it != "auto" }
 
     internal fun parseGeneratedImages(
         response: JSONObject,
@@ -275,6 +280,7 @@ internal object OpenAiAdapter : ProviderAdapter {
     private const val MAX_GENERATED_IMAGE_BASE64_CHARS =
         ((MAX_GENERATED_IMAGE_BYTES + 2) / 3) * 4
     private const val MAX_XAI_EDIT_IMAGES = 3
+    private val OPENAI_IMAGE_QUALITIES = setOf("auto", "low", "medium", "high")
 
     /**
      * 思考预算：OpenAI 兼容阵营各家字段互不相同（无统一标准），按 baseUrl 主机名分流；

@@ -213,7 +213,9 @@ internal class GenerationController(
                     } catch (e: Exception) {
                         if (e is ChatApi.Stopped) throw e
                         // 工具失败不打断生成：把错误回传给模型自行处理
-                        """{"error":"${(e.message ?: "tool failed").replace("\"", "'")}"}""" to
+                        org.json.JSONObject()
+                            .put("error", e.message ?: "tool failed")
+                            .toString() to
                             pending?.copy(searching = false)
                     }
                     if (pending != null) {

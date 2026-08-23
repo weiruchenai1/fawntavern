@@ -140,6 +140,31 @@ class ProviderAdapterStreamTest {
     }
 
     @Test
+    fun geminiCombinesBuiltInAndCustomTools() {
+        enqueueSse("{" +
+            "\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]}}]" +
+            "}")
+
+        GoogleAdapter.stream(
+            provider = provider("google"),
+            model = ModelInfo("gemini-3.7-flash", tools = setOf(BuiltInTool.SEARCH)),
+            messages = listOf(ApiMessage("user", "search")),
+            params = GenParams(toolChoice = ToolChoice.REQUIRED),
+            tools = listOf(ToolSpec("search_web", "Search", "{\"type\":\"object\"}")),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val body = JSONObject(requireNotNull(server.takeRequest().body).utf8())
+        val encodedTools = body.getJSONArray("tools")
+        assertTrue(encodedTools.getJSONObject(0).has("googleSearch"))
+        assertTrue(encodedTools.getJSONObject(1).has("functionDeclarations"))
+        assertEquals("ANY", body.getJSONObject("toolConfig")
+            .getJSONObject("functionCallingConfig").getString("mode"))
+    }
+
+    @Test
     fun responsesApiConnectionToolTestUsesNonStreamingEndpoint() = runBlocking {
         server.enqueue(
             MockResponse.Builder()
@@ -260,6 +285,7 @@ class ProviderAdapterStreamTest {
                     count = 2,
                     aspectRatio = "2:3",
                     resolution = "1k",
+                    quality = "high",
                 ),
             ),
             tools = emptyList(),
@@ -271,6 +297,7 @@ class ProviderAdapterStreamTest {
         val requestBody = JSONObject(requireNotNull(server.takeRequest().body).utf8())
         assertEquals(2, requestBody.getInt("n"))
         assertEquals("1024x1536", requestBody.getString("size"))
+        assertEquals("high", requestBody.getString("quality"))
         assertTrue(!requestBody.has("aspect_ratio"))
         assertTrue(!requestBody.has("resolution"))
     }
@@ -292,6 +319,7 @@ class ProviderAdapterStreamTest {
 
         val requestBody = JSONObject(requireNotNull(server.takeRequest().body).utf8())
         assertTrue(!requestBody.has("size"))
+        assertTrue(!requestBody.has("quality"))
         assertEquals(1, requestBody.getInt("n"))
     }
 
@@ -322,6 +350,7 @@ class ProviderAdapterStreamTest {
                     count = 2,
                     aspectRatio = "2:3",
                     resolution = "2k",
+                    quality = "high",
                 ),
             ),
             tools = emptyList(),
@@ -334,6 +363,7 @@ class ProviderAdapterStreamTest {
         assertEquals(2, requestBody.getInt("n"))
         assertEquals("2:3", requestBody.getString("aspect_ratio"))
         assertEquals("2k", requestBody.getString("resolution"))
+        assertTrue(!requestBody.has("quality"))
         assertEquals("b64_json", requestBody.getString("response_format"))
         assertEquals("请画两张 2:3 2k 的鹿", requestBody.getString("prompt"))
         assertEquals(2, end.generatedImages.size)
@@ -485,6 +515,32 @@ class ProviderAdapterStreamTest {
             server.takeRequest().requestLine
                 .startsWith("POST /v1/custom/models/gemini-test:streamGenerateContent?alt=sse "),
         )
+    }
+
+    @Test
+    fun googleMergesFunctionCallArgumentsAcrossStreamEvents() {
+        enqueueSse(
+            """{"candidates":[{"content":{"parts":[{"thoughtSignature":"sig","functionCall":{"name":"search_web","args":{"query":"fawn"}}}]}}]}""",
+            """{"candidates":[{"content":{"parts":[{"functionCall":{"name":"search_web","args":{"count":5}}}]}}]}""",
+        )
+
+        val end = GoogleAdapter.stream(
+            provider = provider("google"),
+            model = ModelInfo("gemini-test"),
+            messages = listOf(ApiMessage("user", "hello")),
+            params = null,
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val call = end.toolCalls.single()
+        val arguments = JSONObject(call.arguments)
+        assertEquals("search_web", call.name)
+        assertEquals("fawn", arguments.getString("query"))
+        assertEquals(5, arguments.getInt("count"))
+        assertEquals("sig", call.extra)
     }
 
     @Test

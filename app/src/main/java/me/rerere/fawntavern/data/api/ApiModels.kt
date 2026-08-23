@@ -43,17 +43,21 @@ data class ApiImage(
     val base64: String,
 )
 
+/** 控制模型在当前请求中是否可以选择应用提供的自定义函数。 */
+enum class ToolChoice { AUTO, REQUIRED, NONE }
+
 /** 图片生成接口返回的图片内容；由聊天层落盘后写入消息附件。 */
 data class GeneratedImage(
     val bytes: ByteArray,
     val mimeType: String = "image/png",
 )
 
-/** xAI Imagine 图片生成控制项，按模型保存并在生成请求中下发。 */
+/** 跨提供商共用的图片生成设置；各适配器只下发当前模型支持的字段。 */
 data class ImageGenerationSettings(
     val count: Int = 1,
     val aspectRatio: String = "2:3",
     val resolution: String = "1k",
+    val quality: String = "auto",
 )
 
 /** 采样参数（来自关联预设）；null 字段 = 不下发，使用服务端默认值 */
@@ -67,6 +71,7 @@ data class GenParams(
     val seed: Int? = null,
     /** 思考预算档位（来自 ThinkingStore，按模型记忆）；AUTO = 不下发任何思考字段 */
     val reasoning: ReasoningLevel = ReasoningLevel.AUTO,
+    val toolChoice: ToolChoice = ToolChoice.AUTO,
     val imageGeneration: ImageGenerationSettings? = null,
 )
 
