@@ -44,7 +44,7 @@ object ImageGenerationStore {
 
     val ASPECT_RATIOS = listOf(
         "auto", "2:3", "3:2", "1:1", "9:16", "16:9", "4:3", "3:4", "2:1", "1:2",
-        "19.5:9", "9:19.5", "20:9", "9:20",
+        "4:5", "5:4", "21:9", "19.5:9", "9:19.5", "20:9", "9:20",
     )
-    val RESOLUTIONS = listOf("1k", "2k")
+    val RESOLUTIONS = listOf("1k", "2k", "4k")
 }

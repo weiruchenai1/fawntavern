@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.data.api
 
 import java.util.Base64
+import kotlin.math.roundToInt
 import me.rerere.fawntavern.data.api.SseClient.strOr
 import okhttp3.Request
 import org.json.JSONArray
@@ -121,18 +122,25 @@ internal object OpenAiAdapter : ProviderAdapter {
         val body = JSONObject().apply {
             put("model", model.id)
             put("prompt", prompt)
-            if (xaiImageModel) {
-                val settings = params?.imageGeneration
-                settings?.count?.let { put("n", it) }
-                settings?.aspectRatio
-                    ?.takeUnless { it.equals("auto", ignoreCase = true) }
-                    ?.let { put("aspect_ratio", it) }
-                settings?.resolution?.let { put("resolution", it) }
-                if (sourceImages.isNotEmpty()) {
-                    val encoded = sourceImages.map(::encodeXaiEditImage)
-                    if (encoded.size == 1) put("image", encoded.single())
-                    else put("images", JSONArray(encoded))
+            val settings = params?.imageGeneration
+            if (settings != null) {
+                // Both APIs support n. xAI uses its native aspect_ratio/resolution fields;
+                // OpenAI's Image API expresses the same controls through size.
+                settings.count.let { put("n", it) }
+                if (xaiImageModel) {
+                    settings.aspectRatio
+                        .takeUnless { it.equals("auto", ignoreCase = true) }
+                        ?.let { put("aspect_ratio", it) }
+                    settings.resolution.let { put("resolution", it) }
+                } else {
+                    openAiImageSize(settings.aspectRatio, settings.resolution)
+                        ?.let { put("size", it) }
                 }
+            }
+            if (xaiImageModel && sourceImages.isNotEmpty()) {
+                val encoded = sourceImages.map(::encodeXaiEditImage)
+                if (encoded.size == 1) put("image", encoded.single())
+                else put("images", JSONArray(encoded))
             }
             // Per-model custom fields intentionally win over values inferred from the prompt.
             applyCustomBodies(model)
@@ -202,6 +210,25 @@ internal object OpenAiAdapter : ProviderAdapter {
         model.id.startsWith("grok-imagine-image", ignoreCase = true) ||
             runCatching { java.net.URI(provider.baseUrl).host?.endsWith("x.ai", ignoreCase = true) == true }
                 .getOrDefault(false)
+
+    /** Convert the app's ratio/scale controls to an OpenAI Image API size. */
+    internal fun openAiImageSize(aspectRatio: String, resolution: String): String? {
+        if (aspectRatio.equals("auto", ignoreCase = true)) return null
+        val parts = aspectRatio.split(':', limit = 2)
+        val widthRatio = parts.getOrNull(0)?.toDoubleOrNull() ?: return null
+        val heightRatio = parts.getOrNull(1)?.toDoubleOrNull() ?: return null
+        if (widthRatio <= 0.0 || heightRatio <= 0.0) return null
+        val longEdge = when {
+            resolution.equals("4k", ignoreCase = true) -> 3840
+            resolution.equals("2k", ignoreCase = true) -> 2048
+            else -> 1024
+        }
+        val scale = longEdge / maxOf(widthRatio, heightRatio)
+        fun dimension(value: Double): Int = (value * scale / 16.0).roundToInt() * 16
+        val width = dimension(widthRatio).coerceIn(16, 3840)
+        val height = dimension(heightRatio).coerceIn(16, 3840)
+        return "${width}x${height}"
+    }
 
     internal fun parseGeneratedImages(
         response: JSONObject,

@@ -111,6 +111,35 @@ class ProviderAdapterStreamTest {
     }
 
     @Test
+    fun geminiImageModelRequestsImageConfigAndParsesInlineData() {
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)
+        val encoded = Base64.getEncoder().encodeToString(png)
+        enqueueSse(
+            JSONObject().put("candidates", JSONArray().put(JSONObject().put("content", JSONObject()
+                .put("parts", JSONArray().put(JSONObject().put("inlineData", JSONObject()
+                    .put("mimeType", "image/png").put("data", encoded))))))).toString(),
+        )
+
+        val end = GoogleAdapter.stream(
+            provider = provider("google"),
+            model = ModelInfo("gemini-3.1-flash-image", outputModalities = listOf(Modality.TEXT, Modality.IMAGE)),
+            messages = listOf(ApiMessage("user", "draw a fawn")),
+            params = GenParams(imageGeneration = ImageGenerationSettings(aspectRatio = "16:9", resolution = "2k")),
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val requestBody = JSONObject(requireNotNull(server.takeRequest().body).utf8())
+        val config = requestBody.getJSONObject("generationConfig")
+        assertEquals("IMAGE", config.getJSONArray("responseModalities").getString(1))
+        assertEquals("16:9", config.getJSONObject("imageConfig").getString("aspectRatio"))
+        assertEquals("2K", config.getJSONObject("imageConfig").getString("imageSize"))
+        assertTrue(end.generatedImages.single().bytes.contentEquals(png))
+    }
+
+    @Test
     fun responsesApiConnectionToolTestUsesNonStreamingEndpoint() = runBlocking {
         server.enqueue(
             MockResponse.Builder()
@@ -213,6 +242,57 @@ class ProviderAdapterStreamTest {
         assertEquals("draw a fawn", requestBody.getString("prompt"))
         assertTrue(end.generatedImages.single().bytes.contentEquals(pngHeader))
         assertEquals("image/png", end.generatedImages.single().mimeType)
+    }
+
+    @Test
+    fun openAiImageRequestMapsSettingsToOfficialImageApiFields() {
+        enqueueGeneratedImage()
+
+        OpenAiAdapter.stream(
+            provider = ApiProvider(type = "openai", baseUrl = server.url("/v1").toString()),
+            model = ModelInfo(
+                "gpt-image-1",
+                outputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+            ),
+            messages = listOf(ApiMessage("user", "draw a fawn")),
+            params = GenParams(
+                imageGeneration = ImageGenerationSettings(
+                    count = 2,
+                    aspectRatio = "2:3",
+                    resolution = "1k",
+                ),
+            ),
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val requestBody = JSONObject(requireNotNull(server.takeRequest().body).utf8())
+        assertEquals(2, requestBody.getInt("n"))
+        assertEquals("1024x1536", requestBody.getString("size"))
+        assertTrue(!requestBody.has("aspect_ratio"))
+        assertTrue(!requestBody.has("resolution"))
+    }
+
+    @Test
+    fun openAiImageRequestOmitsSizeForAutomaticAspectRatio() {
+        enqueueGeneratedImage()
+
+        OpenAiAdapter.stream(
+            provider = ApiProvider(type = "openai", baseUrl = server.url("/v1").toString()),
+            model = ModelInfo("gpt-image-1", outputModalities = listOf(Modality.IMAGE)),
+            messages = listOf(ApiMessage("user", "draw a fawn")),
+            params = GenParams(imageGeneration = ImageGenerationSettings(aspectRatio = "auto")),
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val requestBody = JSONObject(requireNotNull(server.takeRequest().body).utf8())
+        assertTrue(!requestBody.has("size"))
+        assertEquals(1, requestBody.getInt("n"))
     }
 
     @Test

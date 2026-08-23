@@ -1,5 +1,6 @@
 package me.rerere.fawntavern.data.api
 
+import java.util.Base64
 import me.rerere.fawntavern.data.api.SseClient.strOr
 import org.json.JSONArray
 import org.json.JSONObject
@@ -54,6 +55,15 @@ internal object GoogleAdapter : ProviderAdapter {
                     }
                 })
             }
+            if (isImageGenerationModel(model)) {
+                cfg.put("responseModalities", JSONArray().put("TEXT").put("IMAGE"))
+                val imageConfig = JSONObject()
+                params?.imageGeneration?.let { settings ->
+                    geminiImageAspectRatio(settings.aspectRatio)?.let { imageConfig.put("aspectRatio", it) }
+                    geminiImageSize(settings.resolution)?.let { imageConfig.put("imageSize", it) }
+                }
+                if (imageConfig.length() > 0) cfg.put("imageConfig", imageConfig)
+            }
             if (cfg.length() > 0) put("generationConfig", cfg)
             // 函数工具与服务端内置工具互斥（Gemini 不允许 googleSearch 与 functionDeclarations 并存），
             // 内置工具开启时以它为准，直接原样下发 googleSearch / urlContext
@@ -78,6 +88,7 @@ internal object GoogleAdapter : ProviderAdapter {
             applyCustomBodies(model)
         }
         val toolCalls = mutableListOf<ApiToolCall>()
+        val generatedImages = mutableListOf<GeneratedImage>()
         var promptTokens = 0
         var completionTokens = 0
         var cachedTokens = 0
@@ -113,6 +124,8 @@ internal object GoogleAdapter : ProviderAdapter {
                     )
                 }
                 val text = part.strOr("text")
+                part.optJSONObject("inlineData")?.let { decodeGeneratedImage(it)?.let(generatedImages::add) }
+                part.optJSONObject("inline_data")?.let { decodeGeneratedImage(it)?.let(generatedImages::add) }
                 if (text.isEmpty()) continue
                 // 思考内容与正文混在同一个 parts 数组里，只靠 thought=true 区分（不分流会当正文输出）
                 if (part.optBoolean("thought")) onDelta("", text) else onDelta(text, "")
@@ -123,8 +136,39 @@ internal object GoogleAdapter : ProviderAdapter {
             promptTokens = promptTokens,
             completionTokens = completionTokens,
             cachedTokens = cachedTokens,
+            generatedImages = generatedImages,
         )
     }
+
+    internal fun isImageGenerationModel(model: ModelInfo): Boolean =
+        Modality.IMAGE in model.outputModalities
+
+    internal fun geminiImageAspectRatio(value: String): String? =
+        value.takeUnless { it.equals("auto", ignoreCase = true) }
+            ?.takeIf { it in GEMINI_IMAGE_ASPECT_RATIOS }
+
+    internal fun geminiImageSize(value: String): String? = when (value.lowercase()) {
+        "0.5k", "512px" -> "0.5K"
+        "1k" -> "1K"
+        "2k" -> "2K"
+        "4k" -> "4K"
+        else -> null
+    }
+
+    private fun decodeGeneratedImage(inline: JSONObject): GeneratedImage? {
+        val encoded = inline.strOr("data")
+        if (encoded.isBlank()) return null
+        val bytes = runCatching { Base64.getDecoder().decode(encoded) }.getOrNull() ?: return null
+        if (bytes.isEmpty() || bytes.size > MAX_GENERATED_IMAGE_BYTES) return null
+        val mime = inline.strOr("mimeType").ifBlank { inline.strOr("mime_type") }
+        return GeneratedImage(bytes, mime.takeIf { it.startsWith("image/") } ?: "image/png")
+    }
+
+    private val GEMINI_IMAGE_ASPECT_RATIOS = setOf(
+        "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4",
+        "8:1", "9:16", "16:9", "21:9",
+    )
+    private const val MAX_GENERATED_IMAGE_BYTES = 25 * 1024 * 1024
 
     /**
      * 一条协议无关消息可展开为多条 contents：带工具调用的 assistant 展开为
