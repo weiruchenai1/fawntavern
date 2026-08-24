@@ -246,11 +246,7 @@ object PluginWorkerClient {
             require(sessionId.isNotBlank()) { "当前插件调用没有会话上下文" }
             val params = JSONObject(paramsJson)
             val value = params.opt("value")
-            val state = when (value) {
-                null, JSONObject.NULL -> ""
-                is String -> value
-                else -> value.toString()
-            }
+            val state = if (value == null || value === JSONObject.NULL) "" else value.toString()
             require(state.toByteArray(Charsets.UTF_8).size <= MAX_STATE_BYTES) { "插件状态超过 128KB" }
             stateLocks.getOrPut(sessionId) { Mutex() }.withLock {
                 val context = checkNotNull(appContext)

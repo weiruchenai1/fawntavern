@@ -39,15 +39,17 @@ object PluginManager {
     @Volatile private var appContext: Context? = null
     @Volatile private var initialized = false
 
-    suspend fun initialize(context: Context) = initLock.withLock {
-        if (initialized) return
-        val app = context.applicationContext
-        appContext = app
-        PluginInstaller.recoverInterruptedInstalls(app)
-        BuiltinExtensions.registerAll()
-        PluginWorkerClient.initialize(app)
-        PluginRepository.list(app).forEach { register(app, it) }
-        initialized = true
+    suspend fun initialize(context: Context) {
+        initLock.withLock {
+            if (initialized) return
+            val app = context.applicationContext
+            appContext = app
+            PluginInstaller.recoverInterruptedInstalls(app)
+            BuiltinExtensions.registerAll()
+            PluginWorkerClient.initialize(app)
+            PluginRepository.list(app).forEach { register(app, it) }
+            initialized = true
+        }
     }
 
     suspend fun installFromZip(input: InputStream): PluginRepository.InstalledPlugin {

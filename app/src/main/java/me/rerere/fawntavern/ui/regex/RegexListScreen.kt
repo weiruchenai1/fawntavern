@@ -373,7 +373,7 @@ fun RegexListScreen(onBack: () -> Unit) {
                                 RegexScope.LOCAL -> {
                                     val defaultPreset = PresetRepository.ensureDefaultPreset(
                                         context,
-                                        context.getString(R.string.default_preset),
+                                        resources.getString(R.string.default_preset),
                                     )
                                     CharacterRepository.create(context, requestedName, defaultPreset)
                                 }
@@ -400,7 +400,7 @@ fun RegexListScreen(onBack: () -> Unit) {
                         index = -1,
                         script = RegexScript(
                             id = java.util.UUID.randomUUID().toString(),
-                            scriptName = context.getString(R.string.unnamed_prompt),
+                            scriptName = resources.getString(R.string.unnamed_prompt),
                         ),
                     )
                 },
