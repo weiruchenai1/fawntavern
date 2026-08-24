@@ -249,7 +249,7 @@ private fun SystemLogEntryCard(entry: SafeLogEntry) {
         }
     }
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .padding(Space12),
         verticalArrangement = Arrangement.spacedBy(Space8),

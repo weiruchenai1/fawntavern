@@ -181,7 +181,7 @@ private fun ProviderCard(
     Row(
         Modifier.fillMaxWidth()
             .draggableLiftScale(dragging)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(if (prov.enabled) MaterialTheme.colorScheme.surfaceContainer
                         else MaterialTheme.colorScheme.errorContainer)
             .clickable { onClick() }

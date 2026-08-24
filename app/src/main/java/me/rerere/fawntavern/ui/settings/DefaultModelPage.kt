@@ -209,7 +209,7 @@ internal fun ModelCard(
 ) {
     Column(
         Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -254,7 +254,7 @@ internal fun ModelCard(
 
         Row(
             Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 .clickable { onPick() }
                 .padding(horizontal = Space12, vertical = 10.dp),
