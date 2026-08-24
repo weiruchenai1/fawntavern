@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.data.chat
 
 import kotlinx.serialization.Serializable
+import me.rerere.fawntavern.data.api.ApiRequestSnapshot
 
 /**
  * 消息的一个版本（重新生成的历史版本 / 备选开场白）。
@@ -21,6 +22,7 @@ data class MsgAlt(
     val generationMs: Long = 0,
     val images: List<String> = emptyList(),
     val imageAspectRatio: String = "2:3",
+    val requestSnapshots: List<ApiRequestSnapshot> = emptyList(),
 )
 
 /** 联网搜索的单条引用来源（展示"N个引用"胶囊卡与来源列表用） */
@@ -71,6 +73,7 @@ data class ChatMessage(
     val completionTokens: Int = 0,   // 本次生成输出 token（API usage 优先，缺失时估算）
     val cachedTokens: Int = 0,       // 本次请求由供应商缓存命中的输入 token
     val generationMs: Long = 0,      // 从发起请求到生成收尾的总用时
+    val requestSnapshots: List<ApiRequestSnapshot> = emptyList(), // 当前版本各轮实际请求，不含请求头
 )
 
 /** 聊天会话：每个角色卡对应独立的聊天列表 */

@@ -35,7 +35,7 @@ class ChatDatabaseMigrationTest {
     }
 
     @Test
-    fun migration9To12PreservesSessionsAndMessages() {
+    fun migration9To13PreservesSessionsAndMessages() {
         createVersion9Database().use { helper ->
             helper.writableDatabase.apply {
                 execSQL(
@@ -56,6 +56,7 @@ class ChatDatabaseMigrationTest {
                 ChatDatabase.MIGRATION_9_10,
                 ChatDatabase.MIGRATION_10_11,
                 ChatDatabase.MIGRATION_11_12,
+                ChatDatabase.MIGRATION_12_13,
             )
             .allowMainThreadQueries()
             .build()
@@ -65,6 +66,7 @@ class ChatDatabaseMigrationTest {
             assertEquals(listOf("Keep me"), session?.messages?.map(MessageEntity::content))
             assertEquals(listOf("2:3"), session?.messages?.map(MessageEntity::imageAspectRatio))
             assertEquals(listOf(0), session?.messages?.map(MessageEntity::cachedTokens))
+            assertEquals(listOf(""), session?.messages?.map(MessageEntity::requestSnapshotsJson))
         } finally {
             migrated.close()
         }

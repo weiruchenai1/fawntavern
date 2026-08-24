@@ -6,6 +6,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
+import me.rerere.fawntavern.data.api.ApiRequestException
 import me.rerere.fawntavern.data.api.ApiToolCall
 import me.rerere.fawntavern.data.api.ChatApi
 import me.rerere.fawntavern.data.api.GenParams
@@ -90,6 +91,7 @@ internal class GenerationController(
         // 搜索时间线步骤（工具循环期间追加/更新），随每帧刷进 cur
         var searches = genMessage.searches
         var generatedImages = genMessage.images
+        var requestSnapshots = genMessage.requestSnapshots
         // 累加缓冲：SSE 在 IO 线程高频回调，UI 按帧节流刷新，避免每个 token 都重组。
         // lock 保护 StringBuilder：IO 线程 append 与主线程 toString 并发
         val lock = Any()
@@ -165,6 +167,11 @@ internal class GenerationController(
                     dirty.set(true)
                 }
                 if (end.promptTokens > 0) promptTokens += end.promptTokens - estimatedInput
+                end.requestSnapshot?.let { snapshot ->
+                    requestSnapshots = requestSnapshots + snapshot
+                    cur = cur.copy(requestSnapshots = requestSnapshots)
+                    onUpdate(cur)
+                }
                 val (roundContent, roundReasoning) = synchronized(lock) {
                     buf.substring(roundStart) to reasoningBuf.substring(reasoningRoundStart)
                 }
@@ -250,12 +257,22 @@ internal class GenerationController(
                 completionTokens = completionTokens,
                 cachedTokens = cachedTokens,
                 generationMs = (System.currentTimeMillis() - generationStartedAt).coerceAtLeast(1L),
+                requestSnapshots = requestSnapshots,
             )
         } catch (_: ChatApi.Stopped) {
         } catch (e: Exception) {
+            val displayError = if (e is ApiRequestException) {
+                if (e.snapshot !in requestSnapshots) {
+                    requestSnapshots = requestSnapshots + e.snapshot
+                    cur = cur.copy(requestSnapshots = requestSnapshots)
+                }
+                e.cause as? Exception ?: e
+            } else {
+                e
+            }
             synchronized(lock) {
                 if (buf.isNotEmpty()) buf.append("\n\n")
-                buf.append(errorText(e))
+                buf.append(errorText(displayError))
             }
         }
         refresher?.cancel()
@@ -275,6 +292,7 @@ internal class GenerationController(
                 content = cur.content, reasoning = cur.reasoning,
                 model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
                 images = cur.images, imageAspectRatio = cur.imageAspectRatio,
+                requestSnapshots = cur.requestSnapshots,
                 promptTokens = cur.promptTokens, completionTokens = cur.completionTokens,
                 cachedTokens = cur.cachedTokens,
                 generationMs = cur.generationMs)

@@ -3,6 +3,8 @@ package me.rerere.fawntavern.domain
 import kotlinx.coroutines.runBlocking
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
+import me.rerere.fawntavern.data.api.ApiRequestSnapshot
+import me.rerere.fawntavern.data.api.ApiRequestException
 import me.rerere.fawntavern.data.api.ApiToolCall
 import me.rerere.fawntavern.data.api.ChatApi
 import me.rerere.fawntavern.data.api.GeneratedImage
@@ -18,6 +20,29 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GenerationControllerTest {
+    @Test
+    fun failedRequestStillPersistsItsSnapshot() = runBlocking {
+        val snapshot = ApiRequestSnapshot("https://example.com/fail", "{\"model\":\"test\"}")
+        val client = GenerationStreamClient { _, _, _, _, _, _, _ ->
+            throw ApiRequestException(snapshot, IllegalStateException("provider failed"))
+        }
+
+        val result = GenerationController(client).run(
+            apiMessages = listOf(ApiMessage("user", "question")),
+            genMessage = ChatMessage(role = "assistant", alts = listOf(MsgAlt())),
+            provider = ApiProvider(id = "provider"),
+            modelId = "model",
+            built = PromptBuilder.Built(),
+            streaming = false,
+            errorText = { it.message.orEmpty() },
+            onUpdate = {},
+        )
+
+        assertEquals("provider failed", result.content)
+        assertEquals(listOf(snapshot), result.requestSnapshots)
+        assertEquals(listOf(snapshot), result.alts.single().requestSnapshots)
+    }
+
     @Test
     fun stopCancelsTheCurrentRound() = runBlocking {
         lateinit var controller: GenerationController
@@ -50,10 +75,15 @@ class GenerationControllerTest {
             if (requests.size == 1) {
                 StreamEnd(
                     toolCalls = listOf(ApiToolCall("call-1", "search_web", "{\"query\":\"fawn\"}")),
+                    requestSnapshot = ApiRequestSnapshot("https://example.com/round-1", "{\"round\":1}"),
                 )
             } else {
                 onDelta("final answer", "")
-                StreamEnd(promptTokens = 10, completionTokens = 2)
+                StreamEnd(
+                    promptTokens = 10,
+                    completionTokens = 2,
+                    requestSnapshot = ApiRequestSnapshot("https://example.com/round-2", "{\"round\":2}"),
+                )
             }
         }
         val executor = object : GenerationController.ToolExecutor {
@@ -81,6 +111,7 @@ class GenerationControllerTest {
         assertEquals("assistant", toolRound.role)
         assertEquals("{\"items\":[\"result\"]}", toolRound.toolCalls.single().result)
         assertEquals("final answer", result.content)
+        assertEquals(listOf("{\"round\":1}", "{\"round\":2}"), result.requestSnapshots.map { it.body })
         assertTrue(result.generationMs > 0)
     }
 

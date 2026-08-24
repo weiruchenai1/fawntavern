@@ -54,6 +54,7 @@ class ProviderAdapterStreamTest {
         assertEquals("{\"query\":\"fawn\"}", end.toolCalls.single().arguments)
         assertEquals(12, end.promptTokens)
         assertEquals(4, end.completionTokens)
+        assertEquals("model", JSONObject(requireNotNull(end.requestSnapshot).body).getString("model"))
     }
 
     @Test
@@ -108,6 +109,7 @@ class ProviderAdapterStreamTest {
         assertEquals(14, end.promptTokens)
         assertEquals(6, end.completionTokens)
         assertEquals("reasoning", JSONArray(end.rawBlocks).getJSONObject(0).getString("type"))
+        assertEquals("system", JSONObject(requireNotNull(end.requestSnapshot).body).getString("instructions"))
     }
 
     @Test
@@ -137,6 +139,8 @@ class ProviderAdapterStreamTest {
         assertEquals("16:9", config.getJSONObject("imageConfig").getString("aspectRatio"))
         assertEquals("2K", config.getJSONObject("imageConfig").getString("imageSize"))
         assertTrue(end.generatedImages.single().bytes.contentEquals(png))
+        assertEquals("2K", JSONObject(requireNotNull(end.requestSnapshot).body)
+            .getJSONObject("generationConfig").getJSONObject("imageConfig").getString("imageSize"))
     }
 
     @Test
@@ -273,7 +277,7 @@ class ProviderAdapterStreamTest {
     fun openAiImageRequestMapsSettingsToOfficialImageApiFields() {
         enqueueGeneratedImage()
 
-        OpenAiAdapter.stream(
+        val end = OpenAiAdapter.stream(
             provider = ApiProvider(type = "openai", baseUrl = server.url("/v1").toString()),
             model = ModelInfo(
                 "gpt-image-1",
@@ -300,6 +304,7 @@ class ProviderAdapterStreamTest {
         assertEquals("high", requestBody.getString("quality"))
         assertTrue(!requestBody.has("aspect_ratio"))
         assertTrue(!requestBody.has("resolution"))
+        assertEquals("high", JSONObject(requireNotNull(end.requestSnapshot).body).getString("quality"))
     }
 
     @Test
@@ -577,6 +582,7 @@ class ProviderAdapterStreamTest {
         assertEquals("sig", raw.getJSONObject(0).getString("signature"))
         assertTrue(raw.toString().contains("tool_use"))
         assertTrue(server.takeRequest().requestLine.startsWith("POST /v1/custom/messages "))
+        assertEquals("claude-test", JSONObject(requireNotNull(end.requestSnapshot).body).getString("model"))
     }
 
     private fun provider(type: String) = ApiProvider(

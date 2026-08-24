@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.domain
 
 import me.rerere.fawntavern.data.character.CharacterCard
+import me.rerere.fawntavern.data.api.ApiRequestSnapshot
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.chat.MsgAlt
@@ -58,6 +59,27 @@ class ConversationOpsTest {
         assertEquals("16:9", switched.alts[0].imageAspectRatio)
         assertEquals(listOf("attachments/second.png"), switched.images)
         assertEquals("9:16", switched.imageAspectRatio)
+    }
+
+    @Test
+    fun switchingAltPreservesRequestSnapshotsPerVersion() {
+        val first = ApiRequestSnapshot("https://example.com/first", "{\"version\":1}")
+        val second = ApiRequestSnapshot("https://example.com/second", "{\"version\":2}")
+        val message = ChatMessage(
+            role = "assistant",
+            requestSnapshots = listOf(first),
+            altIdx = 0,
+            alts = listOf(
+                MsgAlt(requestSnapshots = emptyList()),
+                MsgAlt(requestSnapshots = listOf(second)),
+            ),
+        )
+
+        val switched = ConversationOps.switchAltOne(message, 1)
+
+        requireNotNull(switched)
+        assertEquals(listOf(first), switched.alts[0].requestSnapshots)
+        assertEquals(listOf(second), switched.requestSnapshots)
     }
 
     @Test

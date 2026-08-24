@@ -72,6 +72,7 @@ internal object ConversationOps {
             content = m.content, reasoning = m.reasoning, model = m.model,
             reasoningMs = m.reasoningMs, searches = m.searches, images = m.images,
             imageAspectRatio = m.imageAspectRatio,
+            requestSnapshots = m.requestSnapshots,
             promptTokens = m.promptTokens, completionTokens = m.completionTokens,
             cachedTokens = m.cachedTokens,
             generationMs = m.generationMs)
@@ -79,6 +80,7 @@ internal object ConversationOps {
         return m.copy(content = target.content, reasoning = target.reasoning,
             model = target.model, reasoningMs = target.reasoningMs, searches = target.searches,
             images = target.images, imageAspectRatio = target.imageAspectRatio,
+            requestSnapshots = target.requestSnapshots,
             promptTokens = target.promptTokens, completionTokens = target.completionTokens,
             cachedTokens = target.cachedTokens,
             generationMs = target.generationMs,
@@ -98,6 +100,7 @@ internal object ConversationOps {
             content = cur.content, reasoning = cur.reasoning,
             model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
             images = cur.images, imageAspectRatio = cur.imageAspectRatio,
+            requestSnapshots = cur.requestSnapshots,
             promptTokens = cur.promptTokens, completionTokens = cur.completionTokens,
             cachedTokens = cur.cachedTokens,
             generationMs = cur.generationMs,
@@ -113,12 +116,14 @@ internal object ConversationOps {
         alts[ai] = alts[ai].copy(content = m.content, reasoning = m.reasoning,
             model = m.model, reasoningMs = m.reasoningMs, searches = m.searches, images = m.images,
             imageAspectRatio = m.imageAspectRatio,
+            requestSnapshots = m.requestSnapshots,
             promptTokens = m.promptTokens, completionTokens = m.completionTokens,
             cachedTokens = m.cachedTokens,
             generationMs = m.generationMs)
         alts += MsgAlt(model = modelId)
         return m.copy(content = "", reasoning = "", model = modelId, reasoningMs = 0, images = emptyList(),
             promptTokens = 0, completionTokens = 0, cachedTokens = 0, generationMs = 0,
+            requestSnapshots = emptyList(),
             alts = alts, altIdx = alts.lastIndex)
     }
 }

@@ -60,39 +60,43 @@ internal object OpenAiAdapter : ProviderAdapter {
         var promptTokens = 0
         var completionTokens = 0
         var cachedTokens = 0
-        SseClient.post(
-            url = provider.apiEndpoint("/chat/completions"),
-            headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
-            body = body,
-            stopped = stopped,
-            onCall = onCall,
-        ) { data ->
-            if (data == "[DONE]") return@post
-            val obj = JSONObject(data)
-            obj.optJSONObject("usage")?.let { usage ->
-                promptTokens = usage.optInt("prompt_tokens", usage.optInt("input_tokens", promptTokens))
-                completionTokens = usage.optInt("completion_tokens", usage.optInt("output_tokens", completionTokens))
-                cachedTokens = usage.optJSONObject("prompt_tokens_details")
-                    ?.optInt("cached_tokens", cachedTokens)
-                    ?: usage.optJSONObject("input_tokens_details")
+        val endpoint = provider.apiEndpoint("/chat/completions")
+        val snapshot = requestSnapshot(endpoint, body)
+        captureRequestFailure(snapshot, stopped) {
+            SseClient.post(
+                url = endpoint,
+                headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
+                body = body,
+                stopped = stopped,
+                onCall = onCall,
+            ) { data ->
+                if (data == "[DONE]") return@post
+                val obj = JSONObject(data)
+                obj.optJSONObject("usage")?.let { usage ->
+                    promptTokens = usage.optInt("prompt_tokens", usage.optInt("input_tokens", promptTokens))
+                    completionTokens = usage.optInt("completion_tokens", usage.optInt("output_tokens", completionTokens))
+                    cachedTokens = usage.optJSONObject("prompt_tokens_details")
                         ?.optInt("cached_tokens", cachedTokens)
-                    ?: cachedTokens
-            }
-            val delta = obj.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: return@post
-            val content = delta.strOr("content")
-            val reasoning = delta.strOr("reasoning_content").ifEmpty { delta.strOr("reasoning") }
-            if (content.isNotEmpty() || reasoning.isNotEmpty()) onDelta(content, reasoning)
-            delta.optJSONArray("tool_calls")?.let { arr ->
-                for (i in 0 until arr.length()) {
-                    val tc = arr.optJSONObject(i) ?: continue
-                    val idx = tc.optInt("index", i)
-                    val fn = tc.optJSONObject("function")
-                    val prev = callsByIndex[idx]
-                    val id = tc.strOr("id").ifEmpty { prev?.first ?: "" }
-                    val name = (fn?.strOr("name") ?: "").ifEmpty { prev?.second ?: "" }
-                    val args = prev?.third ?: StringBuilder()
-                    fn?.strOr("arguments")?.let { args.append(it) }
-                    callsByIndex[idx] = Triple(id, name, args)
+                        ?: usage.optJSONObject("input_tokens_details")
+                            ?.optInt("cached_tokens", cachedTokens)
+                        ?: cachedTokens
+                }
+                val delta = obj.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: return@post
+                val content = delta.strOr("content")
+                val reasoning = delta.strOr("reasoning_content").ifEmpty { delta.strOr("reasoning") }
+                if (content.isNotEmpty() || reasoning.isNotEmpty()) onDelta(content, reasoning)
+                delta.optJSONArray("tool_calls")?.let { arr ->
+                    for (i in 0 until arr.length()) {
+                        val tc = arr.optJSONObject(i) ?: continue
+                        val idx = tc.optInt("index", i)
+                        val fn = tc.optJSONObject("function")
+                        val prev = callsByIndex[idx]
+                        val id = tc.strOr("id").ifEmpty { prev?.first ?: "" }
+                        val name = (fn?.strOr("name") ?: "").ifEmpty { prev?.second ?: "" }
+                        val args = prev?.third ?: StringBuilder()
+                        fn?.strOr("arguments")?.let { args.append(it) }
+                        callsByIndex[idx] = Triple(id, name, args)
+                    }
                 }
             }
         }
@@ -105,6 +109,7 @@ internal object OpenAiAdapter : ProviderAdapter {
             promptTokens = promptTokens,
             completionTokens = completionTokens,
             cachedTokens = cachedTokens,
+            requestSnapshot = snapshot,
         )
     }
 
@@ -154,22 +159,28 @@ internal object OpenAiAdapter : ProviderAdapter {
             // xAI 的临时图片 URL 可能被资源服务器拒绝；直接返回 base64，避免二次下载。
             if (xaiImageModel) put("response_format", "b64_json")
         }
-        val response = SseClient.postJson(
-            url = provider.apiEndpoint(
-                if (xaiImageModel && sourceImages.isNotEmpty()) "/images/edits"
-                else "/images/generations",
-            ),
-            headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
-            body = body,
-            stopped = stopped,
-            onCall = onCall,
+        val endpoint = provider.apiEndpoint(
+            if (xaiImageModel && sourceImages.isNotEmpty()) "/images/edits"
+            else "/images/generations",
         )
-        val images = parseGeneratedImages(response) { url ->
-            stopped()
-            downloadGeneratedImage(url, stopped, onCall)
+        val snapshot = requestSnapshot(endpoint, body)
+        val images = captureRequestFailure(snapshot, stopped) {
+            val response = SseClient.postJson(
+                url = endpoint,
+                headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
+                body = body,
+                stopped = stopped,
+                onCall = onCall,
+            )
+            parseGeneratedImages(response) { url ->
+                stopped()
+                downloadGeneratedImage(url, stopped, onCall)
+            }.also { check(it.isNotEmpty()) { "Image generation returned no images" } }
         }
-        check(images.isNotEmpty()) { "Image generation returned no images" }
-        return StreamEnd(generatedImages = images)
+        return StreamEnd(
+            generatedImages = images,
+            requestSnapshot = snapshot,
+        )
     }
 
     private fun downloadGeneratedImage(

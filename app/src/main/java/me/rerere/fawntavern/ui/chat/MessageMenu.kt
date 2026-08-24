@@ -28,6 +28,7 @@ import me.rerere.fawntavern.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.SquarePen
 import com.composables.icons.lucide.Trash2
@@ -39,10 +40,12 @@ import com.composables.icons.lucide.Trash2
 fun MessageMenu(
     onDismiss: () -> Unit,
     onSelectCopy: () -> Unit = {},
+    onViewRequestBody: () -> Unit = {},
     onEdit: () -> Unit = {},
     onDeleteCurrentVersion: () -> Unit = {},
     onDeleteAllVersions: () -> Unit = {},
     hasMultipleVersions: Boolean = true,
+    canViewRequestBody: Boolean = false,
 ) {
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
@@ -74,6 +77,21 @@ fun MessageMenu(
                 label = stringResource(R.string.select_copy),
                 onClick = { onSelectCopy() }
             )
+
+            if (canViewRequestBody) {
+                MenuRow(
+                    icon = {
+                        Icon(
+                            Lucide.FileJson,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    },
+                    label = stringResource(R.string.request_body),
+                    onClick = onViewRequestBody,
+                )
+            }
 
             MenuRow(
                 icon = {

@@ -45,13 +45,17 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
         var receivedContentDelta = false
         var receivedReasoningDelta = false
 
-        SseClient.post(
-            url = endpoint(provider),
+        val endpoint = endpoint(provider)
+        val body = buildRequestBody(provider, model, messages, params, tools, stream = true)
+        val snapshot = requestSnapshot(endpoint, body)
+        captureRequestFailure(snapshot, stopped) {
+            SseClient.post(
+            url = endpoint,
             headers = model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
-            body = buildRequestBody(provider, model, messages, params, tools, stream = true),
+            body = body,
             stopped = stopped,
             onCall = onCall,
-        ) { data ->
+            ) { data ->
             if (data == "[DONE]") return@post
             val event = JSONObject(data)
             throwIfErrorEvent(event)
@@ -111,6 +115,7 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
                     generatedImages = parsed.generatedImages
                 }
             }
+            }
         }
 
         return StreamEnd(
@@ -128,6 +133,7 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
             completionTokens = completionTokens,
             cachedTokens = cachedTokens,
             generatedImages = generatedImages,
+            requestSnapshot = snapshot,
         )
     }
 

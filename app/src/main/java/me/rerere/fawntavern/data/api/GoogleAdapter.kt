@@ -98,17 +98,20 @@ internal object GoogleAdapter : ProviderAdapter {
         var promptTokens = 0
         var completionTokens = 0
         var cachedTokens = 0
-        SseClient.post(
-            url = provider.apiEndpoint(
-                "/models/{model}:streamGenerateContent?alt=sse",
-                model.id,
-            ),
+        val endpoint = provider.apiEndpoint(
+            "/models/{model}:streamGenerateContent?alt=sse",
+            model.id,
+        )
+        val snapshot = requestSnapshot(endpoint, body)
+        captureRequestFailure(snapshot, stopped) {
+            SseClient.post(
+            url = endpoint,
             // 密钥走 x-goog-api-key 请求头，不再拼进 URL
             headers = model.applyHeaders(mapOf("x-goog-api-key" to provider.apiKey)),
             body = body,
             stopped = stopped,
             onCall = onCall,
-        ) { data ->
+            ) { data ->
             val obj = JSONObject(data)
             obj.optJSONObject("usageMetadata")?.let { usage ->
                 promptTokens = usage.optInt("promptTokenCount", promptTokens)
@@ -151,6 +154,7 @@ internal object GoogleAdapter : ProviderAdapter {
                 // 思考内容与正文混在同一个 parts 数组里，只靠 thought=true 区分（不分流会当正文输出）
                 if (part.optBoolean("thought")) onDelta("", text) else onDelta(text, "")
             }
+            }
         }
         return StreamEnd(
             toolCalls = toolCalls.values.toList(),
@@ -158,6 +162,7 @@ internal object GoogleAdapter : ProviderAdapter {
             completionTokens = completionTokens,
             cachedTokens = cachedTokens,
             generatedImages = generatedImages,
+            requestSnapshot = snapshot,
         )
     }
 

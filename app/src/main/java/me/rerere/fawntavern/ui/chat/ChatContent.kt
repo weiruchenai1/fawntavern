@@ -61,6 +61,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.data.api.ApiRequestSnapshot
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.ThemeMode
@@ -678,6 +679,13 @@ internal fun ChatContent(
                 )
                 menuTargetIdx = null
             },
+            onViewRequestBody = {
+                copyPanel = CopyPanel(
+                    title = resources.getString(R.string.request_body),
+                    text = formatRequestSnapshots(menuMsg.requestSnapshots),
+                )
+                menuTargetIdx = null
+            },
             onEdit = {
                 vm.startEdit(menuTs)
                 menuTargetIdx = null
@@ -701,6 +709,7 @@ internal fun ChatContent(
                 menuTargetIdx = null
             },
             hasMultipleVersions = menuMsg.alts.size > 1,
+            canViewRequestBody = menuMsg.role == "assistant" && menuMsg.requestSnapshots.isNotEmpty(),
         )
     }
 
@@ -846,5 +855,31 @@ private data class CopyPanel(
     val editable: Boolean = false,
     val preview: TextCopyPreview? = null,
 )
+
+internal fun formatRequestSnapshots(snapshots: List<ApiRequestSnapshot>): String {
+    fun parsedBody(body: String): Any = runCatching {
+        when (body.trimStart().firstOrNull()) {
+            '{' -> JSONObject(body)
+            '[' -> JSONArray(body)
+            else -> body
+        }
+    }.getOrDefault(body)
+
+    fun detail(index: Int, snapshot: ApiRequestSnapshot) = JSONObject().apply {
+        if (snapshots.size > 1) put("round", index + 1)
+        put("endpoint", snapshot.endpoint)
+        put("body", parsedBody(snapshot.body))
+    }
+
+    val formatted = if (snapshots.size == 1) {
+        detail(0, snapshots.single()).toString(2)
+    } else {
+        JSONArray().apply {
+            snapshots.forEachIndexed { index, snapshot -> put(detail(index, snapshot)) }
+        }.toString(2)
+    }
+    // Android JSONObject 会把 URL 的斜杠写成 `\/`；详情页只做显示还原，不改变存储内容。
+    return formatted.replace("\\/", "/")
+}
 
 /** 状态栏高度（px），用于把悬浮窗初始位置放到顶栏之下 */

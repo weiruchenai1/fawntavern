@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import me.rerere.fawntavern.data.api.ApiRequestSnapshot
 import me.rerere.fawntavern.domain.ConversationOps
 
 /** 聊天会话存储：Room 数据库（sessions + messages 两张表），写入后 Flow 自动重发 */
@@ -306,6 +307,10 @@ object ChatRepository {
         completionTokens = completionTokens,
         cachedTokens = cachedTokens,
         generationMs = generationMs,
+        requestSnapshots = if (requestSnapshotsJson.isBlank()) emptyList()
+                           else try {
+                               json.decodeFromString<List<ApiRequestSnapshot>>(requestSnapshotsJson)
+                           } catch (_: Exception) { emptyList() },
     )
 
     private fun ChatMessage.toEntity(sessionId: String) = MessageEntity(
@@ -326,5 +331,6 @@ object ChatRepository {
         completionTokens = completionTokens,
         cachedTokens = cachedTokens,
         generationMs = generationMs,
+        requestSnapshotsJson = if (requestSnapshots.isEmpty()) "" else json.encodeToString(requestSnapshots),
     )
 }

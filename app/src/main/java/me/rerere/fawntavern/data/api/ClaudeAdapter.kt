@@ -81,8 +81,11 @@ internal object ClaudeAdapter : ProviderAdapter {
         var promptTokens = 0
         var completionTokens = 0
         var cachedTokens = 0
-        SseClient.post(
-            url = provider.apiEndpoint("/messages"),
+        val endpoint = provider.apiEndpoint("/messages")
+        val snapshot = requestSnapshot(endpoint, body)
+        captureRequestFailure(snapshot, stopped) {
+            SseClient.post(
+            url = endpoint,
             headers = model.applyHeaders(mapOf(
                 "x-api-key" to provider.apiKey,
                 "anthropic-version" to "2023-06-01",
@@ -90,7 +93,7 @@ internal object ClaudeAdapter : ProviderAdapter {
             body = body,
             stopped = stopped,
             onCall = onCall,
-        ) { data ->
+            ) { data ->
             val obj = JSONObject(data)
             when (obj.optString("type")) {
                 "message_start" -> obj.optJSONObject("message")?.optJSONObject("usage")?.let { usage ->
@@ -132,6 +135,7 @@ internal object ClaudeAdapter : ProviderAdapter {
                 "error" -> throw IllegalStateException(
                     obj.optJSONObject("error")?.optString("message") ?: "Claude API error")
             }
+            }
         }
         val toolCalls = blocks.values.filter { it.type == "tool_use" }.map { b ->
             ApiToolCall(
@@ -144,6 +148,7 @@ internal object ClaudeAdapter : ProviderAdapter {
             promptTokens = promptTokens,
             completionTokens = completionTokens,
             cachedTokens = cachedTokens,
+            requestSnapshot = snapshot,
         )
         // 原样重建本轮 assistant 内容块（thinking 签名 / redacted_thinking 必须逐字回显）
         val raw = JSONArray()
@@ -172,6 +177,7 @@ internal object ClaudeAdapter : ProviderAdapter {
             promptTokens = promptTokens,
             completionTokens = completionTokens,
             cachedTokens = cachedTokens,
+            requestSnapshot = snapshot,
         )
     }
 
