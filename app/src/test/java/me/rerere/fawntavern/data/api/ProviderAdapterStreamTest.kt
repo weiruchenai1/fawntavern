@@ -6,6 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -164,8 +165,7 @@ class ProviderAdapterStreamTest {
         val encodedTools = body.getJSONArray("tools")
         assertTrue(encodedTools.getJSONObject(0).has("googleSearch"))
         assertTrue(encodedTools.getJSONObject(1).has("functionDeclarations"))
-        assertEquals("ANY", body.getJSONObject("toolConfig")
-            .getJSONObject("functionCallingConfig").getString("mode"))
+        assertFalse(body.has("toolConfig"))
     }
 
     @Test

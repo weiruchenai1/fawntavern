@@ -539,7 +539,7 @@ internal fun extractFencedHtmlMessage(source: String): String? {
 
 private fun wrapFencedResource(source: String, tag: String): String {
     val alreadyWrapped = Regex("(?is)^\\s*<$tag\\b").containsMatchIn(source)
-    return if (alreadyWrapped) source else "<$tag>\n$source</$tag>"
+    return if (alreadyWrapped) source else "<$tag>\n$source\n</$tag>"
 }
 
 internal fun extractStandaloneHtmlDocument(source: String): String? {
