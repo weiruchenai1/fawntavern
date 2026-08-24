@@ -18,6 +18,8 @@ class ChatUiSettingsControllerTest {
             showChatBarModelName = false,
             showChatBarProvider = false,
             showUserAvatar = false,
+            htmlCssRendering = false,
+            javascriptSupport = false,
             characterMarkdown = false,
             newChatOnLaunch = false,
             enterToSend = true,
@@ -29,11 +31,14 @@ class ChatUiSettingsControllerTest {
         assertTrue(initial.showChatBarModelName)
         assertTrue(initial.showChatBarProvider)
         assertTrue(initial.showUserAvatar)
+        assertFalse(initial.javascriptSupport)
         assertEquals(1.0f, initial.fontScale, 0.0f)
         assertFalse(refreshed.showChatBarCharacterName)
         assertFalse(refreshed.showChatBarModelName)
         assertFalse(refreshed.showChatBarProvider)
         assertFalse(refreshed.showUserAvatar)
+        assertFalse(refreshed.htmlCssRendering)
+        assertFalse(refreshed.javascriptSupport)
         assertFalse(refreshed.characterMarkdown)
         assertFalse(refreshed.newChatOnLaunch)
         assertTrue(refreshed.enterToSend)

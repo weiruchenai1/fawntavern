@@ -1,6 +1,8 @@
 package me.rerere.fawntavern.ui.chat
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HtmlMessageContentTest {
@@ -52,6 +54,20 @@ class HtmlMessageContentTest {
     }
 
     @Test
+    fun extractFencedHtmlMessageWrapsCssAndJavaScriptSections() {
+        val extracted = extractFencedHtmlMessage(
+            "```html\n<div class=\"card\">content</div>\n```\n" +
+                "```css\n.card { color: red; }\n```\n" +
+                "```javascript\nwindow.cardReady = true;\n```",
+        ).orEmpty()
+
+        assertTrue(extracted.contains("<div class=\"card\">content</div>"))
+        assertTrue(extracted.contains("<style>\n.card { color: red; }\n</style>"))
+        assertTrue(extracted.contains("<script>\nwindow.cardReady = true;\n</script>"))
+        assertFalse(extracted.contains("```"))
+    }
+
+    @Test
     fun replaceViewportHeightUnitsUsesParentViewportVariable() {
         assertEquals(
             ".full{min-height:var(--TH-viewport-height);}.half{max-height:calc(var(--TH-viewport-height) * 0.5);}.fixed{height:calc(var(--TH-viewport-height) * 0.7);}",
@@ -59,5 +75,44 @@ class HtmlMessageContentTest {
                 ".full{min-height:100vh;}.half{max-height:50vh;}.fixed{height:70vh;}",
             ),
         )
+    }
+
+    @Test
+    fun sanitizeHtmlRemovesContentJavaScriptWhenDisabled() {
+        val sanitized = sanitizeHtml(
+            "<style>.card{color:red}</style><div onclick=\"run()\">card</div><script>run()</script>" +
+                "<iframe src=\"https://example.com/card\" srcdoc=\"<button onclick='run()'>run</button>\"></iframe>",
+            allowContentJavaScript = false,
+        )
+
+        assertTrue(sanitized.contains(".card"))
+        assertTrue(sanitized.contains("card"))
+        assertFalse(sanitized.contains("onclick"))
+        assertFalse(sanitized.contains("<script"))
+        assertFalse(sanitized.contains("https://example.com/card"))
+    }
+
+    @Test
+    fun sanitizeHtmlKeepsInlineJavaScriptWhenEnabled() {
+        val sanitized = sanitizeHtml(
+            "<button onclick=\"run()\">run</button><script src=\"https://example.com/card.js\"></script><script>run()</script>",
+            allowContentJavaScript = true,
+        )
+
+        assertTrue(sanitized.contains("onclick"))
+        assertTrue(sanitized.contains("<script"))
+        assertTrue(sanitized.contains("https://example.com/card.js"))
+    }
+
+    @Test
+    fun sanitizeHtmlKeepsExternalHttpsImages() {
+        val sanitized = sanitizeHtml(
+            "<figure><img loading=\"lazy\" src=\"https://example.com/card.png\" srcset=\"https://example.com/card@2x.png 2x\"></figure>",
+            allowContentJavaScript = false,
+        )
+
+        assertTrue(sanitized.contains("https://example.com/card.png"))
+        assertTrue(sanitized.contains("https://example.com/card@2x.png"))
+        assertTrue(sanitized.contains("loading=\"eager\""))
     }
 }

@@ -692,7 +692,14 @@
     <string name="show_token_speed">Show token generation speed</string>
     <string name="show_generation_time">Show total generation time</string>
     <string name="rendering_settings">Rendering</string>
-    <string name="math_rendering">Enable math formula rendering</string>
+    <string name="html_css_rendering">HTML and CSS rendering</string>
+    <string name="html_css_rendering_desc">Render HTML page structure and CSS styles in messages</string>
+    <string name="javascript_support">JavaScript support</string>
+    <string name="javascript_support_desc">Allow HTML content to run JavaScript and load remote scripts</string>
+    <string name="javascript_warning_title">Enable JavaScript support?</string>
+    <string name="javascript_warning_message">Malicious character cards, presets, or model output may load remote code, expose conversation data, perform unexpected actions, or continuously consume system resources. Enable this only for content you trust.</string>
+    <string name="javascript_warning_confirm">Enable anyway</string>
+    <string name="math_rendering">Math formula rendering</string>
     <string name="math_rendering_desc">Recognize formulas wrapped in $…$ and $$…$$ and render them separately</string>
     <string name="user_markdown">User message markdown</string>
     <string name="thinking_markdown">Thinking chain markdown</string>

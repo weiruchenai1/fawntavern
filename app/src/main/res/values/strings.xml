@@ -690,7 +690,14 @@
     <string name="show_token_speed">显示 token 生成速率</string>
     <string name="show_generation_time">显示生成总用时</string>
     <string name="rendering_settings">渲染设置</string>
-    <string name="math_rendering">启用数学公式渲染</string>
+    <string name="html_css_rendering">HTML和CSS渲染</string>
+    <string name="html_css_rendering_desc">渲染消息中的 HTML 页面结构和 CSS 样式</string>
+    <string name="javascript_support">JavaScript支持</string>
+    <string name="javascript_support_desc">允许 HTML 内容运行 JavaScript 和加载远程脚本</string>
+    <string name="javascript_warning_title">开启 JavaScript 支持？</string>
+    <string name="javascript_warning_message">恶意角色卡、预设或模型输出可能加载远程代码、泄露对话信息、执行未预期操作或持续消耗系统资源。请仅在信任内容来源时开启。</string>
+    <string name="javascript_warning_confirm">仍要开启</string>
+    <string name="math_rendering">数学公式渲染</string>
     <string name="math_rendering_desc">识别 $…$ 与 $$…$$ 包裹的公式并单独渲染</string>
     <string name="user_markdown">用户消息markdown渲染</string>
     <string name="thinking_markdown">思维链markdown渲染</string>

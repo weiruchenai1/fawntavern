@@ -75,6 +75,10 @@ private val noTextAnimations = DefaultMarkdownAnimation(animateTextSize = { this
 data class RenderPrefs(
     /** 是否以 markdown 渲染（关闭时按纯文本） */
     val markdown: Boolean = true,
+    /** 是否用 WebView 渲染消息中的 HTML 和 CSS */
+    val htmlCss: Boolean = true,
+    /** 是否允许运行 HTML 内容中的内联 JavaScript */
+    val javascript: Boolean = false,
     /** 识别 $…$ 与 $$…$$ 包裹的公式并单独渲染 */
     val math: Boolean = false,
     /** 超过阈值行数的代码块自动折叠 */
@@ -96,7 +100,7 @@ data class RenderPrefs(
  * @param depth 消息深度（从底向上 0 递增），用于正则脚本的 minDepth/maxDepth 过滤
  * @param userName persona 名（用于 {{user}} 宏替换）
  * @param charName 角色名（用于 {{char}} 宏替换）
- * @param renderPrefs 渲染设置分组的开关（markdown / 数学 / 代码块折叠）
+ * @param renderPrefs 渲染设置分组的开关（HTML / JavaScript / markdown / 数学 / 代码块折叠）
  */
 @Composable
 fun MessageContent(
@@ -138,8 +142,8 @@ fun MessageContent(
         )
     }
 
-    // markdown 关闭：按纯文本渲染（正则/宏仍套用，保证与发送侧口径一致）
-    if (!renderPrefs.markdown) {
+    // HTML/CSS 与 Markdown 相互独立，只有两者都关闭时才直接按纯文本渲染。
+    if (!renderPrefs.markdown && !renderPrefs.htmlCss) {
         Text(
             processed,
             style = textStyle,
@@ -151,10 +155,10 @@ fun MessageContent(
 
     // 流式输出经常在结束围栏抵达前停留数帧。临时补齐结束围栏，代码从第一行起就按代码块
     // 测量和显示；真实结束围栏到达后补丁自然消失，不会改变最终存储内容。
-    // Fenced role-card output is one document: styles, scripts, body, and iframes must stay in the
-    // same WebView. Removing fences and then running Markdown segmentation would split that runtime.
-    val wholeHtmlPage = remember(processed, isStreaming) {
-        if (isStreaming) null else {
+    // 带围栏的角色卡输出属于同一文档，样式、脚本、正文和 iframe 必须放在同一个 WebView 中。
+    // 若先移除围栏再按 Markdown 分段，会破坏同一文档内的运行环境。
+    val wholeHtmlPage = remember(processed, isStreaming, renderPrefs.htmlCss) {
+        if (isStreaming || !renderPrefs.htmlCss) null else {
             extractFencedHtmlMessage(processed)
                 ?: processed.takeIf(::isBareHtmlFragment)
         }
@@ -164,6 +168,7 @@ fun MessageContent(
             html = wholeHtmlPage,
             textStyle = textStyle,
             modifier = if (fillWidth) modifier.fillMaxWidth() else modifier,
+            allowContentJavaScript = renderPrefs.javascript,
             chatMessagesJson = chatMessagesJson,
             onSetInputText = onSetInputText,
             onSetChatMessage = onSetChatMessage,
@@ -182,20 +187,21 @@ fun MessageContent(
             segments.forEachIndexed { index, segment ->
                 key(index, segment.text.hashCode(), segment.isHtml) {
                     if (segment.isHtml) {
-                        if (isStreaming) {
+                        if (isStreaming || !renderPrefs.htmlCss) {
                             Text(segment.text, style = textStyle, color = MaterialTheme.colorScheme.onSurface)
                         } else {
                             HtmlMessageContent(
                                 html = segment.text,
                                 textStyle = textStyle,
                                 modifier = Modifier.fillMaxWidth(),
+                                allowContentJavaScript = renderPrefs.javascript,
                                 chatMessagesJson = chatMessagesJson,
                                 onSetInputText = onSetInputText,
                                 onSetChatMessage = onSetChatMessage,
                                 onSelectChatMessageSwipe = onSelectChatMessageSwipe,
                             )
                         }
-                    } else {
+                    } else if (renderPrefs.markdown) {
                         MarkdownMessageBlock(
                             content = segment.text,
                             textStyle = textStyle,
@@ -203,24 +209,40 @@ fun MessageContent(
                             renderPrefs = renderPrefs,
                             fillWidth = true,
                         )
+                    } else {
+                        Text(
+                            segment.text,
+                            style = textStyle,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             }
         }
         return
     }
-    MarkdownMessageBlock(
-        content = streamSafe,
-        textStyle = textStyle,
-        modifier = modifier,
-        renderPrefs = renderPrefs,
-        fillWidth = fillWidth,
-    )
+    if (renderPrefs.markdown) {
+        MarkdownMessageBlock(
+            content = streamSafe,
+            textStyle = textStyle,
+            modifier = modifier,
+            renderPrefs = renderPrefs,
+            fillWidth = fillWidth,
+        )
+    } else {
+        Text(
+            streamSafe,
+            style = textStyle,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = if (fillWidth) modifier.fillMaxWidth() else modifier,
+        )
+    }
 }
 
 private data class MessageRenderSegment(val text: String, val isHtml: Boolean)
 
-/** Split bare HTML blocks. Fenced html/css/text always remain ordinary Markdown code. */
+/** 拆分裸 HTML 块；完整的围栏角色卡文档会在调用此函数前处理。 */
 private fun splitBareHtmlSegments(text: String): List<MessageRenderSegment> {
     val root = runCatching { markdownParser.buildMarkdownTreeFromString(text) }.getOrNull()
         ?: return listOf(MessageRenderSegment(text, false))
@@ -228,9 +250,9 @@ private fun splitBareHtmlSegments(text: String): List<MessageRenderSegment> {
         node.type == MarkdownTokenTypes.HTML_TAG || node.children.any(::containsHtmlTag)
 
     val htmlBlocks = root.children.filter { node ->
-        // CommonMark classifies HTML indented by four spaces as CODE_BLOCK. SillyTavern-style model
-        // output often indents whole status widgets, so promote only root-level code blocks whose
-        // DOM consists entirely of HTML nodes and whitespace. Fenced code has a different AST type.
+        // CommonMark 会把缩进四个空格的 HTML 识别为代码块。SillyTavern 风格输出常会整体缩进
+        // 状态组件，因此这里只提升 DOM 完全由 HTML 节点和空白组成的顶层代码块；围栏代码
+        // 使用不同的 AST 类型，不会进入此分支。
         val source = text.substring(node.startOffset, node.endOffset)
         node.type == MarkdownElementTypes.HTML_BLOCK ||
             (node.type == MarkdownElementTypes.PARAGRAPH && containsHtmlTag(node)) ||

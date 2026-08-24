@@ -7,13 +7,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +43,7 @@ import com.composables.icons.lucide.Rows3
 import com.composables.icons.lucide.ShieldCheck
 import com.composables.icons.lucide.Sigma
 import com.composables.icons.lucide.Tag
+import com.composables.icons.lucide.TriangleAlert
 import com.composables.icons.lucide.Type
 import com.composables.icons.lucide.UserPlus
 import com.composables.icons.lucide.Vibrate
@@ -108,17 +112,24 @@ internal fun ChatItemDisplayScreen(onBack: () -> Unit) {
     }
 }
 
-/** 渲染设置：markdown / 数学 / 代码块折叠 */
+/** 渲染设置：HTML / JavaScript / markdown / 数学 / 代码块折叠 */
 @Composable
 internal fun RenderingSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
     var prefs by remember(controller) { mutableStateOf(controller.preferences()) }
+    var showJavascriptWarning by rememberSaveable { mutableStateOf(false) }
     fun save(next: Preferences) {
         prefs = controller.savePreferences(next)
     }
     PrefSubPage(stringResource(R.string.rendering_settings), onBack) {
         PrefSection(stringResource(R.string.rendering_settings)) {
+            PrefToggle(Lucide.Type, stringResource(R.string.html_css_rendering),
+                prefs.htmlCssRendering, desc = stringResource(R.string.html_css_rendering_desc)) { save(prefs.copy(htmlCssRendering = it)) }
+            PrefToggle(Lucide.ShieldCheck, stringResource(R.string.javascript_support),
+                prefs.javascriptSupport, desc = stringResource(R.string.javascript_support_desc)) { enabled ->
+                if (enabled) showJavascriptWarning = true else save(prefs.copy(javascriptSupport = false))
+            }
             PrefToggle(Lucide.Sigma, stringResource(R.string.math_rendering),
                 prefs.mathRendering, desc = stringResource(R.string.math_rendering_desc)) { save(prefs.copy(mathRendering = it)) }
             PrefToggle(Lucide.Type, stringResource(R.string.user_markdown), prefs.userMarkdown) { save(prefs.copy(userMarkdown = it)) }
@@ -134,6 +145,37 @@ internal fun RenderingSettingsScreen(onBack: () -> Unit) {
                 )
             }
         }
+    }
+    if (showJavascriptWarning) {
+        AlertDialog(
+            onDismissRequest = { showJavascriptWarning = false },
+            icon = {
+                Icon(
+                    Lucide.TriangleAlert,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            title = { Text(stringResource(R.string.javascript_warning_title)) },
+            text = { Text(stringResource(R.string.javascript_warning_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showJavascriptWarning = false
+                    save(prefs.copy(javascriptSupport = true))
+                }) {
+                    Text(
+                        stringResource(R.string.javascript_warning_confirm),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showJavascriptWarning = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }
 

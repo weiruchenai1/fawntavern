@@ -291,6 +291,8 @@ internal fun ChatContent(
     }
     val renderPrefs = RenderPrefs(
         markdown = prefs.characterMarkdown,
+        htmlCss = prefs.htmlCssRendering,
+        javascript = prefs.javascriptSupport,
         math = prefs.mathRendering,
         autoCollapseCode = prefs.autoCollapseCode,
         codeCollapseLines = prefs.codeCollapseLines,

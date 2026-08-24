@@ -28,6 +28,8 @@ data class Preferences(
     val showGenerationTime: Boolean = false,
 
     // ── 渲染设置 ──
+    val htmlCssRendering: Boolean = true,
+    val javascriptSupport: Boolean = false,
     val mathRendering: Boolean = false,
     val userMarkdown: Boolean = true,
     val thinkingMarkdown: Boolean = true,
@@ -75,6 +77,8 @@ object PreferencesStore {
     private const val K_SHOW_TOKEN_USAGE = "showTokenUsage"
     private const val K_SHOW_TOKEN_SPEED = "showTokenSpeed"
     private const val K_SHOW_GENERATION_TIME = "showGenerationTime"
+    private const val K_HTML_CSS_RENDERING = "htmlCssRendering"
+    private const val K_JAVASCRIPT_SUPPORT = "javascriptSupport"
     private const val K_MATH_RENDERING = "mathRendering"
     private const val K_USER_MARKDOWN = "userMarkdown"
     private const val K_THINKING_MARKDOWN = "thinkingMarkdown"
@@ -116,6 +120,8 @@ object PreferencesStore {
             showTokenUsage = p.getBoolean(K_SHOW_TOKEN_USAGE, d.showTokenUsage),
             showTokenSpeed = p.getBoolean(K_SHOW_TOKEN_SPEED, d.showTokenSpeed),
             showGenerationTime = p.getBoolean(K_SHOW_GENERATION_TIME, d.showGenerationTime),
+            htmlCssRendering = p.getBoolean(K_HTML_CSS_RENDERING, d.htmlCssRendering),
+            javascriptSupport = p.getBoolean(K_JAVASCRIPT_SUPPORT, d.javascriptSupport),
             mathRendering = p.getBoolean(K_MATH_RENDERING, d.mathRendering),
             userMarkdown = p.getBoolean(K_USER_MARKDOWN, d.userMarkdown),
             thinkingMarkdown = p.getBoolean(K_THINKING_MARKDOWN, d.thinkingMarkdown),
@@ -154,6 +160,8 @@ object PreferencesStore {
             .putBoolean(K_SHOW_TOKEN_USAGE, s.showTokenUsage)
             .putBoolean(K_SHOW_TOKEN_SPEED, s.showTokenSpeed)
             .putBoolean(K_SHOW_GENERATION_TIME, s.showGenerationTime)
+            .putBoolean(K_HTML_CSS_RENDERING, s.htmlCssRendering)
+            .putBoolean(K_JAVASCRIPT_SUPPORT, s.javascriptSupport)
             .putBoolean(K_MATH_RENDERING, s.mathRendering)
             .putBoolean(K_USER_MARKDOWN, s.userMarkdown)
             .putBoolean(K_THINKING_MARKDOWN, s.thinkingMarkdown)
