@@ -29,7 +29,6 @@ import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.api.Modality
 import me.rerere.fawntavern.data.api.ReasoningLevel
-import me.rerere.fawntavern.data.api.ToolChoice
 import me.rerere.fawntavern.data.api.supportsBuiltInTool
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
@@ -79,7 +78,6 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     var reasoning by mutableStateOf(modelController.reasoning(apiConfig.currentModel)); private set
     /** 当前模型的图片生成控制项（按模型记忆）。 */
     var imageGeneration by mutableStateOf(modelController.imageGeneration(apiConfig.currentModel)); private set
-    var toolChoice by mutableStateOf(modelController.toolChoice(apiConfig.currentModel)); private set
     var sessions by mutableStateOf<List<ChatSession>>(emptyList()); private set
     var session by mutableStateOf<ChatSession?>(null); private set
     var currentCard by mutableStateOf<CharacterCard?>(null); private set
@@ -250,7 +248,6 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val spec = modelController.effectiveModelSpec(currentCard?.name, apiConfig).orEmpty()
                 reasoning = modelController.reasoning(spec)
                 imageGeneration = modelController.imageGeneration(spec)
-                toolChoice = modelController.toolChoice(spec)
             }
         }
         // 切换会话即清空 overlay：overlay 按 ts 索引，而 ts 仅在会话内唯一，跨会话残留会误覆盖
@@ -277,7 +274,6 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // displayModelSpec 负责角色记忆 > ROLE_CHAT > apiConfig.currentModel 的完整回退
         reasoning = modelController.reasoning(displayModelSpec() ?: apiConfig.currentModel)
         imageGeneration = modelController.imageGeneration(displayModelSpec() ?: apiConfig.currentModel)
-        toolChoice = modelController.toolChoice(displayModelSpec() ?: apiConfig.currentModel)
     }
 
     /** 从偏好或字号页面返回时刷新聊天页使用的设置快照。 */
@@ -289,7 +285,6 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val spec = "$providerId::$modelId"
         reasoning = modelController.select(currentCard?.name, spec)
         imageGeneration = modelController.imageGeneration(spec)
-        toolChoice = modelController.toolChoice(spec)
         modelRevision++
     }
 
@@ -302,11 +297,6 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun updateImageGeneration(settings: ImageGenerationSettings) {
         imageGeneration = settings
         modelController.saveImageGeneration(displayModelSpec() ?: apiConfig.currentModel, settings)
-    }
-
-    fun updateToolChoice(choice: ToolChoice) {
-        toolChoice = choice
-        modelController.saveToolChoice(displayModelSpec() ?: apiConfig.currentModel, choice)
     }
 
     /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
@@ -767,7 +757,6 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 promptRegex = (currentCard?.regexScripts ?: emptyList()) + presetRegex,
                 reasoning = reasoning,
                 imageGeneration = imageGeneration,
-                toolChoice = toolChoice,
                 searchEnabled = searchEnabled,
             ),
             onStarted = { base, message ->

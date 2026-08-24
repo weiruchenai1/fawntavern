@@ -153,7 +153,7 @@ class ProviderAdapterStreamTest {
             provider = provider("google"),
             model = ModelInfo("gemini-3.7-flash", tools = setOf(BuiltInTool.SEARCH)),
             messages = listOf(ApiMessage("user", "search")),
-            params = GenParams(toolChoice = ToolChoice.REQUIRED),
+            params = GenParams(),
             tools = listOf(ToolSpec("search_web", "Search", "{\"type\":\"object\"}")),
             onDelta = { _, _ -> },
             stopped = {},

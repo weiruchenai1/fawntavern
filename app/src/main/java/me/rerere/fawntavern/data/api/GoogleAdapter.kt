@@ -79,15 +79,6 @@ internal object GoogleAdapter : ProviderAdapter {
                 }))
             }
             if (encodedTools.length() > 0) put("tools", encodedTools)
-            if (tools.isNotEmpty() && params?.toolChoice != ToolChoice.AUTO) {
-                put("toolConfig", JSONObject().put("functionCallingConfig", JSONObject().apply {
-                    put("mode", when (params?.toolChoice) {
-                        ToolChoice.REQUIRED -> "ANY"
-                        ToolChoice.NONE -> "NONE"
-                        else -> "AUTO"
-                    })
-                }))
-            }
             put("contents", JSONArray().apply {
                 merged.forEach { m -> encodeContents(m).forEach { put(it) } }
             })

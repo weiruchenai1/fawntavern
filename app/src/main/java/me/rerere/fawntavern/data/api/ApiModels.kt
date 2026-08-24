@@ -44,7 +44,6 @@ data class ApiImage(
 )
 
 /** 控制模型在当前请求中是否可以选择应用提供的自定义函数。 */
-enum class ToolChoice { AUTO, REQUIRED, NONE }
 
 /** 图片生成接口返回的图片内容；由聊天层落盘后写入消息附件。 */
 data class GeneratedImage(
@@ -71,7 +70,6 @@ data class GenParams(
     val seed: Int? = null,
     /** 思考预算档位（来自 ThinkingStore，按模型记忆）；AUTO = 不下发任何思考字段 */
     val reasoning: ReasoningLevel = ReasoningLevel.AUTO,
-    val toolChoice: ToolChoice = ToolChoice.AUTO,
     val imageGeneration: ImageGenerationSettings? = null,
 )
 

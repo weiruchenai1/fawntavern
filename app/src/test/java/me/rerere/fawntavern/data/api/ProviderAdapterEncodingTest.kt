@@ -115,33 +115,6 @@ class ProviderAdapterEncodingTest {
     }
 
     @Test
-    fun openAiToolChoiceUsesRequired() {
-        val body = OpenAiResponsesAdapter.buildRequestBody(
-            provider = ApiProvider(baseUrl = "https://api.openai.com/v1"),
-            model = ModelInfo("gpt-test"),
-            messages = listOf(ApiMessage("user", "hello")),
-            params = GenParams(toolChoice = ToolChoice.REQUIRED),
-            tools = listOf(ToolSpec("search_web", "Search", "{\"type\":\"object\"}")),
-            stream = true,
-        )
-        assertEquals("required", body.getString("tool_choice"))
-    }
-
-    @Test
-    fun openAiResponsesOmitsToolChoiceWithoutCustomTools() {
-        val body = OpenAiResponsesAdapter.buildRequestBody(
-            provider = ApiProvider(baseUrl = "https://api.openai.com/v1"),
-            model = ModelInfo("gpt-test"),
-            messages = listOf(ApiMessage("user", "hello")),
-            params = GenParams(toolChoice = ToolChoice.REQUIRED),
-            tools = emptyList(),
-            stream = true,
-        )
-
-        assertTrue(!body.has("tool_choice"))
-    }
-
-    @Test
     fun claudeEncodesToolUseAndToolResult() {
         val encoded = ClaudeAdapter.encodeMessage(ApiMessage("assistant", "", toolCalls = listOf(call)))
 

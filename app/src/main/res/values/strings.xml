@@ -606,11 +606,6 @@
     <string name="search_service">搜索服务</string>
     <string name="web_search_enabled">已开启</string>
     <string name="web_search_disabled">已关闭</string>
-    <string name="tool_choice_title">函数调用方式</string>
-    <string name="tool_choice_hint">控制模型如何使用由应用执行的工具</string>
-    <string name="tool_choice_auto">自动</string>
-    <string name="tool_choice_required">必须</string>
-    <string name="tool_choice_none">禁止</string>
     <string name="search_open_config">服务设置</string>
     <string name="search_provider">搜索提供商</string>
     <string name="search_add_provider">添加搜索服务</string>

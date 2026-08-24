@@ -44,11 +44,6 @@ internal object OpenAiAdapter : ProviderAdapter {
                             .put("parameters", JSONObject(t.parametersSchema))))
                     }
                 })
-                when (params?.toolChoice) {
-                    ToolChoice.REQUIRED -> put("tool_choice", "required")
-                    ToolChoice.NONE -> put("tool_choice", "none")
-                    else -> Unit
-                }
             }
             put("messages", JSONArray().apply {
                 messages.forEach { m -> encodeMessage(m).forEach { put(it) } }

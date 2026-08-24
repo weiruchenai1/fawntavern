@@ -70,7 +70,7 @@ object ModelApi {
             inputModalities = if (input.isEmpty()) guess.inputModalities else modalitiesOf(input),
             outputModalities = if (output.isEmpty()) guess.outputModalities else modalitiesOf(output),
             abilities = if (params.isEmpty()) guess.abilities else buildList {
-                if (params.any { it == "tools" || it == "tool_choice" }) add(ModelAbility.TOOL)
+                if (params.any { it == "tools" }) add(ModelAbility.TOOL)
                 if (params.any { it == "reasoning" || it == "include_reasoning" }) add(ModelAbility.REASONING)
             },
         )

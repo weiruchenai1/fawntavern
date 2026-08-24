@@ -608,11 +608,6 @@
     <string name="search_service">Search service</string>
     <string name="web_search_enabled">Enabled</string>
     <string name="web_search_disabled">Disabled</string>
-    <string name="tool_choice_title">Function calling</string>
-    <string name="tool_choice_hint">Control how the model uses tools executed by the app</string>
-    <string name="tool_choice_auto">Auto</string>
-    <string name="tool_choice_required">Required</string>
-    <string name="tool_choice_none">Off</string>
     <string name="search_open_config">Service settings</string>
     <string name="search_provider">Search provider</string>
     <string name="search_add_provider">Add search service</string>

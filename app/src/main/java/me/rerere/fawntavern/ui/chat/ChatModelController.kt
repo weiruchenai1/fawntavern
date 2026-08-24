@@ -5,12 +5,10 @@ import me.rerere.fawntavern.data.api.ApiConfig
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.api.ReasoningLevel
-import me.rerere.fawntavern.data.api.ToolChoice
 import me.rerere.fawntavern.data.settings.CharacterModelStore
 import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.data.settings.ImageGenerationStore
 import me.rerere.fawntavern.data.settings.ThinkingStore
-import me.rerere.fawntavern.data.settings.ToolChoiceStore
 
 internal interface ChatModelDataSource {
     fun characterModel(characterName: String): String
@@ -21,8 +19,6 @@ internal interface ChatModelDataSource {
     fun saveReasoning(modelSpec: String, level: ReasoningLevel)
     fun imageGeneration(modelSpec: String): ImageGenerationSettings
     fun saveImageGeneration(modelSpec: String, settings: ImageGenerationSettings)
-    fun toolChoice(modelSpec: String): ToolChoice
-    fun saveToolChoice(modelSpec: String, choice: ToolChoice)
 }
 
 internal class AndroidChatModelDataSource(
@@ -40,9 +36,6 @@ internal class AndroidChatModelDataSource(
     override fun imageGeneration(modelSpec: String): ImageGenerationSettings = ImageGenerationStore.get(context, modelSpec)
     override fun saveImageGeneration(modelSpec: String, settings: ImageGenerationSettings) =
         ImageGenerationStore.set(context, modelSpec, settings)
-    override fun toolChoice(modelSpec: String): ToolChoice = ToolChoiceStore.get(context, modelSpec)
-    override fun saveToolChoice(modelSpec: String, choice: ToolChoice) =
-        ToolChoiceStore.set(context, modelSpec, choice)
 }
 
 internal class ChatModelController(
@@ -74,12 +67,6 @@ internal class ChatModelController(
 
     fun saveImageGeneration(modelSpec: String, settings: ImageGenerationSettings) {
         dataSource.saveImageGeneration(modelSpec, settings)
-    }
-
-    fun toolChoice(modelSpec: String): ToolChoice = dataSource.toolChoice(modelSpec)
-
-    fun saveToolChoice(modelSpec: String, choice: ToolChoice) {
-        dataSource.saveToolChoice(modelSpec, choice)
     }
 
     fun resolveProvider(
