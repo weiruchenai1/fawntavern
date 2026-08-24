@@ -109,6 +109,7 @@
     <string name="select_model">Select Model</string>
     <string name="select_model_hint">Tap to select a model</string>
     <string name="select_character">Select Character</string>
+    <string name="select_preset">Select Preset</string>
     <string name="no_characters">No characters</string>
     <string name="default_character">Default Character</string>
     <string name="default_preset">Default Preset</string>
@@ -276,6 +277,7 @@
     <string name="role_assistant">Assistant</string>
     <string name="assoc_worldbooks">Associated World Books</string>
     <string name="assoc_preset">Linked Preset (optional)</string>
+    <string name="assoc_regex">Linked Regex (optional)</string>
     <string name="stream_output_label">Streaming output</string>
     <string name="stream_output_desc">Show the reply as it is generated; off shows it all at once when done</string>
     <string name="new_character">New Character</string>
@@ -284,14 +286,35 @@
     <string name="char_order_save_failed_fmt">Failed to save character order: %s</string>
 
     <!-- Presets -->
+    <string name="add_preset">Add preset</string>
+    <string name="preset_name_label">Preset name</string>
+    <string name="import_preset">Import preset</string>
+    <string name="preset_created">Preset created</string>
     <string name="no_presets_title">No presets</string>
     <string name="no_presets_desc">Tap + to import a SillyTavern preset</string>
     <string name="basic_params">Parameters</string>
     <string name="prompts">Prompts</string>
+    <string name="prompt_empty">No prompts</string>
+    <string name="prompt_empty_desc">Use the bottom-right button to add a prompt</string>
     <string name="regex_tab">Regex</string>
+    <string name="regex_title">Regex Scripts</string>
+    <string name="regex_global">Global</string>
+    <string name="regex_preset">Preset</string>
+    <string name="regex_local">Local</string>
+    <string name="regex_empty">No regex scripts</string>
+    <string name="regex_empty_desc">Use the bottom-right button to add or import regex</string>
+    <string name="regex_group_empty">No regex groups</string>
+    <string name="regex_group_empty_desc">Use the bottom-right button to add a regex group</string>
+    <string name="add_regex">Add regex</string>
+    <string name="add_regex_group">Add regex group</string>
+    <string name="regex_group_name">Regex group name</string>
+    <string name="import_regex">Import regex</string>
+    <string name="regex_count_fmt">%1$d regex scripts</string>
     <string name="regex_import">Import regex script</string>
     <string name="edit_regex">Edit Regex</string>
     <string name="delete_regex_title">Delete Regex Script</string>
+    <string name="delete_regex_group_title">Delete Regex Group</string>
+    <string name="delete_regex_group_msg_fmt">Delete "%s"? This cannot be undone.</string>
     <string name="find_regex_label">Find (Regex)</string>
     <string name="replace_string_label">Replace With</string>
     <string name="placement_user">Apply to user messages</string>

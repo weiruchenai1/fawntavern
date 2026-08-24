@@ -70,6 +70,7 @@ import androidx.compose.material3.RadioButton
 import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.ImagePlus
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquareText
@@ -125,6 +126,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     }
     var enabledWb by remember { mutableStateOf(card.enabledWorldBooks) }
     var linkedPreset by remember { mutableStateOf(card.linkedPreset) }
+    var linkedRegex by remember { mutableStateOf(card.linkedRegex) }
     var streaming by remember { mutableStateOf(card.streaming) }
     var greetings by remember {
         mutableStateOf(
@@ -253,6 +255,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 d.put("alternate_greetings", JSONArray(greetings.drop(1)))
                 d.put("enabled_world_books", JSONArray(enabledWb))
                 d.put("linked_preset", linkedPreset)
+                d.put("linked_regex", linkedRegex)
                 d.put("streaming", streaming)
                 // 角色注入提示写回 extensions.depth_prompt（空则移除）
                 val ext = d.optJSONObject("extensions") ?: JSONObject().also { d.put("extensions", it) }
@@ -617,6 +620,13 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                     linkedPreset = sel
                 }
             )
+
+            RegexSelector(
+                controller = controller,
+                currentCardFile = cardFileName,
+                selected = linkedRegex,
+                onSelect = { linkedRegex = it },
+            )
         }
     }
 
@@ -669,6 +679,64 @@ private fun PresetSelector(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RegexSelector(
+    controller: CharacterEditorController,
+    currentCardFile: String,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    var options by remember { mutableStateOf<List<CharacterRegexOption>>(emptyList()) }
+
+    LaunchedEffect(currentCardFile) {
+        options = controller.regexOptions()
+    }
+
+    if (options.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(Space8)) {
+        Text(
+            stringResource(R.string.assoc_regex),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = Space4),
+        )
+        options.forEach { option ->
+            val checked = option.id == selected
+            Row(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .clickable { onSelect(if (checked) "" else option.id) }
+                    .padding(horizontal = Space8, vertical = Space4),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(
+                    selected = checked,
+                    onClick = { onSelect(if (checked) "" else option.id) },
+                )
+                Spacer(Modifier.width(Space4))
+                Icon(
+                    Lucide.FileJson,
+                    null,
+                    Modifier.size(16.dp),
+                    tint = if (checked) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(Space8))
+                Text(
+                    option.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

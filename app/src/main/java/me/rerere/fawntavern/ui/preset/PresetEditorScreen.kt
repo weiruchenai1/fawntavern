@@ -33,8 +33,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
@@ -66,6 +70,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.FileJson
+import com.composables.icons.lucide.FilePlus
+import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
@@ -80,6 +87,7 @@ import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.AppTextArea
 import me.rerere.fawntavern.ui.components.draggableLiftScale
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
+import me.rerere.fawntavern.ui.components.EmptyState
 import me.rerere.fawntavern.ui.components.rememberReorderableList
 import sh.calvin.reorderable.ReorderableItem
 import me.rerere.fawntavern.ui.components.Space4
@@ -209,6 +217,16 @@ fun PresetEditorScreen(
                 2 -> RegexTab(
                     scripts = state.draft.regexScripts,
                     parseRegex = controller::parseRegex,
+                    onCreate = {
+                        dispatch(
+                            PresetEditorAction.CreateRegex(
+                                RegexScript(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                    scriptName = resources.getString(R.string.unnamed_prompt),
+                                ),
+                            ),
+                        )
+                    },
                     onEdit = { dispatch(PresetEditorAction.EditRegex(it)) },
                     onToggle = { dispatch(PresetEditorAction.ToggleRegex(it)) },
                     onDeleteRequest = { dispatch(PresetEditorAction.RequestRegexDelete(it)) },
@@ -301,37 +319,75 @@ private fun PromptsTab(
         keyOf = { it.identifier },
         onReorder = onReorder,
     )
-    LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = Space16),
-        state = listState,
-        verticalArrangement = Arrangement.spacedBy(Space8),
-    ) {
-        item { Spacer(Modifier.height(Space4)) }
-        itemsIndexed(prompts, key = { _, p -> p.identifier }) { _, item ->
-            ReorderableItem(reorderState, key = item.identifier) { dragging ->
-                PromptRow(
-                    item = item,
-                    dragging = dragging,
-                    onEdit = { onEdit(item) },
-                    onToggle = { onToggle(item.identifier) },
-                    onDelete = { onDeleteRequest(item.identifier) },
-                    modifier = Modifier.longPressDraggableHandle(),
-                )
-            }
-        }
-        item {
-            Row(
-                Modifier.fillMaxWidth().clickable { onAdd() }.padding(Space16),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
+    Box(Modifier.fillMaxSize()) {
+        if (prompts.isEmpty()) {
+            EmptyState(
+                icon = Lucide.FileText,
+                title = stringResource(R.string.prompt_empty),
+                desc = stringResource(R.string.prompt_empty_desc),
+            )
+        } else {
+            LazyColumn(
+                Modifier.fillMaxSize().padding(horizontal = Space16),
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(Space8),
             ) {
-                Icon(Lucide.Plus, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(Space8))
-                Text(stringResource(R.string.add_prompt), color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium)
+                item { Spacer(Modifier.height(Space4)) }
+                itemsIndexed(prompts, key = { _, p -> p.identifier }) { _, item ->
+                    ReorderableItem(reorderState, key = item.identifier) { dragging ->
+                        PromptRow(
+                            item = item,
+                            dragging = dragging,
+                            onEdit = { onEdit(item) },
+                            onToggle = { onToggle(item.identifier) },
+                            onDelete = { onDeleteRequest(item.identifier) },
+                            modifier = Modifier.longPressDraggableHandle(),
+                        )
+                    }
+                }
+                item { Spacer(Modifier.height(80.dp)) }
             }
         }
-        item { Spacer(Modifier.height(Space8)) }
+
+        FloatingActionButton(
+            onClick = onAdd,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(Space16),
+        ) {
+            Icon(Lucide.Plus, contentDescription = stringResource(R.string.add_prompt))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PresetRegexAddSheet(
+    onCreate: () -> Unit,
+    onImport: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = Space16)
+                .padding(bottom = Space16),
+            verticalArrangement = Arrangement.spacedBy(Space12),
+        ) {
+            Text(stringResource(R.string.add_regex), style = MaterialTheme.typography.titleMedium)
+            OutlinedButton(onClick = onCreate, modifier = Modifier.fillMaxWidth()) {
+                Icon(Lucide.Plus, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(Space8))
+                Text(stringResource(R.string.add_regex))
+            }
+            OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
+                Icon(Lucide.FilePlus, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(Space8))
+                Text(stringResource(R.string.import_regex))
+            }
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
     }
 }
 
@@ -389,12 +445,14 @@ private fun PromptRow(
 private fun RegexTab(
     scripts: List<RegexScript>,
     parseRegex: suspend (android.net.Uri) -> RegexScript,
+    onCreate: () -> Unit,
     onEdit: (RegexScript) -> Unit,
     onToggle: (RegexScript) -> Unit,
     onDeleteRequest: (RegexScript) -> Unit,
     onImport: (RegexScript) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    var showAddSheet by remember { mutableStateOf(false) }
     // 导入后只追加到编辑草稿，退出编辑器时再随预设落盘。
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) scope.launch {
@@ -402,34 +460,53 @@ private fun RegexTab(
         }
     }
 
-    LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = Space16),
-        verticalArrangement = Arrangement.spacedBy(Space8),
-    ) {
-        item { Spacer(Modifier.height(Space4)) }
-        itemsIndexed(scripts, key = { i, s -> "${s.id}#$i" }) { _, s ->
-            RegexRow(
-                title = s.scriptName.ifBlank { stringResource(R.string.unnamed_prompt) },
-                preview = "${s.findRegex.take(24)} → ${s.replaceString.take(24)}",
-                enabled = !s.disabled,
-                onEdit = { onEdit(s) },
-                onToggle = { onToggle(s) },
-                onDelete = { onDeleteRequest(s) },
+    Box(Modifier.fillMaxSize()) {
+        if (scripts.isEmpty()) {
+            EmptyState(
+                icon = Lucide.FileJson,
+                title = stringResource(R.string.regex_empty),
+                desc = stringResource(R.string.regex_empty_desc),
             )
-        }
-        item {
-            Row(
-                Modifier.fillMaxWidth().clickable { importer.launch("application/json") }.padding(Space16),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
+        } else {
+            LazyColumn(
+                Modifier.fillMaxSize().padding(horizontal = Space16),
+                verticalArrangement = Arrangement.spacedBy(Space8),
             ) {
-                Icon(Lucide.Plus, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(Space8))
-                Text(stringResource(R.string.regex_import), color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium)
+                item { Spacer(Modifier.height(Space4)) }
+                itemsIndexed(scripts, key = { i, s -> "${s.id}#$i" }) { _, s ->
+                    RegexRow(
+                        title = s.scriptName.ifBlank { stringResource(R.string.unnamed_prompt) },
+                        preview = "${s.findRegex.take(24)} → ${s.replaceString.take(24)}",
+                        enabled = !s.disabled,
+                        onEdit = { onEdit(s) },
+                        onToggle = { onToggle(s) },
+                        onDelete = { onDeleteRequest(s) },
+                    )
+                }
+                item { Spacer(Modifier.height(80.dp)) }
             }
         }
-        item { Spacer(Modifier.height(Space8)) }
+
+        FloatingActionButton(
+            onClick = { showAddSheet = true },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(Space16),
+        ) {
+            Icon(Lucide.Plus, contentDescription = stringResource(R.string.add_regex))
+        }
+    }
+
+    if (showAddSheet) {
+        PresetRegexAddSheet(
+            onCreate = {
+                showAddSheet = false
+                onCreate()
+            },
+            onImport = {
+                showAddSheet = false
+                importer.launch("application/json")
+            },
+            onDismiss = { showAddSheet = false },
+        )
     }
 }
 
@@ -470,7 +547,7 @@ private fun RegexRow(
 }
 
 @Composable
-private fun RegexEditDialog(
+internal fun RegexEditDialog(
     script: RegexScript,
     onDismiss: () -> Unit,
     onSave: (RegexScript) -> Unit,

@@ -109,6 +109,7 @@
     <string name="select_model">选择模型</string>
     <string name="select_model_hint">点击选择模型</string>
     <string name="select_character">选择角色卡</string>
+    <string name="select_preset">选择预设</string>
     <string name="no_characters">暂无角色卡</string>
     <string name="default_character">默认角色</string>
     <string name="default_preset">默认预设</string>
@@ -274,6 +275,7 @@
     <string name="role_assistant">助手</string>
     <string name="assoc_worldbooks">关联世界书</string>
     <string name="assoc_preset">关联预设（可选）</string>
+    <string name="assoc_regex">关联正则（可选）</string>
     <string name="stream_output_label">流式输出</string>
     <string name="stream_output_desc">逐字实时显示回复；关闭则生成完成后一次性显示</string>
     <string name="new_character">新建角色</string>
@@ -282,14 +284,35 @@
     <string name="char_order_save_failed_fmt">角色排序保存失败：%s</string>
 
     <!-- Presets -->
+    <string name="add_preset">添加预设</string>
+    <string name="preset_name_label">预设名</string>
+    <string name="import_preset">导入预设</string>
+    <string name="preset_created">预设已创建</string>
     <string name="no_presets_title">暂无预设</string>
     <string name="no_presets_desc">点击右下角导入 SillyTavern 预设</string>
     <string name="basic_params">基础参数</string>
     <string name="prompts">提示词</string>
+    <string name="prompt_empty">暂无提示词</string>
+    <string name="prompt_empty_desc">点击右下角添加提示词</string>
     <string name="regex_tab">正则</string>
+    <string name="regex_title">正则脚本</string>
+    <string name="regex_global">全局正则</string>
+    <string name="regex_preset">预设正则</string>
+    <string name="regex_local">局部正则</string>
+    <string name="regex_empty">暂无正则脚本</string>
+    <string name="regex_empty_desc">点击右下角添加或导入正则</string>
+    <string name="regex_group_empty">暂无正则组</string>
+    <string name="regex_group_empty_desc">点击右下角添加正则组</string>
+    <string name="add_regex">新建正则</string>
+    <string name="add_regex_group">添加正则组</string>
+    <string name="regex_group_name">正则组名称</string>
+    <string name="import_regex">导入正则</string>
+    <string name="regex_count_fmt">%1$d 个正则</string>
     <string name="regex_import">导入正则脚本</string>
     <string name="edit_regex">编辑正则</string>
     <string name="delete_regex_title">删除正则脚本</string>
+    <string name="delete_regex_group_title">删除正则组</string>
+    <string name="delete_regex_group_msg_fmt">确定要删除「%s」吗？此操作不可撤销。</string>
     <string name="find_regex_label">查找（正则）</string>
     <string name="replace_string_label">替换为</string>
     <string name="placement_user">作用于用户消息</string>

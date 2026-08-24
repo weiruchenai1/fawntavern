@@ -8,6 +8,7 @@ import me.rerere.fawntavern.ui.api.ApiConfigScreen
 import me.rerere.fawntavern.ui.character.CharacterListScreen
 import me.rerere.fawntavern.ui.extension.ExtensionsScreen
 import me.rerere.fawntavern.ui.preset.PresetListScreen
+import me.rerere.fawntavern.ui.regex.RegexListScreen
 import me.rerere.fawntavern.ui.settings.AboutScreen
 import me.rerere.fawntavern.ui.settings.DataManagementScreen
 import me.rerere.fawntavern.ui.settings.DefaultModelPage
@@ -135,6 +136,7 @@ internal fun ChatDestinationHost(
                 onNavigateToDefaultModel = { onNavigate(ChatDestination.DefaultModel) },
                 onNavigateToWebSearch = { onNavigate(ChatDestination.WebSearch) },
                 onNavigateToTts = { onNavigate(ChatDestination.Tts) },
+                onNavigateToRegex = { onNavigate(ChatDestination.Regex) },
                 onNavigateToAbout = { onNavigate(ChatDestination.About) },
             )
         }
@@ -153,6 +155,12 @@ internal fun ChatDestinationHost(
             })
         }
         ChatDestination.Tts -> { TtsConfigScreen(onBack = onBack) }
+        ChatDestination.Regex -> {
+            RegexListScreen(onBack = {
+                onBack()
+                viewModel.reloadPromptData()
+            })
+        }
         }
     }
 }

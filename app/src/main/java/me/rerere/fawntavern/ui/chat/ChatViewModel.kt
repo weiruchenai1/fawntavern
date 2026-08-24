@@ -39,6 +39,7 @@ import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.toCharRegex
+import me.rerere.fawntavern.data.regex.GlobalRegexRepository
 import me.rerere.fawntavern.data.speech.TtsUiState
 import me.rerere.fawntavern.data.settings.PromptLogStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
@@ -101,6 +102,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     // 当前角色关联的世界书/预设（随角色卡切换加载，生成时进入 Prompt 拼装）
     var activeWorldBooks by mutableStateOf<List<WorldBook>>(emptyList()); private set
     var activePreset by mutableStateOf<StPreset?>(null); private set
+    var globalRegexScripts by mutableStateOf<List<CharRegex>>(emptyList()); private set
+    var linkedRegexScripts by mutableStateOf<List<CharRegex>>(emptyList()); private set
     var promptContextFailures by mutableStateOf<List<PromptContextLoader.LoadFailure>>(emptyList())
         private set
     private var loadedPromptCharFile: String? = null
@@ -165,9 +168,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val presetRegex: List<CharRegex>
         get() = activePreset?.regexScripts?.map { it.toCharRegex() } ?: emptyList()
 
-    /** 显示侧正则：角色卡内嵌 + 当前预设私有 */
+    /** 生效正则：全局 + 当前预设 + 角色关联的局部正则。 */
     val displayRegexScripts: List<CharRegex>
-        get() = (currentCard?.regexScripts ?: emptyList()) + presetRegex
+        get() = globalRegexScripts + presetRegex + linkedRegexScripts
 
     private val generation = GenerationController()
     private val ctx: Application get() = getApplication()
@@ -329,6 +332,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 按当前角色卡加载关联的世界书与预设；保留可用项并向 UI 上报损坏项。 */
     private suspend fun loadPromptData(revision: Long) {
         val file = session?.charFile.orEmpty()
+        globalRegexScripts = GlobalRegexRepository.load(ctx).map { it.toCharRegex() }
         applyPromptContext(
             PromptContextLoader.load(ctx, file),
             if (file.isBlank()) null else loadCharImage(file),
@@ -351,6 +355,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         currentCard = loaded.card
         activeWorldBooks = loaded.worldBooks
         activePreset = loaded.preset
+        linkedRegexScripts = loaded.linkedRegexScripts
         promptContextFailures = loaded.failures
         charImageBitmap = image
         loadedPromptCharFile = loaded.charFile
@@ -754,7 +759,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 userName = userName,
                 worldBooks = activeWorldBooks,
                 preset = activePreset,
-                promptRegex = (currentCard?.regexScripts ?: emptyList()) + presetRegex,
+                promptRegex = displayRegexScripts,
                 reasoning = reasoning,
                 imageGeneration = imageGeneration,
                 searchEnabled = searchEnabled,
@@ -898,6 +903,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun updateUserProfile(name: String, description: String) {
         userProfileController.save(name, description)
         reloadUserProfile()
+        viewModelScope.launch {
+            globalRegexScripts = GlobalRegexRepository.load(ctx).map { it.toCharRegex() }
+        }
     }
 
     // ── IO 辅助 ──

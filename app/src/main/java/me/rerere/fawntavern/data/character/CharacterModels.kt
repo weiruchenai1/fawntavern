@@ -18,6 +18,7 @@ data class CharacterCard(
     val worldBookEntries: List<WorldBookEntry> = emptyList(),
     val enabledWorldBooks: List<String> = emptyList(),  // 关联的世界书名列表
     val linkedPreset: String = "",  // 关联的预设名（可选）
+    val linkedRegex: String = "",
     val streaming: Boolean = true,  // 流式输出开关
     val regexScripts: List<CharRegex> = emptyList(),  // 内嵌正则（extensions.regex_scripts）
     val depthPrompt: DepthPrompt? = null,  // 角色注入提示（extensions.depth_prompt / Character's Note）
@@ -32,10 +33,12 @@ data class DepthPrompt(
 
 /** 角色卡内嵌的显示用正则（SillyTavern extensions.regex_scripts 子集）。 */
 data class CharRegex(
+    val id: String = "",
     val scriptName: String = "",
     val findRegex: String = "",
     val replaceString: String = "",
     val disabled: Boolean = false,
+    val runOnEdit: Boolean = true,
     val placement: List<Int> = emptyList(),  // 1=user, 2=ai
     val markdownOnly: Boolean = false,       // 仅影响显示（不改发送给模型的内容）
     val promptOnly: Boolean = false,         // 仅影响 prompt（发送），不用于显示

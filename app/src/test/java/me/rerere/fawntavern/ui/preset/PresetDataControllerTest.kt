@@ -16,6 +16,7 @@ class PresetDataControllerTest {
         assertEquals(true, controller.isDefault("preset"))
         assertEquals(listOf("preset"), controller.names())
         assertEquals(StPreset(name = "preset"), controller.load("preset"))
+        assertEquals(StPreset(name = "created"), controller.create("created"))
         controller.save(StPreset(name = "saved"))
         controller.rename("preset", "renamed")
         controller.delete("renamed")
@@ -33,6 +34,7 @@ class PresetDataControllerTest {
         override fun defaultName(): String = "preset"
         override suspend fun names(): List<String> = listOf("preset")
         override suspend fun load(name: String): StPreset = StPreset(name = name)
+        override suspend fun create(name: String): StPreset = StPreset(name = name)
         override suspend fun import(uri: Uri): StPreset = StPreset(name = "imported")
         override suspend fun rename(old: String, new: String): Boolean {
             renamed = old to new

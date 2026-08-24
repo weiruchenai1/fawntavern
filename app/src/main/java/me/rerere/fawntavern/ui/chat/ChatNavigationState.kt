@@ -28,6 +28,7 @@ internal enum class ChatDestination {
     DefaultModel,
     WebSearch,
     Tts,
+    Regex,
 }
 
 private val ChatNavigationSaver = listSaver<SnapshotStateList<ChatDestination>, String>(

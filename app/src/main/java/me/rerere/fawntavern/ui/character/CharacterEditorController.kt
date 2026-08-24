@@ -11,6 +11,11 @@ import me.rerere.fawntavern.data.settings.CharacterModelStore
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import org.json.JSONObject
 
+internal data class CharacterRegexOption(
+    val id: String,
+    val displayName: String,
+)
+
 internal interface CharacterEditorDataSource {
     fun imageFile(name: String): File
     suspend fun saveImage(name: String, uri: Uri): Boolean
@@ -21,6 +26,7 @@ internal interface CharacterEditorDataSource {
     fun saveModel(key: String, model: String)
     suspend fun presetNames(): List<String>
     suspend fun worldBookNames(): List<String>
+    suspend fun regexOptions(): List<CharacterRegexOption>
 }
 
 internal class AndroidCharacterEditorDataSource(
@@ -38,6 +44,13 @@ internal class AndroidCharacterEditorDataSource(
     override fun saveModel(key: String, model: String) = CharacterModelStore.set(context, key, model)
     override suspend fun presetNames(): List<String> = PresetRepository.listNames(context)
     override suspend fun worldBookNames(): List<String> = WorldBookRepository.listNames(context)
+    override suspend fun regexOptions(): List<CharacterRegexOption> =
+        CharacterRepository.listNames(context).mapNotNull { fileName ->
+            runCatching {
+                val card = CharacterRepository.load(context, fileName)
+                CharacterRegexOption(fileName, card.name.ifBlank { fileName })
+            }.getOrNull()
+        }
 }
 
 internal class CharacterEditorController(
@@ -52,4 +65,5 @@ internal class CharacterEditorController(
     fun saveModel(key: String, model: String) = dataSource.saveModel(key, model)
     suspend fun presetNames(): List<String> = dataSource.presetNames()
     suspend fun worldBookNames(): List<String> = dataSource.worldBookNames()
+    suspend fun regexOptions(): List<CharacterRegexOption> = dataSource.regexOptions()
 }

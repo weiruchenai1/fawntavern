@@ -73,10 +73,12 @@ data class RegexScript(
 
 /** 转成正则引擎的统一脚本类型（RegexEngine 只认 CharRegex） */
 fun RegexScript.toCharRegex() = me.rerere.fawntavern.data.character.CharRegex(
+    id = id,
     scriptName = scriptName,
     findRegex = findRegex,
     replaceString = replaceString,
     disabled = disabled,
+    runOnEdit = runOnEdit,
     placement = placement,
     markdownOnly = markdownOnly,
     promptOnly = promptOnly,

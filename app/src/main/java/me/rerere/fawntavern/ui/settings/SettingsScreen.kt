@@ -48,6 +48,7 @@ import com.composables.icons.lucide.Package
 import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.Earth
+import com.composables.icons.lucide.FileTerminal
 import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Smile
 import com.composables.icons.lucide.SlidersHorizontal
@@ -77,6 +78,7 @@ fun SettingsScreen(
     onNavigateToDefaultModel: () -> Unit = {},
     onNavigateToWebSearch: () -> Unit = {},
     onNavigateToTts: () -> Unit = {},
+    onNavigateToRegex: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -245,6 +247,10 @@ fun SettingsScreen(
                 { Icon(Lucide.SlidersHorizontal, null, Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 stringResource(R.string.presets), onClick = onNavigateToPresets)
+            SettingsRow(
+                { Icon(Lucide.FileTerminal, null, Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                stringResource(R.string.regex_title), onClick = onNavigateToRegex)
             SettingsRow(
                 { Icon(Lucide.SquareLibrary, null, Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant) },

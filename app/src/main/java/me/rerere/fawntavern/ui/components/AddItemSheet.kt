@@ -40,8 +40,8 @@ import me.rerere.fawntavern.R
 fun AddItemSheet(
     title: String,
     nameLabel: String,
-    importLabel: String,
-    onImport: () -> Unit,
+    importLabel: String? = null,
+    onImport: (() -> Unit)? = null,
     onCreate: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -61,13 +61,15 @@ fun AddItemSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedButton(
-                onClick = onImport,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Lucide.FilePlus, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(Space8))
-                Text(importLabel)
+            if (importLabel != null && onImport != null) {
+                OutlinedButton(
+                    onClick = onImport,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Lucide.FilePlus, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(Space8))
+                    Text(importLabel)
+                }
             }
             Row(
                 Modifier.fillMaxWidth(),

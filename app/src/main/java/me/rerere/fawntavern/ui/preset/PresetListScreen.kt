@@ -31,6 +31,7 @@ import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.ui.components.ImportableListScreen
+import me.rerere.fawntavern.ui.components.CreateItemSpec
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.appClickable
 
@@ -70,6 +71,13 @@ fun PresetListScreen(onBack: () -> Unit) {
         deleteItem = controller::delete,
         onOpen = { selectedPreset = it },
         canDeleteItem = { !controller.isDefault(it) },
+        createItem = CreateItemSpec(
+            titleRes = R.string.add_preset,
+            nameLabelRes = R.string.preset_name_label,
+            importLabelRes = R.string.import_preset,
+            createdToastRes = R.string.preset_created,
+            create = { controller.create(it) },
+        ),
         itemCard = { name, p, onClick, onLongPress ->
             PresetCard(
                 name = name,

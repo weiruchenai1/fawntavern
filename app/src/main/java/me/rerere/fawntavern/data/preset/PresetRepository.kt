@@ -66,6 +66,18 @@ object PresetRepository {
         PresetParser.parse(json, name)
     }
 
+    suspend fun create(context: Context, requestedName: String): StPreset = withContext(Dispatchers.IO) {
+        val displayName = requestedName.trim()
+        require(displayName.isNotBlank()) { "Preset name cannot be empty" }
+        val fallback = "preset_${System.currentTimeMillis()}"
+        val name = writeMutex.withLock {
+            JsonFileDir.uniqueName(context, PRESETS_DIR, displayName, fallback).also {
+                JsonFileDir.atomicWriteText(JsonFileDir.file(context, PRESETS_DIR, it), JSONObject().toString(2))
+            }
+        }
+        PresetParser.parse(JSONObject(), name)
+    }
+
     /** 保存（覆盖）预设：全量回写采样参数、prompts 内容池与 prompt_order（保留其它字段）。 */
     suspend fun save(context: Context, preset: StPreset) = withContext(Dispatchers.IO) {
         writeMutex.withLock {
@@ -181,6 +193,11 @@ object PresetRepository {
 
     suspend fun delete(context: Context, name: String) {
         if (name != defaultPresetName(context)) JsonFileDir.delete(context, PRESETS_DIR, name)
+    }
+
+    /** Export the original preset JSON so unknown SillyTavern fields are preserved. */
+    suspend fun exportJsonBytes(context: Context, name: String): ByteArray = withContext(Dispatchers.IO) {
+        JsonFileDir.file(context, PRESETS_DIR, name).readBytes()
     }
 
     /** 重命名预设，成功返回 true（目标名已存在或源不存在则失败） */

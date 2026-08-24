@@ -11,6 +11,7 @@ internal interface PresetDataSource {
     fun defaultName(): String?
     suspend fun names(): List<String>
     suspend fun load(name: String): StPreset
+    suspend fun create(name: String): StPreset
     suspend fun import(uri: Uri): StPreset
     suspend fun rename(old: String, new: String): Boolean
     suspend fun delete(name: String)
@@ -27,6 +28,7 @@ internal class AndroidPresetDataSource(
         return PresetRepository.listNames(context)
     }
     override suspend fun load(name: String): StPreset = PresetRepository.load(context, name)
+    override suspend fun create(name: String): StPreset = PresetRepository.create(context, name)
     override suspend fun import(uri: Uri): StPreset = PresetRepository.import(context, uri)
     override suspend fun rename(old: String, new: String): Boolean = PresetRepository.rename(context, old, new)
     override suspend fun delete(name: String) = PresetRepository.delete(context, name)
@@ -42,6 +44,7 @@ internal class PresetDataController(
     fun isDefault(name: String): Boolean = name == dataSource.defaultName()
     suspend fun names(): List<String> = dataSource.names()
     suspend fun load(name: String): StPreset = dataSource.load(name)
+    suspend fun create(name: String): StPreset = dataSource.create(name)
     suspend fun import(uri: Uri): String = dataSource.import(uri).name
     suspend fun rename(old: String, new: String): Boolean = dataSource.rename(old, new)
     suspend fun delete(name: String) = dataSource.delete(name)

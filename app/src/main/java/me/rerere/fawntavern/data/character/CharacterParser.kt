@@ -109,10 +109,12 @@ object CharacterParser {
                     }
                     regexScripts.add(
                         CharRegex(
+                            id = r.optString("id", ""),
                             scriptName = r.optString("scriptName", ""),
                             findRegex = r.optString("findRegex", ""),
                             replaceString = r.optString("replaceString", ""),
                             disabled = r.optBoolean("disabled", false),
+                            runOnEdit = r.optBoolean("runOnEdit", true),
                             placement = placement,
                             markdownOnly = r.optBoolean("markdownOnly", false),
                             promptOnly = r.optBoolean("promptOnly", false),
@@ -156,6 +158,11 @@ object CharacterParser {
             worldBookEntries = worldBookEntries,
             enabledWorldBooks = enabledWorldBooks,
             linkedPreset = d.optString("linked_preset", "").trim(),
+            linkedRegex = if (d.has("linked_regex")) {
+                d.optString("linked_regex", "").trim()
+            } else {
+                fileName.removeSuffix(".json")
+            },
             streaming = d.optBoolean("streaming", true),
             regexScripts = regexScripts,
             depthPrompt = depthPrompt,

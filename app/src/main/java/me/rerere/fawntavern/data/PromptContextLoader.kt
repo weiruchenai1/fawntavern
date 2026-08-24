@@ -5,6 +5,7 @@ import me.rerere.fawntavern.core.diagnostics.SafeLog
 import kotlinx.coroutines.CancellationException
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
+import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.worldbook.WorldBook
@@ -14,7 +15,7 @@ import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 object PromptContextLoader {
     private const val TAG = "PromptContextLoader"
 
-    enum class ContentType { CHARACTER, WORLD_BOOK, PRESET }
+    enum class ContentType { CHARACTER, WORLD_BOOK, PRESET, REGEX }
 
     data class LoadFailure(
         val type: ContentType,
@@ -27,6 +28,7 @@ object PromptContextLoader {
         val card: CharacterCard?,
         val worldBooks: List<WorldBook>,
         val preset: StPreset?,
+        val linkedRegexScripts: List<CharRegex> = emptyList(),
         val failures: List<LoadFailure> = emptyList(),
     )
 
@@ -42,7 +44,7 @@ object PromptContextLoader {
             SafeLog.error(TAG, "character_card_load_failed", error)
             null
         }
-            ?: return Loaded(charFile, null, emptyList(), null, failures)
+            ?: return Loaded(charFile, null, emptyList(), null, failures = failures)
         val books = (card.enabledWorldBooks + card.world)
             .filter { it.isNotBlank() }
             .distinct()
@@ -66,6 +68,19 @@ object PromptContextLoader {
             SafeLog.error(TAG, "preset_load_failed", error)
             null
         }
-        return Loaded(charFile, card, books, preset, failures)
+        val linkedRegexScripts = when {
+            card.linkedRegex.isBlank() -> emptyList()
+            card.linkedRegex == charFile -> card.regexScripts
+            else -> try {
+                CharacterRepository.load(context, card.linkedRegex).regexScripts
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                failures += LoadFailure(ContentType.REGEX, card.linkedRegex, error)
+                SafeLog.error(TAG, "linked_regex_load_failed", error)
+                emptyList()
+            }
+        }
+        return Loaded(charFile, card, books, preset, linkedRegexScripts, failures)
     }
 }

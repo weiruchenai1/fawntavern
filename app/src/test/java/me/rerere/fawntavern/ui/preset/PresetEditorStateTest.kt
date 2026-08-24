@@ -103,4 +103,16 @@ class PresetEditorStateTest {
 
         assertEquals(editedInDraft, editing.editingRegex)
     }
+
+    @Test
+    fun newRegexIsAddedOnlyAfterSavingTheEditor() {
+        val initial = PresetEditorState(StPreset())
+        val editing = reducePresetEditor(initial, PresetEditorAction.CreateRegex(regex))
+        val dismissed = reducePresetEditor(editing, PresetEditorAction.DismissRegexEditor)
+        val saved = reducePresetEditor(editing, PresetEditorAction.SaveRegex(regex.copy(scriptName = "Saved")))
+
+        assertEquals(emptyList<RegexScript>(), dismissed.draft.regexScripts)
+        assertEquals("Saved", saved.draft.regexScripts.single().scriptName)
+        assertNull(saved.editingRegex)
+    }
 }

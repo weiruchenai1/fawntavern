@@ -32,6 +32,7 @@ internal sealed interface PresetEditorAction {
     data object DismissPromptDelete : PresetEditorAction
 
     data class EditRegex(val regex: RegexScript) : PresetEditorAction
+    data class CreateRegex(val regex: RegexScript) : PresetEditorAction
     data class SaveRegex(val regex: RegexScript) : PresetEditorAction
     data object DismissRegexEditor : PresetEditorAction
     data class ToggleRegex(val regex: RegexScript) : PresetEditorAction
@@ -84,9 +85,14 @@ internal fun reducePresetEditor(
         deletePromptIdentifier = null,
         deleteRegex = null,
     )
+    is PresetEditorAction.CreateRegex -> state.copy(
+        editingPrompt = null,
+        editingRegex = action.regex,
+        deletePromptIdentifier = null,
+        deleteRegex = null,
+    )
     PresetEditorAction.DismissRegexEditor -> state.copy(editingRegex = null)
-    is PresetEditorAction.SaveRegex -> state.updateRegex(state.editingRegex) { action.regex }
-        .copy(editingRegex = null)
+    is PresetEditorAction.SaveRegex -> state.saveRegex(action.regex)
     is PresetEditorAction.ToggleRegex -> state.updateRegex(action.regex) {
         it.copy(disabled = !it.disabled)
     }
@@ -121,6 +127,15 @@ private inline fun PresetEditorState.updateRegex(
     if (index < 0) return this
     val scripts = draft.regexScripts.toMutableList().also { it[index] = update(it[index]) }
     return copy(draft = draft.copy(regexScripts = scripts))
+}
+
+private fun PresetEditorState.saveRegex(regex: RegexScript): PresetEditorState {
+    val target = editingRegex ?: return this
+    val index = draft.regexScripts.indexOfFirst { it.matchesRegex(target) }
+    val scripts = draft.regexScripts.toMutableList().also {
+        if (index >= 0) it[index] = regex else it += regex
+    }
+    return copy(draft = draft.copy(regexScripts = scripts), editingRegex = null)
 }
 
 private fun PresetEditorState.deletePrompt(): PresetEditorState {
