@@ -6,6 +6,7 @@ import me.rerere.fawntavern.data.backup.AppBackup
 import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.preset.PresetRepository
+import me.rerere.fawntavern.data.regex.RegexSetRepository
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import java.io.File
@@ -13,7 +14,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.Locale
 
-internal enum class DataCategoryKey { CHARACTERS, PRESETS, WORLDBOOKS, CHATS, SYSTEM_LOGS }
+internal enum class DataCategoryKey { CHARACTERS, PRESETS, WORLDBOOKS, REGEXSETS, CHATS, SYSTEM_LOGS }
 
 internal data class DataCategoryInfo(
     val key: DataCategoryKey,
@@ -79,6 +80,8 @@ internal class AndroidDataManagementDataSource(
                 .forEach { CharacterRepository.deletePreset(context, it) }
             DataCategoryKey.WORLDBOOKS -> WorldBookRepository.listNames(context)
                 .forEach { CharacterRepository.deleteWorldBook(context, it) }
+            DataCategoryKey.REGEXSETS -> RegexSetRepository.listNames(context)
+                .forEach { CharacterRepository.deleteRegexSet(context, it) }
             DataCategoryKey.CHATS -> ChatRepository.clear(context)
             DataCategoryKey.SYSTEM_LOGS -> SafeLog.clear()
         }
@@ -122,6 +125,7 @@ internal class AndroidDataManagementDataSource(
         DataCategoryKey.CHARACTERS -> CharacterRepository.listNames(context).size
         DataCategoryKey.PRESETS -> PresetRepository.listNames(context).size
         DataCategoryKey.WORLDBOOKS -> WorldBookRepository.listNames(context).size
+        DataCategoryKey.REGEXSETS -> RegexSetRepository.listNames(context).size
         DataCategoryKey.CHATS -> ChatRepository.count(context)
         DataCategoryKey.SYSTEM_LOGS -> SafeLog.snapshot().size
     }
@@ -130,6 +134,7 @@ internal class AndroidDataManagementDataSource(
         DataCategoryKey.CHARACTERS -> CharacterRepository.charsDir(context)
         DataCategoryKey.PRESETS -> PresetRepository.presetsDir(context)
         DataCategoryKey.WORLDBOOKS -> WorldBookRepository.worldDir(context)
+        DataCategoryKey.REGEXSETS -> RegexSetRepository.setsDir(context)
         DataCategoryKey.CHATS -> ChatRepository.storageDir(context)
         DataCategoryKey.SYSTEM_LOGS -> null
     }

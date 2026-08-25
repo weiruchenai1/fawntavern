@@ -49,6 +49,7 @@ import com.composables.icons.lucide.ArrowDownToLine
 import com.composables.icons.lucide.ArrowUpToLine
 import com.composables.icons.lucide.SquareLibrary
 import com.composables.icons.lucide.Database
+import com.composables.icons.lucide.FileJson
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircle
 import com.composables.icons.lucide.Package
@@ -150,6 +151,14 @@ fun DataManagementScreen(
                 labelResId = R.string.world_books,
                 icon = {
                     Icon(Lucide.SquareLibrary, null, Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                },
+            ),
+            DataCategory(
+                key = DataCategoryKey.REGEXSETS,
+                labelResId = R.string.regex_local,
+                icon = {
+                    Icon(Lucide.FileJson, null, Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
             ),
