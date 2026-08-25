@@ -12,7 +12,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
+import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.preset.PresetRepository
+import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 
 internal data class CharacterLibraryState(
     val names: List<String>,
@@ -26,6 +28,8 @@ internal interface CharacterLibraryDataSource {
     suspend fun create(name: String): CharacterCard
     suspend fun import(uri: Uri): CharacterCard
     suspend fun delete(name: String)
+    suspend fun chatCount(name: String): Int = 0
+    suspend fun delete(name: String, deleteChats: Boolean, deleteAssociations: Boolean) = delete(name)
     suspend fun saveOrder(names: List<String>)
     suspend fun exportPng(name: String): ByteArray
     suspend fun exportJson(name: String): ByteArray
@@ -45,7 +49,31 @@ internal class AndroidCharacterLibraryDataSource(
         CharacterRepository.create(context, name, defaultPresetName())
     override suspend fun import(uri: Uri): CharacterCard =
         CharacterRepository.import(context, uri, defaultPresetName())
-    override suspend fun delete(name: String) = CharacterRepository.delete(context, name)
+    override suspend fun delete(name: String) = delete(name, deleteChats = false, deleteAssociations = false)
+    override suspend fun chatCount(name: String): Int = ChatRepository.countForCharacter(context, name)
+    override suspend fun delete(name: String, deleteChats: Boolean, deleteAssociations: Boolean) {
+        val card = if (deleteAssociations) {
+            runCatching { CharacterRepository.load(context, name) }.getOrNull()
+        } else {
+            null
+        }
+        if (deleteChats) {
+            ChatRepository.deleteForCharacter(context, name)
+        }
+        if (deleteAssociations) {
+            // 世界书按名字关联，多张卡可以指同一本：还有别的卡在用的不能跟着这张卡一起删
+            val stillReferenced = CharacterRepository.referencedWorldBooks(context, excluding = name)
+            card?.let { it.enabledWorldBooks + it.world }
+                ?.asSequence()
+                ?.filter(String::isNotBlank)
+                ?.distinct()
+                ?.filter { it !in stillReferenced }
+                ?.forEach { WorldBookRepository.delete(context, it) }
+            // 内嵌正则不在这里处理：自有正则（linked_regex 指向自己）随卡 JSON 一起消失，
+            // 借用别人的（指向另一张卡）属于出借方自己的资产，删借用者不该清空它
+        }
+        CharacterRepository.delete(context, name)
+    }
     override suspend fun saveOrder(names: List<String>) = CharacterRepository.saveOrder(context, names)
     override suspend fun exportPng(name: String): ByteArray = CharacterRepository.exportPngBytes(context, name)
     override suspend fun exportJson(name: String): ByteArray = CharacterRepository.exportJsonBytes(context, name)
@@ -77,6 +105,9 @@ internal class CharacterLibraryController(
     suspend fun import(uri: Uri): CharacterCard = dataSource.import(uri)
     suspend fun create(name: String): CharacterCard = dataSource.create(name)
     suspend fun delete(name: String) = dataSource.delete(name)
+    suspend fun chatCount(name: String): Int = dataSource.chatCount(name)
+    suspend fun delete(name: String, deleteChats: Boolean, deleteAssociations: Boolean) =
+        dataSource.delete(name, deleteChats, deleteAssociations)
     suspend fun saveOrder(names: List<String>) = dataSource.saveOrder(names)
     suspend fun exportPng(name: String): ByteArray = dataSource.exportPng(name)
     suspend fun exportJson(name: String): ByteArray = dataSource.exportJson(name)

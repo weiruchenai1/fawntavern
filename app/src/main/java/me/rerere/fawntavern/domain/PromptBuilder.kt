@@ -425,22 +425,12 @@ internal object PromptBuilder {
         maxContext: Int,
         macroContext: MacroContext,
     ): Pair<List<WorldBookEntry>, Map<String, Int>> {
-        val loaded = worldBooks.flatMap { it.entries.values }
-        val loadedContents = loaded.mapTo(HashSet()) { it.content }
-        val embedded = card?.worldBookEntries.orEmpty()
-            .filter { it.content.isNotBlank() && it.content !in loadedContents }
-            .map {
-                WorldBookEntry(
-                    id = it.id, keys = it.keys, comment = it.comment, content = it.content,
-                    enabled = it.enabled, position = it.position,  // 解析层已归一化到 WorldBookPos
-                    insertionOrder = it.insertionOrder, constant = it.constant,
-                    vectorized = it.vectorized, depth = it.depth, role = it.role,
-                    keySecondary = it.keySecondary, selectiveLogic = it.selectiveLogic,
-                    probability = it.probability, caseSensitive = it.caseSensitive,
-                )
-            }
+        // 只认关联的世界书。卡内 character_book 是导入载荷、不参与激活（同 ST：checkEmbeddedWorld
+        // 仅据它显示导入按钮，生效与否只看链接），否则编辑/删除条目后旧内容还会从卡内那份注入。
+        // 导入时已抽成独立文件并写进 enabled_world_books，老卡由 migrateEmbeddedWorldBooks 补抽。
         // 向量化条目排除出激活候选（无 embedding 后端做语义检索，仅保留数据/状态）
-        val candidates = (embedded + loaded).filter { it.enabled && it.content.isNotBlank() && !it.vectorized }
+        val candidates = worldBooks.flatMap { it.entries.values }
+            .filter { it.enabled && it.content.isNotBlank() && !it.vectorized }
         val charName = card?.name ?: ""
         // include_names：扫描文本按 "名字: 内容" 前缀（同 ST chatForWI）
         val messages = history.filter { it.content.isNotBlank() }.map { msg ->

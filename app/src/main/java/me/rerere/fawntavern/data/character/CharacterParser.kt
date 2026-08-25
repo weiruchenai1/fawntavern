@@ -24,53 +24,12 @@ object CharacterParser {
             }
         }
 
-        // 解析内嵌世界书条目与关联的世界书名
-        val worldBookEntries = mutableListOf<WorldBookEntry>()
-        val charaBook = d.optJSONObject("character_book")
+        // 内嵌 character_book 只取书名做关联兜底：条目本身不参与激活（见 PromptBuilder），
+        // 导入与迁移都会把它抽成独立世界书文件并写下 enabled_world_books
         val enabledWorldBooks = mutableListOf<String>()
-        charaBook?.optString("name", "")?.trim()?.takeIf { it.isNotBlank() }?.let {
-            enabledWorldBooks.add(it)
-        }
-        charaBook?.optJSONArray("entries")?.let { arr ->
-            for (i in 0 until arr.length()) {
-                arr.optJSONObject(i)?.let { entry ->
-                    fun strList(name: String): List<String> {
-                        val a = entry.optJSONArray(name) ?: return emptyList()
-                        return (0 until a.length()).mapNotNull { j -> a.optString(j, "").trim().takeIf { it.isNotBlank() } }
-                    }
-                    val ext = entry.optJSONObject("extensions")
-                    // character_book 规范里 selective = false 表示忽略次级关键词
-                    val secondary = if (entry.optBoolean("selective", true)) strList("secondary_keys") else emptyList()
-                    val probability = if (ext != null && !ext.optBoolean("useProbability", true)) 100
-                                      else ext?.optInt("probability", 100)?.coerceIn(0, 100) ?: 100
-                    worldBookEntries.add(
-                        WorldBookEntry(
-                            id = entry.optInt("id", i),
-                            keys = strList("keys"),
-                            comment = entry.optString("comment", "").trim(),
-                            content = entry.optString("content", "").trim(),
-                            enabled = entry.optBoolean("enabled", true),
-                            // 顶层 position 为数字才权威；粗粒度串/缺失时取 extensions.position（v3 详细枚举）
-                            position = me.rerere.fawntavern.data.worldbook.WorldBookPos.normalize(run {
-                                val top = entry.opt("position")
-                                if (top is Number || (top is String && top.toIntOrNull() != null)) top
-                                else ext?.opt("position")?.takeIf { it != org.json.JSONObject.NULL } ?: top
-                            }),
-                            insertionOrder = entry.optInt("insertion_order", 100),
-                            constant = entry.optBoolean("constant", false),
-                            vectorized = entry.optBoolean("vectorized", ext?.optBoolean("vectorized", false) ?: false),
-                            depth = ext?.optInt("depth", 4) ?: 4,
-                            role = (ext?.optInt("role", 0) ?: 0).coerceIn(0, 2),
-                            keySecondary = secondary,
-                            selectiveLogic = ext?.optInt("selectiveLogic", 0) ?: 0,
-                            probability = probability,
-                            caseSensitive = if (entry.has("case_sensitive") && !entry.isNull("case_sensitive"))
-                                entry.optBoolean("case_sensitive") else null,
-                        )
-                    )
-                }
-            }
-        }
+        d.optJSONObject("character_book")
+            ?.optString("name", "")?.trim()?.takeIf { it.isNotBlank() }
+            ?.let { enabledWorldBooks.add(it) }
 
         // 编辑器保存的关联世界书列表存在时以它为准（用户可能取消了 character_book 的关联）
         d.optJSONArray("enabled_world_books")?.let { arr ->
@@ -155,7 +114,6 @@ object CharacterParser {
             systemPrompt = d.optString("system_prompt", "").trim(),
             postHistoryInstructions = d.optString("post_history_instructions", "").trim(),
             world = d.optJSONObject("extensions")?.optString("world", "") ?: "",
-            worldBookEntries = worldBookEntries,
             enabledWorldBooks = enabledWorldBooks,
             linkedPreset = d.optString("linked_preset", "").trim(),
             linkedRegex = if (d.has("linked_regex")) {

@@ -200,6 +200,7 @@ internal fun ModelCard(
     title: String,
     subtitle: String,
     iconKey: String,
+    selectionIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     displayName: String,
     showReset: Boolean,
     showBolt: Boolean,
@@ -261,7 +262,16 @@ internal fun ModelCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Space8),
         ) {
-            if (iconKey.isNotBlank()) ProviderIcon(name = iconKey, size = 24.dp)
+            if (iconKey.isNotBlank()) {
+                ProviderIcon(name = iconKey, size = 24.dp)
+            } else if (selectionIcon != null) {
+                Icon(
+                    selectionIcon,
+                    null,
+                    Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(displayName,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,

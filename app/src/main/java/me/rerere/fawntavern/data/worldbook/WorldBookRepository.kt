@@ -13,7 +13,8 @@ import java.io.File
 
 object WorldBookRepository {
 
-    private const val WORLD_DIR = "worldbooks"
+    /** 角色卡抽内嵌书、导出时回填都要拼这个目录，共享一份避免字符串各处硬编码 */
+    const val WORLD_DIR = "worldbooks"
     private val writeMutex = Mutex()
 
     fun worldDir(context: Context): File = JsonFileDir.dir(context, WORLD_DIR)
@@ -77,7 +78,7 @@ object WorldBookRepository {
         val file = JsonFileDir.file(context, WORLD_DIR, name)
         require(file.isFile) { "世界书不存在: $name" }
         val json = JSONObject(file.readText())
-        val entriesObj = json.optJSONObject("entries") ?: JSONObject()
+        val entriesObj = patchableEntries(json)
         entries.forEach { entry ->
             val key = entry.id.toString()
             // 就地取原条目对象（可能以 id 为键，或与 uid 不一致）；缺失才新建，避免丢失原有私有字段
@@ -120,6 +121,7 @@ object WorldBookRepository {
             obj.put("sticky", entry.sticky)
             obj.put("cooldown", entry.cooldown)
             obj.put("delay", entry.delay)
+            stripCharacterBookAliases(obj, entry)
         }
         // 删除：原文件里存在、但本次条目列表已不含的条目
         val keepIds = entries.mapTo(HashSet()) { it.id.toString() }
@@ -130,6 +132,48 @@ object WorldBookRepository {
         json.put("entries", entriesObj)
         JsonFileDir.atomicWriteText(file, json.toString(2))
         }
+    }
+
+    /**
+     * 取出可原地 patch 的条目表。角色卡内嵌书抽出来的文件 entries 是数组（character_book 形态），
+     * 直接 optJSONObject 拿到 null，会让每条都当新条目重建，把 extensions 里的 ST 私有字段
+     * （automation_id/triggers/ignore_budget/match_*…）整批丢掉。先按 id 转成对象、条目原样搬。
+     */
+    private fun patchableEntries(json: JSONObject): JSONObject {
+        json.optJSONObject("entries")?.let { return it }
+        val arr = json.optJSONArray("entries") ?: return JSONObject()
+        return JSONObject().apply {
+            for (i in 0 until arr.length()) {
+                val entry = arr.optJSONObject(i) ?: continue
+                val id = entry.optInt("id", entry.optInt("uid", i))
+                entry.put("uid", id)
+                entry.put("id", id)
+                put(id.toString(), entry)
+            }
+        }
+    }
+
+    /**
+     * 清掉 character_book 形态的同义字段。解析层对这些键是「character_book 优先」或与 native 键
+     * 取或，留着会让本次保存的值失效：`keys` 盖掉 `key`、`insertion_order` 盖掉 `order`、
+     * `extensions.exclude_recursion` 与 `excludeRecursion` 取或导致关不掉。
+     * 未建模的字段（automation_id、triggers、ignore_budget、use_regex、match_ 系列…）不动。
+     */
+    private fun stripCharacterBookAliases(obj: JSONObject, entry: WorldBookEntry) {
+        listOf("keys", "secondary_keys", "insertion_order", "enabled", "selective", "case_sensitive")
+            .forEach { obj.remove(it) }
+        // 三个覆盖项为 null 表示「跟随全局」，旧值连 snake_case 别名一起清掉才能真正恢复默认
+        if (entry.scanDepth == null) obj.remove("scanDepth")
+        if (entry.caseSensitive == null) obj.remove("caseSensitive")
+        if (entry.matchWholeWords == null) obj.remove("matchWholeWords")
+        val ext = obj.optJSONObject("extensions") ?: return
+        listOf(
+            "exclude_recursion", "prevent_recursion", "delay_until_recursion",
+            "group_override", "use_group_scoring",
+        ).forEach { ext.remove(it) }
+        if (entry.scanDepth == null) ext.remove("scan_depth")
+        if (entry.caseSensitive == null) ext.remove("case_sensitive")
+        if (entry.matchWholeWords == null) ext.remove("match_whole_words")
     }
 
     /** 清空所有世界书 */

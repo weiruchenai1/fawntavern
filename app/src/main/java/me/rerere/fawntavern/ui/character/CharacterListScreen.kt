@@ -24,6 +24,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
@@ -51,6 +55,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.FileJson
+import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
@@ -70,7 +75,6 @@ import me.rerere.fawntavern.ui.components.AddItemSheet
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.appClickable
 import me.rerere.fawntavern.ui.components.draggableLiftScale
-import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
 import me.rerere.fawntavern.ui.components.EmptyState
 import me.rerere.fawntavern.ui.components.LoadingState
 import me.rerere.fawntavern.ui.components.Space4
@@ -203,13 +207,14 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     ) { uri -> writeExport(uri) { controller.exportJson(exportTarget) } }
 
     showDeleteDialog?.let { name ->
-        ConfirmDeleteDialog(
+        CharacterDeleteDialog(
+            name = name,
+            controller = controller,
             title = stringResource(R.string.delete_character_title),
-            text = stringResource(R.string.delete_character_msg_fmt, name),
-            onConfirm = {
+            onConfirm = { deleteChats, deleteAssociations ->
                 scope.launch {
                     try {
-                        controller.delete(name)
+                        controller.delete(name, deleteChats, deleteAssociations)
                         Toast.makeText(context, resources.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
                         refresh()
                     } catch (error: Exception) {
@@ -326,6 +331,115 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
         }
     }
     } // SaveableStateProvider("list")
+}
+
+@Composable
+private fun CharacterDeleteDialog(
+    name: String,
+    controller: CharacterLibraryController,
+    title: String,
+    onConfirm: (deleteChats: Boolean, deleteAssociations: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var deleteAssociations by remember(name) { mutableStateOf(false) }
+    var chatCount by remember(name) { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(name) {
+        chatCount = runCatching { controller.chatCount(name) }.getOrDefault(0)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Space8)) {
+                Text(stringResource(R.string.delete_character_msg_fmt, name))
+                CircularCheckOption(
+                    checked = true,
+                    onCheckedChange = {},
+                    interactive = false,
+                    label = stringResource(
+                        R.string.delete_character_chats_fmt,
+                        chatCount ?: 0,
+                    ),
+                )
+                CircularCheckOption(
+                    checked = deleteAssociations,
+                    onCheckedChange = { deleteAssociations = it },
+                    label = stringResource(R.string.delete_character_associations),
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                onConfirm(true, deleteAssociations)
+            }) {
+                Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+@Composable
+private fun CircularCheckOption(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    interactive: Boolean = true,
+    label: String,
+) {
+    val toggleModifier = if (interactive) {
+        Modifier.toggleable(
+            value = checked,
+            role = Role.Checkbox,
+            onValueChange = onCheckedChange,
+        )
+    } else {
+        Modifier
+    }
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .then(toggleModifier)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Space8),
+    ) {
+        Box(
+            Modifier.size(22.dp)
+                .clip(CircleShape)
+                .background(
+                    if (checked) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.surface,
+                )
+                .border(
+                    width = 2.dp,
+                    color = if (checked) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outline,
+                    shape = CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (checked) {
+                Icon(
+                    Lucide.Check,
+                    null,
+                    Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                )
+            }
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+    }
 }
 
 @Composable

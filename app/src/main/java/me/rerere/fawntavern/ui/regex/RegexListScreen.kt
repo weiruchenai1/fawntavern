@@ -126,7 +126,11 @@ fun RegexListScreen(onBack: () -> Unit) {
         when (source.scope) {
             RegexScope.GLOBAL -> globalScripts = updated
             RegexScope.PRESET -> presetGroups = presetGroups.map { if (it.name == source.name) it.copy(scripts = updated) else it }
-            RegexScope.LOCAL -> localGroups = localGroups.map { if (it.name == source.name) it.copy(scripts = updated) else it }
+            RegexScope.LOCAL -> localGroups = if (updated.isEmpty()) {
+                localGroups.filterNot { it.name == source.name }
+            } else {
+                localGroups.map { if (it.name == source.name) it.copy(scripts = updated) else it }
+            }
         }
     }
 
@@ -138,7 +142,9 @@ fun RegexListScreen(onBack: () -> Unit) {
         localGroups = CharacterRepository.listNames(context).mapNotNull { name ->
             runCatching {
                 val card = CharacterRepository.load(context, name)
-                RegexGroup(name, card.name.ifBlank { name }, card.regexScripts.map { it.toRegexScript() })
+                card.regexScripts.takeIf { it.isNotEmpty() }?.let { scripts ->
+                    RegexGroup(name, card.name.ifBlank { name }, scripts.map { it.toRegexScript() })
+                }
             }.getOrNull()
         }
     }

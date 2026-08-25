@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -65,9 +66,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.RadioButton
 import com.composables.icons.lucide.BookOpen
+import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.FileJson
@@ -82,6 +82,7 @@ import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.ui.components.ModelSelectorSheet
+import me.rerere.fawntavern.ui.components.PickerRow
 import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
@@ -607,10 +608,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
             WorldBookSelector(
                 controller = controller,
                 enabledNames = enabledWb,
-                onToggle = { wbName ->
-                    val updated = if (wbName in enabledWb) enabledWb - wbName else enabledWb + wbName
-                    enabledWb = updated
-                }
+                onChange = { enabledWb = it },
             )
 
             PresetSelector(
@@ -648,39 +646,35 @@ private fun PresetSelector(
     onSelect: (String) -> Unit,
 ) {
     var presetNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         presetNames = controller.presetNames()
     }
 
-    if (presetNames.isEmpty()) return
+    ModelCard(
+        icon = Lucide.SlidersHorizontal,
+        title = stringResource(R.string.assoc_preset),
+        subtitle = stringResource(R.string.assoc_preset_desc),
+        iconKey = "",
+        selectionIcon = Lucide.SlidersHorizontal,
+        displayName = selected.ifBlank { stringResource(R.string.assoc_none) },
+        showReset = selected.isNotBlank(),
+        showBolt = false,
+        onPick = { showSheet = true },
+        onReset = { onSelect("") },
+    )
 
-    Column(verticalArrangement = Arrangement.spacedBy(Space8)) {
-        Text(stringResource(R.string.assoc_preset), style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = Space4))
-        presetNames.forEach { name ->
-            val checked = name == selected
-            Row(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                    .clickable { onSelect(if (checked) "" else name) }
-                    .padding(horizontal = Space8, vertical = Space4),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = checked, onClick = { onSelect(if (checked) "" else name) })
-                Spacer(Modifier.width(Space4))
-                Icon(Lucide.SlidersHorizontal, null, Modifier.size(16.dp),
-                    tint = if (checked) MaterialTheme.colorScheme.primary
-                           else MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.width(Space8))
-                Text(name, style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
+    if (showSheet) {
+        AssociationPickerSheet(
+            title = stringResource(R.string.assoc_preset),
+            optionIcon = Lucide.SlidersHorizontal,
+            options = presetNames.map { AssociationOption(it, it) },
+            selectedIds = setOfNotNull(selected.takeIf(String::isNotBlank)),
+            multiSelect = false,
+            onConfirm = { onSelect(it.firstOrNull().orEmpty()); showSheet = false },
+            onDismiss = { showSheet = false },
+        )
     }
 }
 
@@ -692,53 +686,37 @@ private fun RegexSelector(
     onSelect: (String) -> Unit,
 ) {
     var options by remember { mutableStateOf<List<CharacterRegexOption>>(emptyList()) }
+    var showSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentCardFile) {
         options = controller.regexOptions()
     }
 
-    if (options.isEmpty()) return
+    val displayName = options.find { it.id == selected }?.displayName
+        ?: selected.ifBlank { stringResource(R.string.assoc_none) }
+    ModelCard(
+        icon = Lucide.FileJson,
+        title = stringResource(R.string.assoc_regex),
+        subtitle = stringResource(R.string.assoc_regex_desc),
+        iconKey = "",
+        selectionIcon = Lucide.FileJson,
+        displayName = displayName,
+        showReset = selected.isNotBlank(),
+        showBolt = false,
+        onPick = { showSheet = true },
+        onReset = { onSelect("") },
+    )
 
-    Column(verticalArrangement = Arrangement.spacedBy(Space8)) {
-        Text(
-            stringResource(R.string.assoc_regex),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = Space4),
+    if (showSheet) {
+        AssociationPickerSheet(
+            title = stringResource(R.string.assoc_regex),
+            optionIcon = Lucide.FileJson,
+            options = options.map { AssociationOption(it.id, it.displayName) },
+            selectedIds = setOfNotNull(selected.takeIf(String::isNotBlank)),
+            multiSelect = false,
+            onConfirm = { onSelect(it.firstOrNull().orEmpty()); showSheet = false },
+            onDismiss = { showSheet = false },
         )
-        options.forEach { option ->
-            val checked = option.id == selected
-            Row(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                    .clickable { onSelect(if (checked) "" else option.id) }
-                    .padding(horizontal = Space8, vertical = Space4),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(
-                    selected = checked,
-                    onClick = { onSelect(if (checked) "" else option.id) },
-                )
-                Spacer(Modifier.width(Space4))
-                Icon(
-                    Lucide.FileJson,
-                    null,
-                    Modifier.size(16.dp),
-                    tint = if (checked) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.width(Space8))
-                Text(
-                    option.displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
     }
 }
 
@@ -746,42 +724,145 @@ private fun RegexSelector(
 private fun WorldBookSelector(
     controller: CharacterEditorController,
     enabledNames: List<String>,
-    onToggle: (String) -> Unit,
+    onChange: (List<String>) -> Unit,
 ) {
     var bookNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         bookNames = controller.worldBookNames()
     }
 
-    if (bookNames.isEmpty()) return
+    val displayName = when (enabledNames.size) {
+        0 -> stringResource(R.string.assoc_none)
+        1 -> enabledNames.first()
+        else -> stringResource(R.string.assoc_selected_count, enabledNames.size)
+    }
+    ModelCard(
+        icon = Lucide.BookOpen,
+        title = stringResource(R.string.assoc_worldbooks),
+        subtitle = stringResource(R.string.assoc_worldbooks_desc),
+        iconKey = "",
+        selectionIcon = Lucide.BookOpen,
+        displayName = displayName,
+        showReset = enabledNames.isNotEmpty(),
+        showBolt = false,
+        onPick = { showSheet = true },
+        onReset = { onChange(emptyList()) },
+    )
 
-    Column(verticalArrangement = Arrangement.spacedBy(Space8)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = Space4), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.assoc_worldbooks), style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f))
-        }
-        bookNames.forEach { name ->
-            val checked = name in enabledNames
-            Row(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                    .clickable { onToggle(name) }
-                    .padding(horizontal = Space8, vertical = Space4),
-                verticalAlignment = Alignment.CenterVertically,
+    if (showSheet) {
+        AssociationPickerSheet(
+            title = stringResource(R.string.assoc_worldbooks),
+            optionIcon = Lucide.BookOpen,
+            options = bookNames.map { AssociationOption(it, it) },
+            selectedIds = enabledNames.toSet(),
+            multiSelect = true,
+            onConfirm = { selected ->
+                onChange(bookNames.filter(selected::contains))
+                showSheet = false
+            },
+            onDismiss = { showSheet = false },
+        )
+    }
+}
+
+private data class AssociationOption(
+    val id: String,
+    val label: String,
+)
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun AssociationPickerSheet(
+    title: String,
+    optionIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    options: List<AssociationOption>,
+    selectedIds: Set<String>,
+    multiSelect: Boolean,
+    onConfirm: (Set<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val optionIds = remember(options) { options.mapTo(mutableSetOf()) { it.id } }
+    var draftSelection by remember(title, selectedIds, optionIds) {
+        mutableStateOf(selectedIds.intersect(optionIds))
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberBottomSheetState(
+            initialValue = SheetValue.Hidden,
+            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+        ),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = Space16).padding(bottom = Space16),
+            verticalArrangement = Arrangement.spacedBy(Space12),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Space12),
             ) {
-                Checkbox(checked = checked, onCheckedChange = { onToggle(name) })
-                Spacer(Modifier.width(Space4))
-                Icon(Lucide.BookOpen, null, Modifier.size(16.dp),
-                    tint = if (checked) MaterialTheme.colorScheme.primary
-                           else MaterialTheme.colorScheme.onSurfaceVariant)
+                options.forEach { option ->
+                    val selected = option.id in draftSelection
+                    PickerRow(
+                        selected = selected,
+                        onClick = {
+                            draftSelection = if (multiSelect) {
+                                if (selected) draftSelection - option.id else draftSelection + option.id
+                            } else {
+                                setOf(option.id)
+                            }
+                        },
+                        icon = {
+                            Icon(
+                                optionIcon,
+                                null,
+                                Modifier.size(24.dp),
+                                tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        label = {
+                            Text(
+                                option.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        trailing = {
+                            if (selected) {
+                                Icon(
+                                    Lucide.Check,
+                                    null,
+                                    Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                        },
+                    )
+                }
+
+                if (options.isEmpty()) {
+                    Text(
+                        stringResource(R.string.assoc_no_options),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = Space8, vertical = Space4),
+                    )
+                }
+            }
+            Button(
+                onClick = { onConfirm(draftSelection) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Lucide.Check, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(Space8))
-                Text(name, style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.confirm))
             }
         }
     }

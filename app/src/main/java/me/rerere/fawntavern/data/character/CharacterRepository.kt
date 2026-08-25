@@ -15,6 +15,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.JsonFileDir
+import me.rerere.fawntavern.data.worldbook.WorldBookParser
+import me.rerere.fawntavern.data.worldbook.WorldBookRepository
+import me.rerere.fawntavern.data.worldbook.WorldBookSerializer
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -231,7 +234,6 @@ object CharacterRepository {
         if (!data.has("linked_preset") && defaultPresetName.isNotBlank()) {
             data.put("linked_preset", defaultPresetName)
         }
-        val persistedJson = json.toString(2)
 
         val parsed = CharacterParser.parse(json)
         val displayName = JsonFileDir.queryDisplayName(context, uri)
@@ -259,16 +261,21 @@ object CharacterRepository {
                     val bookName = charaBook.optString("name", "").ifBlank { "$name 世界书" }
                     val safeBookName = JsonFileDir.uniqueName(
                         context,
-                        "worldbooks",
+                        WorldBookRepository.WORLD_DIR,
                         bookName,
                         "worldbook_${System.currentTimeMillis()}",
                     )
-                    createdWorldBook = JsonFileDir.file(context, "worldbooks", safeBookName)
+                    createdWorldBook = JsonFileDir.file(context, WorldBookRepository.WORLD_DIR, safeBookName)
                     JsonFileDir.atomicWriteText(createdWorldBook, charaBook.toString(2))
+                    // 关联必须落到抽出来的**实际**文件名上：书名撞车时 uniqueName 会加后缀，
+                    // 只靠解析层拿 character_book.name 兜底会指到同名的别人家那本书上
+                    if (!data.has("enabled_world_books")) {
+                        data.put("enabled_world_books", JSONArray().put(safeBookName))
+                    }
                 }
 
-                JsonFileDir.atomicWriteText(cardFile, persistedJson)
-                parsed
+                JsonFileDir.atomicWriteText(cardFile, json.toString(2))
+                CharacterParser.parse(json, name)
             } catch (error: Exception) {
                 if (!cardFile.exists()) {
                     if (createdImage) pngFile.delete()
@@ -278,6 +285,74 @@ object CharacterRepository {
             }
         }
     }
+
+    /**
+     * 给老卡补抽内嵌世界书并写下关联。此前导入只把 character_book 留在卡里，靠解析层拿
+     * `character_book.name` 兜底关联，书名撞车会指到别人那本书上；而内嵌条目现在不再参与激活，
+     * 不补抽就等于世界书失效。
+     * 判据是「有 character_book 但没有 enabled_world_books 键」——键一旦存在就说明导入或编辑器
+     * 写过关联（含用户主动取消关联的空数组），不再处理，因此可反复调用。
+     */
+    suspend fun migrateEmbeddedWorldBooks(context: Context) = withContext(Dispatchers.IO) {
+        mutationMutex.withLock {
+            charsDir(context).listFiles()
+                ?.filter { it.extension == "json" }
+                ?.forEach { file ->
+                    runCatching {
+                        val json = JSONObject(file.readText())
+                        val data = json.optJSONObject("data") ?: json
+                        if (data.has("enabled_world_books")) return@runCatching
+                        val book = data.optJSONObject("character_book") ?: return@runCatching
+                        val cardName = file.nameWithoutExtension
+                        val bookName = book.optString("name", "").trim()
+                            .ifBlank { "$cardName 世界书" }
+                        // 同名文件已在，视作之前那次导入抽出来的那本，直接关联；否则会凭空多出一本副本
+                        val existing = JsonFileDir.file(context, WorldBookRepository.WORLD_DIR, bookName)
+                        val linked = if (existing.isFile) {
+                            bookName
+                        } else {
+                            JsonFileDir.uniqueName(
+                                context,
+                                WorldBookRepository.WORLD_DIR,
+                                bookName,
+                                "worldbook_${System.currentTimeMillis()}",
+                            ).also {
+                                JsonFileDir.atomicWriteText(
+                                    JsonFileDir.file(context, WorldBookRepository.WORLD_DIR, it),
+                                    book.toString(2),
+                                )
+                            }
+                        }
+                        data.put("enabled_world_books", JSONArray().put(linked))
+                        JsonFileDir.atomicWriteText(file, json.toString(2))
+                    }
+                }
+            Unit
+        }
+    }
+
+    /**
+     * 除 [excluding] 之外，其余角色卡还在关联的世界书名集合。世界书按名字关联、多张卡可以指同
+     * 一本，删卡时据此判断哪本能连带删、哪本还有人用。
+     */
+    suspend fun referencedWorldBooks(context: Context, excluding: String): Set<String> =
+        withContext(Dispatchers.IO) {
+            charsDir(context).listFiles()
+                ?.asSequence()
+                ?.filter { it.extension == "json" && it.nameWithoutExtension != excluding }
+                ?.flatMap { file ->
+                    runCatching {
+                        val card = CharacterParser.parse(
+                            JSONObject(file.readText()),
+                            file.nameWithoutExtension,
+                        )
+                        (card.enabledWorldBooks + card.world).asSequence()
+                    }.getOrDefault(emptySequence())
+                }
+                ?.filter { it.isNotBlank() }
+                ?.toSet()
+                .orEmpty()
+        }
 
     suspend fun delete(context: Context, name: String) = withContext(Dispatchers.IO) {
         mutationMutex.withLock {
@@ -296,9 +371,37 @@ object CharacterRepository {
         }
     }
 
-    /** 导出角色卡原始 JSON 字节（与 SillyTavern 兼容，文件内容原样输出） */
+    /** 导出角色卡 JSON（与 SillyTavern 兼容；除内嵌世界书按关联重建外，其余字段原样输出） */
     suspend fun exportJsonBytes(context: Context, name: String): ByteArray = withContext(Dispatchers.IO) {
-        File(charsDir(context), "$name.json").readBytes()
+        cardJsonForExport(context, name).toByteArray()
+    }
+
+    /**
+     * 导出用的卡 JSON：把 `character_book` 换成当前关联世界书的内容。卡内那份自导入起就不再更新，
+     * 直接导出会丢掉用户在世界书里的全部编辑（同 ST 保存时按 linked world 重新生成内嵌书）。
+     * 关联的书一本都读不到时保持文件原样，解析/读盘出错也回落原文，导出不因此失败。
+     */
+    private fun cardJsonForExport(context: Context, name: String): String {
+        val text = File(charsDir(context), "$name.json").readText()
+        return runCatching {
+            val json = JSONObject(text)
+            val card = CharacterParser.parse(json, name)
+            val sources = (card.enabledWorldBooks + card.world)
+                .filter { it.isNotBlank() }
+                .distinct()
+                .mapNotNull { bookName ->
+                    val file = JsonFileDir.file(context, WorldBookRepository.WORLD_DIR, bookName)
+                    if (!file.isFile) return@mapNotNull null
+                    val raw = JSONObject(file.readText())
+                    WorldBookSerializer.Source(raw, WorldBookParser.parse(raw, bookName))
+                }
+            if (sources.isEmpty()) return@runCatching text
+            (json.optJSONObject("data") ?: json).put(
+                "character_book",
+                WorldBookSerializer.toCharacterBook(sources.first().book.name, sources),
+            )
+            json.toString(2)
+        }.getOrDefault(text)
     }
 
     /**
@@ -307,7 +410,7 @@ object CharacterRepository {
      * 嵌入 tEXt 块（关键字 "chara"），原图里旧的 chara/ccv3 块会被剥离避免双写。
      */
     suspend fun exportPngBytes(context: Context, name: String): ByteArray = withContext(Dispatchers.IO) {
-        val jsonStr = File(charsDir(context), "$name.json").readText()
+        val jsonStr = cardJsonForExport(context, name)
         val img = imageFile(context, name)
         val base = if (img.exists()) {
             img.readBytes()

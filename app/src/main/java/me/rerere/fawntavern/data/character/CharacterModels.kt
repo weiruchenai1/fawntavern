@@ -15,7 +15,6 @@ data class CharacterCard(
     val systemPrompt: String = "",
     val postHistoryInstructions: String = "",
     val world: String = "",
-    val worldBookEntries: List<WorldBookEntry> = emptyList(),
     val enabledWorldBooks: List<String> = emptyList(),  // 关联的世界书名列表
     val linkedPreset: String = "",  // 关联的预设名（可选）
     val linkedRegex: String = "",

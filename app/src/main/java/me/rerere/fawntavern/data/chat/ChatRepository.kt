@@ -38,6 +38,10 @@ object ChatRepository {
     suspend fun listSummaries(context: Context): List<ChatSession> =
         dao(context).listSummaries().map { it.toModel() }
 
+    /** 返回指定角色的聊天数量。 */
+    suspend fun countForCharacter(context: Context, charFile: String): Int =
+        listSummaries(context).count { it.charFile == charFile }
+
     suspend fun count(context: Context): Int = dao(context).countSessions()
 
     suspend fun statistics(context: Context, startMillis: Long): Statistics {
@@ -101,6 +105,16 @@ object ChatRepository {
     suspend fun delete(context: Context, id: String) {
         dao(context).deleteSession(id)
         collectUnusedAttachments(context)
+    }
+
+    /** 删除指定角色的全部聊天，返回实际删除的会话数。 */
+    suspend fun deleteForCharacter(context: Context, charFile: String): Int {
+        val ids = listSummaries(context)
+            .filter { it.charFile == charFile }
+            .map { it.id }
+        ids.forEach { dao(context).deleteSession(it) }
+        if (ids.isNotEmpty()) collectUnusedAttachments(context)
+        return ids.size
     }
 
     /** 清空所有会话（附件随之全部失去引用，一并删除） */

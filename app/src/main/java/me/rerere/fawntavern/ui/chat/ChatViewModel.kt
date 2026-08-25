@@ -224,6 +224,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 ctx.getString(R.string.default_character),
                 defaultPresetName,
             )
+            // 内嵌世界书条目不再参与激活，老卡必须先补抽成独立文件，否则世界书直接失效
+            CharacterRepository.migrateEmbeddedWorldBooks(ctx)
             if (ChatRepository.count(ctx) == 0) {
                 session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName)
             }

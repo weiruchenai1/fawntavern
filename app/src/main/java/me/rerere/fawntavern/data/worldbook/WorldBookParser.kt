@@ -49,7 +49,9 @@ object WorldBookParser {
                 selectiveLogic = int("selectiveLogic", 0),
                 // useProbability=false 表示不掷骰（等效 100%）；两字段 character_book 在 extensions 下、native 在顶层
                 probability = if (!bool("useProbability", true)) 100 else int("probability", 100).coerceIn(0, 100),
-                scanDepth = if (e.isNull("scanDepth")) null else e.optInt("scanDepth").takeIf { it > 0 }
+                // 括号不可省：原先 if/else 整体参与 ?:，顶层缺 scanDepth 就直接是 null，
+                // extensions.scan_depth 永远轮不到，character_book 的条目级扫描深度全丢
+                scanDepth = (if (e.isNull("scanDepth")) null else e.optInt("scanDepth").takeIf { it > 0 })
                     ?: ext?.optInt("scan_depth", -1)?.takeIf { it > 0 },
                 caseSensitive = when {
                     e.has("caseSensitive") && !e.isNull("caseSensitive") -> e.optBoolean("caseSensitive")

@@ -71,4 +71,52 @@ class WorldBookRepositoryTest {
         assertEquals("text", WorldBookRepository.load(context, first.name).entries.getValue(0).content)
         assertEquals(emptyMap<Int, WorldBookEntry>(), WorldBookRepository.load(context, second.name).entries)
     }
+
+    /** 角色卡内嵌书抽出来的文件是 character_book 形态（entries 为数组、私有字段在 extensions 下） */
+    @Test
+    fun saveEntriesPatchesCharacterBookShapeWithoutLosingPrivateFields() = runBlocking {
+        val file = File(WorldBookRepository.worldDir(context), "Embedded.json")
+        file.writeText(
+            """
+            {"name":"Embedded","entries":[{"id":7,"keys":["old"],"secondary_keys":[],
+            "comment":"c","content":"old","constant":false,"selective":false,
+            "insertion_order":100,"enabled":true,"position":"before_char","use_regex":true,
+            "extensions":{"position":0,"exclude_recursion":true,"case_sensitive":true,
+            "automation_id":"keep","triggers":["t"],"ignore_budget":true}}]}
+            """.trimIndent()
+        )
+
+        val entry = WorldBookRepository.load(context, "Embedded").entries.getValue(7)
+        assertEquals(listOf("old"), entry.keys)
+        assertEquals(true, entry.excludeRecursion)
+        assertEquals(true, entry.caseSensitive)
+
+        WorldBookRepository.saveEntries(
+            context,
+            "Embedded",
+            listOf(
+                entry.copy(
+                    keys = listOf("new"),
+                    content = "new",
+                    excludeRecursion = false,
+                    caseSensitive = null,
+                )
+            ),
+        )
+
+        // character_book 的同义键会盖掉/取或本次写入的值，保存时必须清掉
+        val reloaded = WorldBookRepository.load(context, "Embedded").entries.getValue(7)
+        assertEquals(listOf("new"), reloaded.keys)
+        assertEquals("new", reloaded.content)
+        assertEquals(false, reloaded.excludeRecursion)
+        assertEquals(null, reloaded.caseSensitive)
+        assertEquals(WorldBookPos.BEFORE_CHAR, reloaded.position)
+
+        // 未建模的 ST 私有字段随原 entry 对象保留
+        val ext = JSONObject(file.readText())
+            .getJSONObject("entries").getJSONObject("7").getJSONObject("extensions")
+        assertEquals("keep", ext.getString("automation_id"))
+        assertEquals(true, ext.getBoolean("ignore_budget"))
+        assertEquals("t", ext.getJSONArray("triggers").getString(0))
+    }
 }
