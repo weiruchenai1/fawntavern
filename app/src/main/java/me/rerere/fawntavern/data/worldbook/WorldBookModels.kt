@@ -2,6 +2,7 @@ package me.rerere.fawntavern.data.worldbook
 
 data class WorldBook(
     val name: String = "",
+    val id: String = "",
     val entries: Map<Int, WorldBookEntry> = emptyMap(),
 )
 

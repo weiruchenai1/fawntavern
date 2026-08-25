@@ -6,6 +6,7 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.RegexScript
 import me.rerere.fawntavern.data.preset.StPreset
+import me.rerere.fawntavern.data.character.CharacterRepository
 
 internal interface PresetDataSource {
     fun defaultName(): String?
@@ -31,7 +32,7 @@ internal class AndroidPresetDataSource(
     override suspend fun create(name: String): StPreset = PresetRepository.create(context, name)
     override suspend fun import(uri: Uri): StPreset = PresetRepository.import(context, uri)
     override suspend fun rename(old: String, new: String): Boolean = PresetRepository.rename(context, old, new)
-    override suspend fun delete(name: String) = PresetRepository.delete(context, name)
+    override suspend fun delete(name: String) = CharacterRepository.deletePreset(context, name)
     override suspend fun save(preset: StPreset) = PresetRepository.save(context, preset)
     override suspend fun parseRegex(uri: Uri): RegexScript = PresetRepository.parseRegexUri(context, uri)
 }

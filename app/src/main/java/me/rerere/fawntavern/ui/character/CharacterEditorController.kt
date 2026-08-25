@@ -7,14 +7,10 @@ import me.rerere.fawntavern.data.api.ApiConfig
 import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.preset.PresetRepository
+import me.rerere.fawntavern.data.regex.RegexSetRepository
 import me.rerere.fawntavern.data.settings.CharacterModelStore
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import org.json.JSONObject
-
-internal data class CharacterRegexOption(
-    val id: String,
-    val displayName: String,
-)
 
 internal interface CharacterEditorDataSource {
     fun imageFile(name: String): File
@@ -24,10 +20,12 @@ internal interface CharacterEditorDataSource {
     fun apiConfig(): ApiConfig
     fun model(key: String): String
     fun saveModel(key: String, model: String)
-    suspend fun presetNames(): List<String>
-    suspend fun worldBookNames(): List<String>
-    suspend fun regexOptions(): List<CharacterRegexOption>
+    suspend fun presetOptions(): List<CharacterAssociationOption>
+    suspend fun worldBookOptions(): List<CharacterAssociationOption>
+    suspend fun regexOptions(): List<CharacterAssociationOption>
 }
+
+internal data class CharacterAssociationOption(val id: String, val label: String)
 
 internal class AndroidCharacterEditorDataSource(
     private val context: Context,
@@ -42,15 +40,19 @@ internal class AndroidCharacterEditorDataSource(
     override fun apiConfig(): ApiConfig = ApiConfigStore.loadConfig(context)
     override fun model(key: String): String = CharacterModelStore.get(context, key)
     override fun saveModel(key: String, model: String) = CharacterModelStore.set(context, key, model)
-    override suspend fun presetNames(): List<String> = PresetRepository.listNames(context)
-    override suspend fun worldBookNames(): List<String> = WorldBookRepository.listNames(context)
-    override suspend fun regexOptions(): List<CharacterRegexOption> =
-        CharacterRepository.listNames(context).mapNotNull { fileName ->
-            runCatching {
-                val card = CharacterRepository.load(context, fileName)
-                CharacterRegexOption(fileName, card.name.ifBlank { fileName })
-            }.getOrNull()
+    override suspend fun presetOptions(): List<CharacterAssociationOption> =
+        PresetRepository.listNames(context).mapNotNull { name ->
+            runCatching { PresetRepository.load(context, name) }
+                .getOrNull()?.let { CharacterAssociationOption(it.id, it.name) }
         }
+    override suspend fun worldBookOptions(): List<CharacterAssociationOption> =
+        WorldBookRepository.listNames(context).mapNotNull { name ->
+            runCatching { WorldBookRepository.load(context, name) }
+                .getOrNull()?.let { CharacterAssociationOption(it.id, it.name) }
+        }
+    override suspend fun regexOptions(): List<CharacterAssociationOption> =
+        RegexSetRepository.loadAll(context).filterNot { it.global }
+            .map { CharacterAssociationOption(it.id, it.name) }
 }
 
 internal class CharacterEditorController(
@@ -63,7 +65,7 @@ internal class CharacterEditorController(
     fun apiConfig(): ApiConfig = dataSource.apiConfig()
     fun model(key: String): String = dataSource.model(key)
     fun saveModel(key: String, model: String) = dataSource.saveModel(key, model)
-    suspend fun presetNames(): List<String> = dataSource.presetNames()
-    suspend fun worldBookNames(): List<String> = dataSource.worldBookNames()
-    suspend fun regexOptions(): List<CharacterRegexOption> = dataSource.regexOptions()
+    suspend fun presetOptions(): List<CharacterAssociationOption> = dataSource.presetOptions()
+    suspend fun worldBookOptions(): List<CharacterAssociationOption> = dataSource.worldBookOptions()
+    suspend fun regexOptions(): List<CharacterAssociationOption> = dataSource.regexOptions()
 }

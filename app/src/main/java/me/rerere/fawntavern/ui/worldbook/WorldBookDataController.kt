@@ -5,6 +5,7 @@ import android.net.Uri
 import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.data.worldbook.WorldBookEntry
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
+import me.rerere.fawntavern.data.character.CharacterRepository
 
 internal interface WorldBookDataSource {
     suspend fun names(): List<String>
@@ -25,7 +26,7 @@ internal class AndroidWorldBookDataSource(
     override suspend fun create(name: String): WorldBook = WorldBookRepository.create(context, name)
     override suspend fun import(uri: Uri): WorldBook = WorldBookRepository.import(context, uri)
     override suspend fun rename(old: String, new: String): Boolean = WorldBookRepository.rename(context, old, new)
-    override suspend fun delete(name: String) = WorldBookRepository.delete(context, name)
+    override suspend fun delete(name: String) = CharacterRepository.deleteWorldBook(context, name)
     override suspend fun saveEntries(name: String, entries: List<WorldBookEntry>) =
         WorldBookRepository.saveEntries(context, name, entries)
     override suspend fun exportJson(name: String): ByteArray =

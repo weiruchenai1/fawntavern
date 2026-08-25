@@ -74,8 +74,11 @@ internal class AndroidDataManagementDataSource(
     override suspend fun clear(category: DataCategoryKey) {
         when (category) {
             DataCategoryKey.CHARACTERS -> CharacterRepository.clear(context)
-            DataCategoryKey.PRESETS -> PresetRepository.clear(context)
-            DataCategoryKey.WORLDBOOKS -> WorldBookRepository.clear(context)
+            DataCategoryKey.PRESETS -> PresetRepository.listNames(context)
+                .filter { it != PresetRepository.defaultPresetName(context) }
+                .forEach { CharacterRepository.deletePreset(context, it) }
+            DataCategoryKey.WORLDBOOKS -> WorldBookRepository.listNames(context)
+                .forEach { CharacterRepository.deleteWorldBook(context, it) }
             DataCategoryKey.CHATS -> ChatRepository.clear(context)
             DataCategoryKey.SYSTEM_LOGS -> SafeLog.clear()
         }

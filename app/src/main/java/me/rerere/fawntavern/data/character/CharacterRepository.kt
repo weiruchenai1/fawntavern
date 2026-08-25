@@ -15,6 +15,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.JsonFileDir
+import me.rerere.fawntavern.data.preset.PresetRepository
+import me.rerere.fawntavern.data.regex.RegexSet
+import me.rerere.fawntavern.data.regex.RegexSetRepository
+import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.data.worldbook.WorldBookParser
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 import me.rerere.fawntavern.data.worldbook.WorldBookSerializer
@@ -45,7 +49,7 @@ object CharacterRepository {
     suspend fun ensureDefaultCard(
         context: Context,
         fallbackName: String,
-        defaultPresetName: String = "",
+        defaultPresetId: String = "",
     ): String = withContext(Dispatchers.IO) {
         mutationMutex.withLock {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -63,14 +67,14 @@ object CharacterRepository {
                         .put("tags", JSONArray())
                         .put("alternate_greetings", JSONArray())
                         .apply {
-                            if (defaultPresetName.isNotBlank()) put("linked_preset", defaultPresetName)
+                            if (defaultPresetId.isNotBlank()) put("linked_preset_id", defaultPresetId)
                         })
                 JsonFileDir.atomicWriteText(file, json.toString(2))
-            } else if (defaultPresetName.isNotBlank()) {
+            } else if (defaultPresetId.isNotBlank()) {
                 val json = JSONObject(file.readText())
                 val data = json.optJSONObject("data") ?: json
-                if (!data.has("linked_preset")) {
-                    data.put("linked_preset", defaultPresetName)
+                if (!data.has("linked_preset_id")) {
+                    data.put("linked_preset_id", defaultPresetId)
                     JsonFileDir.atomicWriteText(file, json.toString(2))
                 }
             }
@@ -150,7 +154,7 @@ object CharacterRepository {
     suspend fun create(
         context: Context,
         requestedName: String,
-        defaultPresetName: String = "",
+        defaultPresetId: String = "",
     ): CharacterCard = withContext(Dispatchers.IO) {
         val displayName = requestedName.trim()
         require(displayName.isNotBlank()) { "角色名称不能为空" }
@@ -169,7 +173,7 @@ object CharacterRepository {
                     .put("tags", JSONArray())
                     .put("alternate_greetings", JSONArray())
                     .apply {
-                        if (defaultPresetName.isNotBlank()) put("linked_preset", defaultPresetName)
+                        if (defaultPresetId.isNotBlank()) put("linked_preset_id", defaultPresetId)
                     })
             JsonFileDir.atomicWriteText(File(charsDir(context), "$name.json"), json.toString(2))
             CharacterParser.parse(json, name)
@@ -188,40 +192,10 @@ object CharacterRepository {
             }
         }
 
-    /** 预设重命名后同步角色卡关联；任一写入失败时恢复已经修改的角色卡。 */
-    suspend fun renameLinkedPreset(context: Context, oldName: String, newName: String) =
-        withContext(Dispatchers.IO) {
-            mutationMutex.withLock {
-                val updates = charsDir(context).listFiles()
-                    ?.filter { it.extension == "json" }
-                    ?.mapNotNull { file ->
-                        val original = file.readText()
-                        val json = JSONObject(original)
-                        val data = json.optJSONObject("data") ?: json
-                        if (data.optString("linked_preset", "") != oldName) return@mapNotNull null
-                        data.put("linked_preset", newName)
-                        Triple(file, original, json.toString(2))
-                    }
-                    .orEmpty()
-                val written = mutableListOf<Pair<File, String>>()
-                try {
-                    updates.forEach { (file, original, updated) ->
-                        JsonFileDir.atomicWriteText(file, updated)
-                        written += file to original
-                    }
-                } catch (error: Exception) {
-                    written.asReversed().forEach { (file, original) ->
-                        runCatching { JsonFileDir.atomicWriteText(file, original) }
-                    }
-                    throw error
-                }
-            }
-        }
-
     suspend fun import(
         context: Context,
         uri: Uri,
-        defaultPresetName: String = "",
+        defaultPresetId: String = "",
     ): CharacterCard = withContext(Dispatchers.IO) {
         val rawBytes = context.contentResolver.openInputStream(uri)?.readBytes()
             ?: throw IllegalStateException("无法读取文件")
@@ -231,8 +205,8 @@ object CharacterRepository {
 
         val json = JSONObject(jsonStr)
         val data = json.optJSONObject("data") ?: json
-        if (!data.has("linked_preset") && defaultPresetName.isNotBlank()) {
-            data.put("linked_preset", defaultPresetName)
+        if (!data.has("linked_preset_id") && defaultPresetId.isNotBlank()) {
+            data.put("linked_preset_id", defaultPresetId)
         }
 
         val parsed = CharacterParser.parse(json)
@@ -242,11 +216,14 @@ object CharacterRepository {
                 ?: "character_${System.currentTimeMillis()}"
         }
         mutationMutex.withLock {
+            val baseName = safeFileName(requestedName)
             val name = uniqueFileName(context, requestedName)
+            if (name != baseName) data.put("name", name)
             val cardFile = File(charsDir(context), "$name.json")
             val pngFile = imageFile(context, name)
             var createdImage = false
-            var createdWorldBook: File? = null
+            var createdWorldBook: WorldBook? = null
+            var createdRegexSet: RegexSet? = null
             try {
                 // The card JSON is the commit marker. Side files are written first and cleaned up
                 // if anything fails before the final atomic JSON replacement.
@@ -259,19 +236,23 @@ object CharacterRepository {
                     ?: json.optJSONObject("character_book")
                 if (charaBook != null) {
                     val bookName = charaBook.optString("name", "").ifBlank { "$name 世界书" }
-                    val safeBookName = JsonFileDir.uniqueName(
-                        context,
-                        WorldBookRepository.WORLD_DIR,
-                        bookName,
-                        "worldbook_${System.currentTimeMillis()}",
-                    )
-                    createdWorldBook = JsonFileDir.file(context, WorldBookRepository.WORLD_DIR, safeBookName)
-                    JsonFileDir.atomicWriteText(createdWorldBook, charaBook.toString(2))
-                    // 关联必须落到抽出来的**实际**文件名上：书名撞车时 uniqueName 会加后缀，
-                    // 只靠解析层拿 character_book.name 兜底会指到同名的别人家那本书上
-                    if (!data.has("enabled_world_books")) {
-                        data.put("enabled_world_books", JSONArray().put(safeBookName))
+                    val extractedBook = WorldBookRepository.createFromCharacterBook(context, bookName, charaBook)
+                    createdWorldBook = extractedBook
+                    data.put("enabled_world_book_ids", JSONArray().put(extractedBook.id))
+                }
+
+                val embeddedRegex = data.optJSONObject("extensions")?.optJSONArray("regex_scripts")
+                if (embeddedRegex != null) {
+                    // 内嵌正则与 character_book 同理：抽成独立局部正则，卡内那份只留作导出载荷。
+                    // 空数组明确表示这张导入卡没有关联的局部正则。
+                    createdRegexSet = if (embeddedRegex.length() > 0) {
+                        RegexSetRepository.createFrom(context, "$name 正则", embeddedRegex)
+                    } else {
+                        null
                     }
+                    data.put("enabled_regex_ids", JSONArray().apply {
+                        createdRegexSet?.let { put(it.id) }
+                    })
                 }
 
                 JsonFileDir.atomicWriteText(cardFile, json.toString(2))
@@ -279,63 +260,16 @@ object CharacterRepository {
             } catch (error: Exception) {
                 if (!cardFile.exists()) {
                     if (createdImage) pngFile.delete()
-                    createdWorldBook?.delete()
+                    createdWorldBook?.let { WorldBookRepository.delete(context, it.name) }
+                    createdRegexSet?.let { RegexSetRepository.delete(context, it.name) }
                 }
                 throw error
             }
         }
     }
 
-    /**
-     * 给老卡补抽内嵌世界书并写下关联。此前导入只把 character_book 留在卡里，靠解析层拿
-     * `character_book.name` 兜底关联，书名撞车会指到别人那本书上；而内嵌条目现在不再参与激活，
-     * 不补抽就等于世界书失效。
-     * 判据是「有 character_book 但没有 enabled_world_books 键」——键一旦存在就说明导入或编辑器
-     * 写过关联（含用户主动取消关联的空数组），不再处理，因此可反复调用。
-     */
-    suspend fun migrateEmbeddedWorldBooks(context: Context) = withContext(Dispatchers.IO) {
-        mutationMutex.withLock {
-            charsDir(context).listFiles()
-                ?.filter { it.extension == "json" }
-                ?.forEach { file ->
-                    runCatching {
-                        val json = JSONObject(file.readText())
-                        val data = json.optJSONObject("data") ?: json
-                        if (data.has("enabled_world_books")) return@runCatching
-                        val book = data.optJSONObject("character_book") ?: return@runCatching
-                        val cardName = file.nameWithoutExtension
-                        val bookName = book.optString("name", "").trim()
-                            .ifBlank { "$cardName 世界书" }
-                        // 同名文件已在，视作之前那次导入抽出来的那本，直接关联；否则会凭空多出一本副本
-                        val existing = JsonFileDir.file(context, WorldBookRepository.WORLD_DIR, bookName)
-                        val linked = if (existing.isFile) {
-                            bookName
-                        } else {
-                            JsonFileDir.uniqueName(
-                                context,
-                                WorldBookRepository.WORLD_DIR,
-                                bookName,
-                                "worldbook_${System.currentTimeMillis()}",
-                            ).also {
-                                JsonFileDir.atomicWriteText(
-                                    JsonFileDir.file(context, WorldBookRepository.WORLD_DIR, it),
-                                    book.toString(2),
-                                )
-                            }
-                        }
-                        data.put("enabled_world_books", JSONArray().put(linked))
-                        JsonFileDir.atomicWriteText(file, json.toString(2))
-                    }
-                }
-            Unit
-        }
-    }
-
-    /**
-     * 除 [excluding] 之外，其余角色卡还在关联的世界书名集合。世界书按名字关联、多张卡可以指同
-     * 一本，删卡时据此判断哪本能连带删、哪本还有人用。
-     */
-    suspend fun referencedWorldBooks(context: Context, excluding: String): Set<String> =
+    /** 除 [excluding] 外其余角色仍关联的世界书 ID，用于避免删除共享资源。 */
+    suspend fun referencedWorldBookIds(context: Context, excluding: String): Set<String> =
         withContext(Dispatchers.IO) {
             charsDir(context).listFiles()
                 ?.asSequence()
@@ -346,13 +280,119 @@ object CharacterRepository {
                             JSONObject(file.readText()),
                             file.nameWithoutExtension,
                         )
-                        (card.enabledWorldBooks + card.world).asSequence()
+                        card.enabledWorldBookIds.asSequence()
                     }.getOrDefault(emptySequence())
                 }
                 ?.filter { it.isNotBlank() }
                 ?.toSet()
                 .orEmpty()
         }
+
+    /** 除 [excluding] 外其余角色仍关联的正则 ID，用于避免删除共享资源。 */
+    suspend fun referencedRegexIds(context: Context, excluding: String): Set<String> =
+        withContext(Dispatchers.IO) {
+            charsDir(context).listFiles()
+                ?.asSequence()
+                ?.filter { it.extension == "json" && it.nameWithoutExtension != excluding }
+                ?.flatMap { file ->
+                    runCatching {
+                        CharacterParser.parse(JSONObject(file.readText()), file.nameWithoutExtension)
+                            .enabledRegexIds.asSequence()
+                    }.getOrDefault(emptySequence())
+                }
+                ?.filter(String::isNotBlank)
+                ?.toSet()
+                .orEmpty()
+        }
+
+    /** 正则按不可变 ID 关联，重命名只改文件名。 */
+    suspend fun renameRegexSet(
+        context: Context,
+        oldName: String,
+        newName: String,
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (!JsonFileDir.isValidName(newName)) return@withContext false
+        RegexSetRepository.rename(context, oldName, newName)
+    }
+
+    /** 删除独立正则集，并从所有角色的关联数组中移除它。 */
+    suspend fun deleteRegexSet(context: Context, name: String) = withContext(Dispatchers.IO) {
+        mutationMutex.withLock {
+            val id = RegexSetRepository.load(context, name).id
+            val updates = associationRemovalUpdates(context, "enabled_regex_ids", id)
+            writeAssociationUpdates(updates) { RegexSetRepository.delete(context, name) }
+        }
+    }
+
+    suspend fun deleteWorldBook(context: Context, name: String) = withContext(Dispatchers.IO) {
+        mutationMutex.withLock {
+            val id = WorldBookRepository.load(context, name).id
+            val updates = associationRemovalUpdates(context, "enabled_world_book_ids", id)
+            writeAssociationUpdates(updates) { WorldBookRepository.delete(context, name) }
+        }
+    }
+
+    suspend fun deletePreset(context: Context, name: String) = withContext(Dispatchers.IO) {
+        if (name == PresetRepository.defaultPresetName(context)) return@withContext
+        mutationMutex.withLock {
+            val id = PresetRepository.load(context, name).id
+            val updates = scalarAssociationRemovalUpdates(context, "linked_preset_id", id)
+            writeAssociationUpdates(updates) { PresetRepository.delete(context, name) }
+        }
+    }
+
+    private fun associationRemovalUpdates(
+        context: Context,
+        field: String,
+        id: String,
+    ): List<Triple<File, String, String>> = charsDir(context).listFiles()
+        ?.filter { it.extension == "json" }
+        ?.mapNotNull { file ->
+            val original = file.readText()
+            val json = JSONObject(original)
+            val data = json.optJSONObject("data") ?: json
+            val current = data.optJSONArray(field) ?: return@mapNotNull null
+            val ids = (0 until current.length()).map { current.optString(it, "") }
+            if (id !in ids) return@mapNotNull null
+            data.put(field, JSONArray(ids.filterNot { it == id }))
+            Triple(file, original, json.toString(2))
+        }
+        .orEmpty()
+
+    private fun scalarAssociationRemovalUpdates(
+        context: Context,
+        field: String,
+        id: String,
+    ): List<Triple<File, String, String>> = charsDir(context).listFiles()
+        ?.filter { it.extension == "json" }
+        ?.mapNotNull { file ->
+            val original = file.readText()
+            val json = JSONObject(original)
+            val data = json.optJSONObject("data") ?: json
+            if (data.optString(field, "") != id) return@mapNotNull null
+            data.put(field, "")
+            Triple(file, original, json.toString(2))
+        }
+        .orEmpty()
+
+    private suspend fun writeAssociationUpdates(
+        updates: List<Triple<File, String, String>>,
+        deleteResource: suspend () -> Unit,
+    ) {
+        val written = mutableListOf<Pair<File, String>>()
+        try {
+            updates.forEach { (file, original, updated) ->
+                JsonFileDir.atomicWriteText(file, updated)
+                written += file to original
+            }
+            deleteResource()
+        } catch (error: Exception) {
+            written.asReversed().forEach { (file, original) ->
+                runCatching { JsonFileDir.atomicWriteText(file, original) }
+            }
+            throw error
+        }
+    }
 
     suspend fun delete(context: Context, name: String) = withContext(Dispatchers.IO) {
         mutationMutex.withLock {
@@ -377,30 +417,70 @@ object CharacterRepository {
     }
 
     /**
-     * 导出用的卡 JSON：把 `character_book` 换成当前关联世界书的内容。卡内那份自导入起就不再更新，
-     * 直接导出会丢掉用户在世界书里的全部编辑（同 ST 保存时按 linked world 重新生成内嵌书）。
-     * 关联的书一本都读不到时保持文件原样，解析/读盘出错也回落原文，导出不因此失败。
+     * 导出用的卡 JSON：把 `character_book` 和 `extensions.regex_scripts` 换成当前关联的世界书 /
+     * 正则集内容。卡内那两份自导入起就不再更新，直接导出会丢掉用户后来的全部编辑（同 ST 保存时
+     * 按 linked world 重新生成内嵌书）。关联项一个都读不到时保持文件原样，解析/读盘出错也回落
+     * 原文，导出不因此失败。
      */
-    private fun cardJsonForExport(context: Context, name: String): String {
+    private suspend fun cardJsonForExport(context: Context, name: String): String {
         val text = File(charsDir(context), "$name.json").readText()
         return runCatching {
             val json = JSONObject(text)
+            val data = json.optJSONObject("data") ?: json
             val card = CharacterParser.parse(json, name)
-            val sources = (card.enabledWorldBooks + card.world)
+            var changed = false
+
+            val sources = card.enabledWorldBookIds
                 .filter { it.isNotBlank() }
                 .distinct()
-                .mapNotNull { bookName ->
+                .mapNotNull { bookId ->
+                    val book = runCatching { WorldBookRepository.loadById(context, bookId) }.getOrNull()
+                        ?: return@mapNotNull null
+                    val bookName = book.name
                     val file = JsonFileDir.file(context, WorldBookRepository.WORLD_DIR, bookName)
                     if (!file.isFile) return@mapNotNull null
                     val raw = JSONObject(file.readText())
                     WorldBookSerializer.Source(raw, WorldBookParser.parse(raw, bookName))
                 }
-            if (sources.isEmpty()) return@runCatching text
-            (json.optJSONObject("data") ?: json).put(
-                "character_book",
-                WorldBookSerializer.toCharacterBook(sources.first().book.name, sources),
-            )
-            json.toString(2)
+            if (sources.isNotEmpty()) {
+                data.put(
+                    "character_book",
+                    WorldBookSerializer.toCharacterBook(sources.first().book.name, sources),
+                )
+                val extensions = data.optJSONObject("extensions")
+                    ?: JSONObject().also { data.put("extensions", it) }
+                extensions.put("world", sources.first().book.name)
+                changed = true
+            } else if (card.enabledWorldBookIds.isEmpty() && data.has("enabled_world_book_ids")) {
+                data.remove("character_book")
+                data.optJSONObject("extensions")?.remove("world")
+                changed = true
+            }
+
+            // 关联多个正则集就合并成一个数组：ST 卡内只有 extensions.regex_scripts 一处能放
+            val associatedSets = card.enabledRegexIds.filter { it.isNotBlank() }.distinct()
+            val merged = JSONArray()
+            var foundAssociatedSet = false
+            associatedSets.forEach { setId ->
+                val set = runCatching { RegexSetRepository.loadById(context, setId) }.getOrNull()
+                if (set != null && !set.global) {
+                    foundAssociatedSet = true
+                    RegexSetRepository.rawScripts(context, set.name)?.let { arr ->
+                        for (i in 0 until arr.length()) merged.put(arr.opt(i))
+                    }
+                }
+            }
+            if (associatedSets.isEmpty() && data.has("enabled_regex_ids")) {
+                data.optJSONObject("extensions")?.remove("regex_scripts")
+                changed = true
+            } else if (foundAssociatedSet) {
+                val ext = data.optJSONObject("extensions")
+                    ?: JSONObject().also { data.put("extensions", it) }
+                ext.put("regex_scripts", merged)
+                changed = true
+            }
+
+            if (changed) json.toString(2) else text
         }.getOrDefault(text)
     }
 
@@ -556,10 +636,7 @@ object CharacterRepository {
     }
 
     private fun uniqueFileName(context: Context, requestedName: String): String {
-        val safe = requestedName
-            .replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001F]"), "_")
-            .trim().trim('.')
-            .ifBlank { "character_${System.currentTimeMillis()}" }
+        val safe = safeFileName(requestedName)
         var candidate = safe
         var suffix = 2
         while (File(charsDir(context), "$candidate.json").exists() || imageFile(context, candidate).exists()) {
@@ -568,6 +645,11 @@ object CharacterRepository {
         }
         return candidate
     }
+
+    private fun safeFileName(requestedName: String): String = requestedName
+            .replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001F]"), "_")
+            .trim().trim('.')
+            .ifBlank { "character_${System.currentTimeMillis()}" }
 
     /** 在原始字节中搜索 "chara\0"，提取其后的 base64。 */
     private fun extractBase64FromRaw(bytes: ByteArray): String? {

@@ -427,7 +427,7 @@ internal object PromptBuilder {
     ): Pair<List<WorldBookEntry>, Map<String, Int>> {
         // 只认关联的世界书。卡内 character_book 是导入载荷、不参与激活（同 ST：checkEmbeddedWorld
         // 仅据它显示导入按钮，生效与否只看链接），否则编辑/删除条目后旧内容还会从卡内那份注入。
-        // 导入时已抽成独立文件并写进 enabled_world_books，老卡由 migrateEmbeddedWorldBooks 补抽。
+        // 角色卡导入时内嵌书已抽成独立文件，并以不可变资源 ID 关联。
         // 向量化条目排除出激活候选（无 embedding 后端做语义检索，仅保留数据/状态）
         val candidates = worldBooks.flatMap { it.entries.values }
             .filter { it.enabled && it.content.isNotBlank() && !it.vectorized }

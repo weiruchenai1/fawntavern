@@ -25,6 +25,7 @@ import me.rerere.fawntavern.data.chat.AttachmentStore
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.preset.PresetRepository
+import me.rerere.fawntavern.data.regex.RegexSetRepository
 import me.rerere.fawntavern.data.settings.GlobalVariableStore
 import me.rerere.fawntavern.data.settings.SearchStore
 import me.rerere.fawntavern.data.settings.TtsStore
@@ -54,6 +55,7 @@ object AppBackup {
         CHARACTERS,
         PRESETS,
         WORLDBOOKS,
+        REGEXSETS,
         CHATS,
         API_CONFIG,
         SEARCH_CONFIG,
@@ -65,6 +67,7 @@ object AppBackup {
         Section.CHARACTERS,
         Section.PRESETS,
         Section.WORLDBOOKS,
+        Section.REGEXSETS,
         Section.CHATS,
         Section.AVATAR,
     )
@@ -107,10 +110,16 @@ object AppBackup {
                     addDirectory(zip, "characters", CharacterRepository.charsDir(context))
                 }
                 if (Section.PRESETS in sections) {
+                    PresetRepository.ensureAllIds(context)
                     addDirectory(zip, "presets", PresetRepository.presetsDir(context))
                 }
                 if (Section.WORLDBOOKS in sections) {
+                    WorldBookRepository.ensureAllIds(context)
                     addDirectory(zip, "worldbooks", WorldBookRepository.worldDir(context))
+                }
+                if (Section.REGEXSETS in sections) {
+                    RegexSetRepository.ensureAllIds(context)
+                    addDirectory(zip, "regexsets", RegexSetRepository.setsDir(context))
                 }
                 if (Section.CHATS in sections) {
                     addDirectory(zip, "attachments", AttachmentStore.dir(context))
@@ -229,6 +238,12 @@ object AppBackup {
                     restoredFiles += restoreDirectory(
                         File(staging, "worldbooks"), WorldBookRepository.worldDir(context),
                         File(rollbackDir, "worldbooks"), restored,
+                    )
+                }
+                if (Section.REGEXSETS in sections) {
+                    restoredFiles += restoreDirectory(
+                        File(staging, "regexsets"), RegexSetRepository.setsDir(context),
+                        File(rollbackDir, "regexsets"), restored,
                     )
                 }
                 if (Section.CHATS in sections) {
@@ -425,6 +440,7 @@ object AppBackup {
                 if (Section.CHARACTERS in sections) capture("characters", File(staging, "characters"))
                 if (Section.PRESETS in sections) capture("presets", File(staging, "presets"))
                 if (Section.WORLDBOOKS in sections) capture("worldbooks", File(staging, "worldbooks"))
+                if (Section.REGEXSETS in sections) capture("regexsets", File(staging, "regexsets"))
                 if (Section.CHATS in sections) capture("attachments", File(staging, "attachments"))
                 if (Section.AVATAR in sections) {
                     val avatar = File(staging, AVATAR_ENTRY)
@@ -468,6 +484,7 @@ object AppBackup {
         "characters" -> File(CharacterRepository.charsDir(context), name)
         "presets" -> File(PresetRepository.presetsDir(context), name)
         "worldbooks" -> File(WorldBookRepository.worldDir(context), name)
+        "regexsets" -> File(RegexSetRepository.setsDir(context), name)
         "attachments" -> File(AttachmentStore.dir(context), name)
         "avatar" -> File(context.filesDir, "avatars/user_avatar")
         else -> throw IllegalArgumentException("Unsupported restore area: $area")
@@ -512,6 +529,7 @@ object AppBackup {
         if (File(staging, "characters").listFiles()?.any { it.isFile } == true) add(Section.CHARACTERS)
         if (File(staging, "presets").listFiles()?.any { it.isFile } == true) add(Section.PRESETS)
         if (File(staging, "worldbooks").listFiles()?.any { it.isFile } == true) add(Section.WORLDBOOKS)
+        if (File(staging, "regexsets").listFiles()?.any { it.isFile } == true) add(Section.REGEXSETS)
         if (File(staging, CHAT_ENTRY).isFile) add(Section.CHATS)
         if (File(staging, API_ENTRY).isFile) add(Section.API_CONFIG)
         if (File(staging, SEARCH_ENTRY).isFile) add(Section.SEARCH_CONFIG)
@@ -571,7 +589,9 @@ object AppBackup {
     }
 
     private fun validatedTarget(staging: File, entryName: String, directory: Boolean): File? {
-        val roots = setOf("characters", "presets", "worldbooks", "attachments", "data", "avatar", "chats")
+        val roots = setOf(
+            "characters", "presets", "worldbooks", "regexsets", "attachments", "data", "avatar", "chats",
+        )
         if (directory) {
             require(entryName.trimEnd('/') in roots) { "Unsupported backup path: $entryName" }
             return null
@@ -583,7 +603,7 @@ object AppBackup {
         require(parts.size == 2 && parts[1].isNotBlank()) { "Unsupported backup path: $entryName" }
         // Legacy backups copied live Room files under chats/. They were never safe to restore.
         if (parts[0] == "chats") return null
-        require(parts[0] in setOf("characters", "presets", "worldbooks", "attachments")) {
+        require(parts[0] in setOf("characters", "presets", "worldbooks", "regexsets", "attachments")) {
             "Unsupported backup path: $entryName"
         }
         val fileName = parts[1]

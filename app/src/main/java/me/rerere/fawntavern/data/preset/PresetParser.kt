@@ -2,6 +2,7 @@ package me.rerere.fawntavern.data.preset
 
 import org.json.JSONArray
 import org.json.JSONObject
+import me.rerere.fawntavern.data.resourceId
 
 /**
  * 将 SillyTavern 预设 JSON 解析为 [StPreset]。
@@ -77,6 +78,7 @@ object PresetParser {
         }
 
         return StPreset(
+            id = json.resourceId(),
             name = fileName.removeSuffix(".json").ifBlank { json.optString("name", "") },
             chatCompletionSource = source,
             openaiModel = json.optString("openai_model", ""),

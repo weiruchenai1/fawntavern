@@ -39,7 +39,7 @@ import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.toCharRegex
-import me.rerere.fawntavern.data.regex.GlobalRegexRepository
+import me.rerere.fawntavern.data.regex.RegexSetRepository
 import me.rerere.fawntavern.data.speech.TtsUiState
 import me.rerere.fawntavern.data.settings.PromptLogStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
@@ -103,7 +103,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     var activeWorldBooks by mutableStateOf<List<WorldBook>>(emptyList()); private set
     var activePreset by mutableStateOf<StPreset?>(null); private set
     var globalRegexScripts by mutableStateOf<List<CharRegex>>(emptyList()); private set
-    var linkedRegexScripts by mutableStateOf<List<CharRegex>>(emptyList()); private set
+    var regexSetScripts by mutableStateOf<List<CharRegex>>(emptyList()); private set
     var promptContextFailures by mutableStateOf<List<PromptContextLoader.LoadFailure>>(emptyList())
         private set
     private var loadedPromptCharFile: String? = null
@@ -168,9 +168,9 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val presetRegex: List<CharRegex>
         get() = activePreset?.regexScripts?.map { it.toCharRegex() } ?: emptyList()
 
-    /** 生效正则：全局 + 当前预设 + 角色关联的局部正则。 */
+    /** 生效正则：全局启用的正则集 + 当前预设 + 角色关联的正则集。 */
     val displayRegexScripts: List<CharRegex>
-        get() = globalRegexScripts + presetRegex + linkedRegexScripts
+        get() = globalRegexScripts + presetRegex + regexSetScripts
 
     private val generation = GenerationController()
     private val ctx: Application get() = getApplication()
@@ -219,13 +219,12 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 ctx,
                 ctx.getString(R.string.default_preset),
             )
+            val defaultPresetId = PresetRepository.load(ctx, defaultPresetName).id
             val defaultName = CharacterRepository.ensureDefaultCard(
                 ctx,
                 ctx.getString(R.string.default_character),
-                defaultPresetName,
+                defaultPresetId,
             )
-            // 内嵌世界书条目不再参与激活，老卡必须先补抽成独立文件，否则世界书直接失效
-            CharacterRepository.migrateEmbeddedWorldBooks(ctx)
             if (ChatRepository.count(ctx) == 0) {
                 session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName)
             }
@@ -332,9 +331,15 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 按当前角色卡加载关联的世界书与预设；保留可用项并向 UI 上报损坏项。 */
+    /** 全局启用的正则集（global=true）：对所有聊天生效，与角色关联的集分两条路加载、互不重复 */
+    private suspend fun loadGlobalRegex(): List<CharRegex> =
+        RegexSetRepository.loadAll(ctx)
+            .filter { it.global }
+            .flatMap { set -> set.scripts.map { it.toCharRegex() } }
+
     private suspend fun loadPromptData(revision: Long) {
         val file = session?.charFile.orEmpty()
-        globalRegexScripts = GlobalRegexRepository.load(ctx).map { it.toCharRegex() }
+        globalRegexScripts = loadGlobalRegex()
         applyPromptContext(
             PromptContextLoader.load(ctx, file),
             if (file.isBlank()) null else loadCharImage(file),
@@ -357,7 +362,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         currentCard = loaded.card
         activeWorldBooks = loaded.worldBooks
         activePreset = loaded.preset
-        linkedRegexScripts = loaded.linkedRegexScripts
+        regexSetScripts = loaded.regexSetScripts
         promptContextFailures = loaded.failures
         charImageBitmap = image
         loadedPromptCharFile = loaded.charFile
@@ -470,10 +475,11 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                             ctx,
                             ctx.getString(R.string.default_preset),
                         )
+                        val defaultPresetId = PresetRepository.load(ctx, defaultPresetName).id
                         val defName = CharacterRepository.ensureDefaultCard(
                             ctx,
                             ctx.getString(R.string.default_character),
-                            defaultPresetName,
+                            defaultPresetId,
                         )
                         currentCard = loadCard(defName)
                         ConversationOps.newSession(currentCard, defName, defName)
@@ -906,7 +912,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         userProfileController.save(name, description)
         reloadUserProfile()
         viewModelScope.launch {
-            globalRegexScripts = GlobalRegexRepository.load(ctx).map { it.toCharRegex() }
+            globalRegexScripts = loadGlobalRegex()
         }
     }
 

@@ -125,9 +125,9 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 .distinctBy { it.lowercase() },
         )
     }
-    var enabledWb by remember { mutableStateOf(card.enabledWorldBooks) }
-    var linkedPreset by remember { mutableStateOf(card.linkedPreset) }
-    var linkedRegex by remember { mutableStateOf(card.linkedRegex) }
+    var enabledWorldBookIds by remember { mutableStateOf(card.enabledWorldBookIds) }
+    var linkedPresetId by remember { mutableStateOf(card.linkedPresetId) }
+    var enabledRegexIds by remember { mutableStateOf(card.enabledRegexIds) }
     var streaming by remember { mutableStateOf(card.streaming) }
     var greetings by remember {
         mutableStateOf(
@@ -254,9 +254,9 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                 d.put("tags", JSONArray(tags))
                 d.put("first_mes", greetings.firstOrNull() ?: "")
                 d.put("alternate_greetings", JSONArray(greetings.drop(1)))
-                d.put("enabled_world_books", JSONArray(enabledWb))
-                d.put("linked_preset", linkedPreset)
-                d.put("linked_regex", linkedRegex)
+                d.put("enabled_world_book_ids", JSONArray(enabledWorldBookIds))
+                d.put("linked_preset_id", linkedPresetId)
+                d.put("enabled_regex_ids", JSONArray(enabledRegexIds))
                 d.put("streaming", streaming)
                 // 角色注入提示写回 extensions.depth_prompt（空则移除）
                 val ext = d.optJSONObject("extensions") ?: JSONObject().also { d.put("extensions", it) }
@@ -607,23 +607,22 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
 
             WorldBookSelector(
                 controller = controller,
-                enabledNames = enabledWb,
-                onChange = { enabledWb = it },
+                selectedIds = enabledWorldBookIds,
+                onChange = { enabledWorldBookIds = it },
             )
 
             PresetSelector(
                 controller = controller,
-                selected = linkedPreset,
+                selectedId = linkedPresetId,
                 onSelect = { sel ->
-                    linkedPreset = sel
+                    linkedPresetId = sel
                 }
             )
 
             RegexSelector(
                 controller = controller,
-                currentCardFile = cardFileName,
-                selected = linkedRegex,
-                onSelect = { linkedRegex = it },
+                selectedIds = enabledRegexIds,
+                onSelect = { enabledRegexIds = it },
             )
         }
     }
@@ -642,14 +641,14 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
 @Composable
 private fun PresetSelector(
     controller: CharacterEditorController,
-    selected: String,
+    selectedId: String,
     onSelect: (String) -> Unit,
 ) {
-    var presetNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    var options by remember { mutableStateOf<List<CharacterAssociationOption>>(emptyList()) }
     var showSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        presetNames = controller.presetNames()
+        options = controller.presetOptions()
     }
 
     ModelCard(
@@ -658,8 +657,10 @@ private fun PresetSelector(
         subtitle = stringResource(R.string.assoc_preset_desc),
         iconKey = "",
         selectionIcon = Lucide.SlidersHorizontal,
-        displayName = selected.ifBlank { stringResource(R.string.assoc_none) },
-        showReset = selected.isNotBlank(),
+        displayName = options.firstOrNull { it.id == selectedId }?.label
+            ?: if (selectedId.isBlank()) stringResource(R.string.assoc_none)
+            else stringResource(R.string.assoc_missing),
+        showReset = selectedId.isNotBlank(),
         showBolt = false,
         onPick = { showSheet = true },
         onReset = { onSelect("") },
@@ -669,8 +670,8 @@ private fun PresetSelector(
         AssociationPickerSheet(
             title = stringResource(R.string.assoc_preset),
             optionIcon = Lucide.SlidersHorizontal,
-            options = presetNames.map { AssociationOption(it, it) },
-            selectedIds = setOfNotNull(selected.takeIf(String::isNotBlank)),
+            options = options.map { AssociationOption(it.id, it.label) },
+            selectedIds = setOfNotNull(selectedId.takeIf(String::isNotBlank)),
             multiSelect = false,
             onConfirm = { onSelect(it.firstOrNull().orEmpty()); showSheet = false },
             onDismiss = { showSheet = false },
@@ -681,19 +682,22 @@ private fun PresetSelector(
 @Composable
 private fun RegexSelector(
     controller: CharacterEditorController,
-    currentCardFile: String,
-    selected: String,
-    onSelect: (String) -> Unit,
+    selectedIds: List<String>,
+    onSelect: (List<String>) -> Unit,
 ) {
-    var options by remember { mutableStateOf<List<CharacterRegexOption>>(emptyList()) }
+    var options by remember { mutableStateOf<List<CharacterAssociationOption>>(emptyList()) }
     var showSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(currentCardFile) {
+    LaunchedEffect(Unit) {
         options = controller.regexOptions()
     }
 
-    val displayName = options.find { it.id == selected }?.displayName
-        ?: selected.ifBlank { stringResource(R.string.assoc_none) }
+    val displayName = when (selectedIds.size) {
+        0 -> stringResource(R.string.assoc_none)
+        1 -> options.firstOrNull { it.id == selectedIds.first() }?.label
+            ?: stringResource(R.string.assoc_missing)
+        else -> stringResource(R.string.assoc_selected_count, selectedIds.size)
+    }
     ModelCard(
         icon = Lucide.FileJson,
         title = stringResource(R.string.assoc_regex),
@@ -701,20 +705,20 @@ private fun RegexSelector(
         iconKey = "",
         selectionIcon = Lucide.FileJson,
         displayName = displayName,
-        showReset = selected.isNotBlank(),
+        showReset = selectedIds.isNotEmpty(),
         showBolt = false,
         onPick = { showSheet = true },
-        onReset = { onSelect("") },
+        onReset = { onSelect(emptyList()) },
     )
 
     if (showSheet) {
         AssociationPickerSheet(
             title = stringResource(R.string.assoc_regex),
             optionIcon = Lucide.FileJson,
-            options = options.map { AssociationOption(it.id, it.displayName) },
-            selectedIds = setOfNotNull(selected.takeIf(String::isNotBlank)),
-            multiSelect = false,
-            onConfirm = { onSelect(it.firstOrNull().orEmpty()); showSheet = false },
+            options = options.map { AssociationOption(it.id, it.label) },
+            selectedIds = selectedIds.toSet(),
+            multiSelect = true,
+            onConfirm = { onSelect(it.toList()); showSheet = false },
             onDismiss = { showSheet = false },
         )
     }
@@ -723,20 +727,21 @@ private fun RegexSelector(
 @Composable
 private fun WorldBookSelector(
     controller: CharacterEditorController,
-    enabledNames: List<String>,
+    selectedIds: List<String>,
     onChange: (List<String>) -> Unit,
 ) {
-    var bookNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    var options by remember { mutableStateOf<List<CharacterAssociationOption>>(emptyList()) }
     var showSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        bookNames = controller.worldBookNames()
+        options = controller.worldBookOptions()
     }
 
-    val displayName = when (enabledNames.size) {
+    val displayName = when (selectedIds.size) {
         0 -> stringResource(R.string.assoc_none)
-        1 -> enabledNames.first()
-        else -> stringResource(R.string.assoc_selected_count, enabledNames.size)
+        1 -> options.firstOrNull { it.id == selectedIds.first() }?.label
+            ?: stringResource(R.string.assoc_missing)
+        else -> stringResource(R.string.assoc_selected_count, selectedIds.size)
     }
     ModelCard(
         icon = Lucide.BookOpen,
@@ -745,7 +750,7 @@ private fun WorldBookSelector(
         iconKey = "",
         selectionIcon = Lucide.BookOpen,
         displayName = displayName,
-        showReset = enabledNames.isNotEmpty(),
+        showReset = selectedIds.isNotEmpty(),
         showBolt = false,
         onPick = { showSheet = true },
         onReset = { onChange(emptyList()) },
@@ -755,11 +760,11 @@ private fun WorldBookSelector(
         AssociationPickerSheet(
             title = stringResource(R.string.assoc_worldbooks),
             optionIcon = Lucide.BookOpen,
-            options = bookNames.map { AssociationOption(it, it) },
-            selectedIds = enabledNames.toSet(),
+            options = options.map { AssociationOption(it.id, it.label) },
+            selectedIds = selectedIds.toSet(),
             multiSelect = true,
             onConfirm = { selected ->
-                onChange(bookNames.filter(selected::contains))
+                onChange(options.map { it.id }.filter(selected::contains))
                 showSheet = false
             },
             onDismiss = { showSheet = false },

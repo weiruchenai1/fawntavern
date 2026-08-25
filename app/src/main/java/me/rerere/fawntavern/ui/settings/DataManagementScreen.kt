@@ -87,6 +87,7 @@ private fun AppBackup.Section.labelResId(): Int = when (this) {
     AppBackup.Section.CHARACTERS -> R.string.backup_section_characters
     AppBackup.Section.PRESETS -> R.string.backup_section_presets
     AppBackup.Section.WORLDBOOKS -> R.string.backup_section_worldbooks
+    AppBackup.Section.REGEXSETS -> R.string.backup_section_regexsets
     AppBackup.Section.CHATS -> R.string.backup_section_chats
     AppBackup.Section.API_CONFIG -> R.string.backup_section_api
     AppBackup.Section.SEARCH_CONFIG -> R.string.backup_section_search

@@ -168,6 +168,7 @@
     <string name="backup_section_characters">角色卡</string>
     <string name="backup_section_presets">预设</string>
     <string name="backup_section_worldbooks">世界书</string>
+    <string name="backup_section_regexsets">正则</string>
     <string name="backup_section_chats">聊天记录和附件</string>
     <string name="backup_section_api">API 配置和密钥</string>
     <string name="backup_section_search">搜索配置和凭据</string>
@@ -191,7 +192,7 @@
     <string name="delete_character_title">删除角色</string>
     <string name="delete_character_msg_fmt">确定要删除「%s」吗？此操作不可撤销。</string>
     <string name="delete_character_chats_fmt">同时删除此角色的%1$d个聊天</string>
-    <string name="delete_character_associations">同时删除关联的世界书</string>
+    <string name="delete_character_associations">同时删除关联的世界书和正则</string>
     <string name="delete_preset_title">删除预设</string>
     <string name="delete_preset_msg_fmt">确定要删除「%s」吗？此操作不可撤销。</string>
     <string name="delete_worldbook_title">删除世界书</string>
@@ -276,12 +277,13 @@
     <string name="role_user">用户</string>
     <string name="role_assistant">助手</string>
     <string name="assoc_worldbooks">关联世界书</string>
-    <string name="assoc_preset">关联预设（可选）</string>
-    <string name="assoc_regex">关联正则（可选）</string>
+    <string name="assoc_preset">关联预设</string>
+    <string name="assoc_regex">关联正则</string>
     <string name="assoc_worldbooks_desc">选择与该角色聊天时启用的世界书</string>
     <string name="assoc_preset_desc">选择与该角色聊天时使用的预设</string>
     <string name="assoc_regex_desc">选择与该角色聊天时额外启用的角色正则</string>
     <string name="assoc_none">未关联</string>
+    <string name="assoc_missing">关联资源不可用</string>
     <string name="assoc_selected_count">已选择 %1$d 项</string>
     <string name="assoc_no_options">暂无可关联项</string>
     <string name="stream_output_label">流式输出</string>

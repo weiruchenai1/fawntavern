@@ -5,6 +5,7 @@ package me.rerere.fawntavern.data.preset
  */
 data class StPreset(
     val name: String = "",
+    val id: String = "",
     val chatCompletionSource: String = "openai",
     val openaiModel: String = "",
     val claudeModel: String = "",

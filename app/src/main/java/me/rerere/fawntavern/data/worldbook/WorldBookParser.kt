@@ -2,6 +2,7 @@ package me.rerere.fawntavern.data.worldbook
 
 import org.json.JSONArray
 import org.json.JSONObject
+import me.rerere.fawntavern.data.resourceId
 
 object WorldBookParser {
     fun parse(json: JSONObject, fileName: String = ""): WorldBook {
@@ -89,6 +90,6 @@ object WorldBookParser {
                 entriesArr.optJSONObject(i)?.let { parseEntry(it, i) }
             }
         }
-        return WorldBook(name = name, entries = entries)
+        return WorldBook(id = json.resourceId(), name = name, entries = entries)
     }
 }

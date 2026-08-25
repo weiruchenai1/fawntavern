@@ -168,6 +168,7 @@
     <string name="backup_section_characters">Characters</string>
     <string name="backup_section_presets">Presets</string>
     <string name="backup_section_worldbooks">World books</string>
+    <string name="backup_section_regexsets">Regex</string>
     <string name="backup_section_chats">Chats and attachments</string>
     <string name="backup_section_api">API configuration and keys</string>
     <string name="backup_section_search">Search configuration and credentials</string>
@@ -191,7 +192,7 @@
     <string name="delete_character_title">Delete Character</string>
     <string name="delete_character_msg_fmt">Delete \"%s\"? This cannot be undone.</string>
     <string name="delete_character_chats_fmt">Also delete %1$d chats for this character</string>
-    <string name="delete_character_associations">Also delete linked world books</string>
+    <string name="delete_character_associations">Also delete linked world books and regex</string>
     <string name="delete_preset_title">Delete Preset</string>
     <string name="delete_preset_msg_fmt">Delete \"%s\"? This cannot be undone.</string>
     <string name="delete_worldbook_title">Delete World Book</string>
@@ -278,12 +279,13 @@
     <string name="role_user">User</string>
     <string name="role_assistant">Assistant</string>
     <string name="assoc_worldbooks">Associated World Books</string>
-    <string name="assoc_preset">Linked Preset (optional)</string>
-    <string name="assoc_regex">Linked Regex (optional)</string>
+    <string name="assoc_preset">Linked Preset</string>
+    <string name="assoc_regex">Linked Regex</string>
     <string name="assoc_worldbooks_desc">Choose world books enabled when chatting with this character</string>
     <string name="assoc_preset_desc">Choose the preset used when chatting with this character</string>
     <string name="assoc_regex_desc">Choose additional character regex used in this character\'s chats</string>
     <string name="assoc_none">Not linked</string>
+    <string name="assoc_missing">Linked resource unavailable</string>
     <string name="assoc_selected_count">%1$d selected</string>
     <string name="assoc_no_options">Nothing available to link</string>
     <string name="stream_output_label">Streaming output</string>

@@ -7,11 +7,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.JsonFileDir
-import me.rerere.fawntavern.data.character.CharacterRepository
+import me.rerere.fawntavern.data.RESOURCE_ID_FIELD
+import me.rerere.fawntavern.data.ensureResourceId
+import me.rerere.fawntavern.data.newResourceId
+import me.rerere.fawntavern.data.resourceId
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.IOException
 
 object PresetRepository {
 
@@ -29,7 +31,11 @@ object PresetRepository {
             val name = prefs.getString(KEY_DEFAULT_NAME, null)
                 ?: fallbackName.also { value -> prefs.edit().putString(KEY_DEFAULT_NAME, value).apply() }
             val file = JsonFileDir.file(context, PRESETS_DIR, name)
-            if (!file.exists()) JsonFileDir.atomicWriteText(file, JSONObject().toString(2))
+            val root = if (file.exists()) JSONObject(file.readText()) else JSONObject()
+            if (!file.exists() || root.resourceId().isBlank()) {
+                root.ensureResourceId()
+                JsonFileDir.atomicWriteText(file, root.toString(2))
+            }
             name
         }
     }
@@ -44,9 +50,24 @@ object PresetRepository {
     }
 
     suspend fun load(context: Context, name: String): StPreset = withContext(Dispatchers.IO) {
-        val file = JsonFileDir.file(context, PRESETS_DIR, name)
-        if (!file.exists()) throw IllegalStateException("预设文件不存在: $name")
-        PresetParser.parse(JSONObject(file.readText()), name)
+        writeMutex.withLock {
+            val file = JsonFileDir.file(context, PRESETS_DIR, name)
+            if (!file.exists()) throw IllegalStateException("预设文件不存在: $name")
+            val root = JSONObject(file.readText())
+            if (root.resourceId().isBlank()) {
+                root.ensureResourceId()
+                JsonFileDir.atomicWriteText(file, root.toString(2))
+            }
+            PresetParser.parse(root, name)
+        }
+    }
+
+    suspend fun loadById(context: Context, id: String): StPreset {
+        listNames(context).forEach { name ->
+            val preset = runCatching { load(context, name) }.getOrNull()
+            if (preset?.id == id) return preset
+        }
+        throw IllegalStateException("预设不存在: $id")
     }
 
     /** 从 content URI（文件选择器结果）导入预设。 */
@@ -60,7 +81,12 @@ object PresetRepository {
             ?: fallback
         val name = writeMutex.withLock {
             JsonFileDir.uniqueName(context, PRESETS_DIR, requestedName, fallback).also {
-                JsonFileDir.atomicWriteText(JsonFileDir.file(context, PRESETS_DIR, it), text)
+                val incomingId = json.resourceId()
+                val id = incomingId.takeIf { value ->
+                    value.isNotBlank() && value !in resourceIdsUnlocked(context)
+                } ?: newResourceId()
+                json.put(RESOURCE_ID_FIELD, id)
+                JsonFileDir.atomicWriteText(JsonFileDir.file(context, PRESETS_DIR, it), json.toString(2))
             }
         }
         PresetParser.parse(json, name)
@@ -70,12 +96,16 @@ object PresetRepository {
         val displayName = requestedName.trim()
         require(displayName.isNotBlank()) { "Preset name cannot be empty" }
         val fallback = "preset_${System.currentTimeMillis()}"
-        val name = writeMutex.withLock {
-            JsonFileDir.uniqueName(context, PRESETS_DIR, displayName, fallback).also {
-                JsonFileDir.atomicWriteText(JsonFileDir.file(context, PRESETS_DIR, it), JSONObject().toString(2))
-            }
+        val (name, root) = writeMutex.withLock {
+            val name = JsonFileDir.uniqueName(context, PRESETS_DIR, displayName, fallback)
+            val root = JSONObject().put(RESOURCE_ID_FIELD, newResourceId())
+            JsonFileDir.atomicWriteText(
+                JsonFileDir.file(context, PRESETS_DIR, name),
+                root.toString(2),
+            )
+            name to root
         }
-        PresetParser.parse(JSONObject(), name)
+        PresetParser.parse(root, name)
     }
 
     /** 保存（覆盖）预设：全量回写采样参数、prompts 内容池与 prompt_order（保留其它字段）。 */
@@ -83,6 +113,8 @@ object PresetRepository {
         writeMutex.withLock {
         val file = JsonFileDir.file(context, PRESETS_DIR, preset.name)
         val root = if (file.exists()) JSONObject(file.readText()) else JSONObject()
+        val stableId = root.resourceId().ifBlank { preset.id.ifBlank { newResourceId() } }
+        root.put(RESOURCE_ID_FIELD, stableId)
 
         // 采样 / 上下文参数
         root.put("chat_completion_source", preset.chatCompletionSource)
@@ -197,7 +229,12 @@ object PresetRepository {
 
     /** Export the original preset JSON so unknown SillyTavern fields are preserved. */
     suspend fun exportJsonBytes(context: Context, name: String): ByteArray = withContext(Dispatchers.IO) {
+        load(context, name)
         JsonFileDir.file(context, PRESETS_DIR, name).readBytes()
+    }
+
+    suspend fun ensureAllIds(context: Context) {
+        listNames(context).forEach { load(context, it) }
     }
 
     /** 重命名预设，成功返回 true（目标名已存在或源不存在则失败） */
@@ -208,20 +245,14 @@ object PresetRepository {
                 if (!JsonFileDir.rename(context, PRESETS_DIR, oldName, newName)) {
                     return@withLock false
                 }
-                var linksRenamed = false
                 try {
-                    CharacterRepository.renameLinkedPreset(context, oldName, newName)
-                    linksRenamed = true
                     if (wasDefault) {
                         val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                             .edit().putString(KEY_DEFAULT_NAME, newName).commit()
-                        if (!saved) throw IOException("Unable to save the default preset name")
+                        if (!saved) throw IllegalStateException("Unable to save the default preset name")
                     }
                     true
                 } catch (_: Exception) {
-                    if (linksRenamed) {
-                        runCatching { CharacterRepository.renameLinkedPreset(context, newName, oldName) }
-                    }
                     runCatching { JsonFileDir.rename(context, PRESETS_DIR, newName, oldName) }
                     false
                 }
@@ -250,4 +281,12 @@ object PresetRepository {
         val parsed = PresetParser.parseRegexScript(JSONObject(text))
         if (parsed.id.isBlank()) parsed.copy(id = java.util.UUID.randomUUID().toString()) else parsed
     }
+
+    private fun resourceIdsUnlocked(context: Context): Set<String> = presetsDir(context).listFiles()
+        ?.asSequence()
+        ?.filter { it.extension == "json" }
+        ?.mapNotNull { runCatching { JSONObject(it.readText()).resourceId() }.getOrNull() }
+        ?.filter(String::isNotBlank)
+        ?.toSet()
+        .orEmpty()
 }

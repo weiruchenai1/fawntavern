@@ -7,6 +7,8 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,5 +50,16 @@ class PresetRepositoryTest {
             true,
             saved.getJSONObject("extensions").getJSONObject("third_party").getBoolean("enabled")
         )
+    }
+
+    @Test
+    fun createAssignsUniqueIdsAndRenameKeepsIdentity() = runBlocking {
+        val first = PresetRepository.create(context, "Preset")
+        val second = PresetRepository.create(context, "Preset")
+
+        assertTrue(first.id.isNotBlank())
+        assertNotEquals(first.id, second.id)
+        assertTrue(PresetRepository.rename(context, first.name, "Renamed"))
+        assertEquals(first.id, PresetRepository.load(context, "Renamed").id)
     }
 }

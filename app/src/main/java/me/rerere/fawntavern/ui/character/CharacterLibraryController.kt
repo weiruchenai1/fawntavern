@@ -14,6 +14,7 @@ import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.preset.PresetRepository
+import me.rerere.fawntavern.data.regex.RegexSetRepository
 import me.rerere.fawntavern.data.worldbook.WorldBookRepository
 
 internal data class CharacterLibraryState(
@@ -39,16 +40,18 @@ internal interface CharacterLibraryDataSource {
 internal class AndroidCharacterLibraryDataSource(
     private val context: Context,
 ) : CharacterLibraryDataSource {
-    private suspend fun defaultPresetName(): String =
-        PresetRepository.ensureDefaultPreset(context, context.getString(R.string.default_preset))
+    private suspend fun defaultPresetId(): String {
+        val name = PresetRepository.ensureDefaultPreset(context, context.getString(R.string.default_preset))
+        return PresetRepository.load(context, name).id
+    }
 
     override fun defaultCardName(): String? = CharacterRepository.defaultCardName(context)
     override suspend fun names(): List<String> = CharacterRepository.listNames(context)
     override suspend fun load(name: String): CharacterCard = CharacterRepository.load(context, name)
     override suspend fun create(name: String): CharacterCard =
-        CharacterRepository.create(context, name, defaultPresetName())
+        CharacterRepository.create(context, name, defaultPresetId())
     override suspend fun import(uri: Uri): CharacterCard =
-        CharacterRepository.import(context, uri, defaultPresetName())
+        CharacterRepository.import(context, uri, defaultPresetId())
     override suspend fun delete(name: String) = delete(name, deleteChats = false, deleteAssociations = false)
     override suspend fun chatCount(name: String): Int = ChatRepository.countForCharacter(context, name)
     override suspend fun delete(name: String, deleteChats: Boolean, deleteAssociations: Boolean) {
@@ -61,16 +64,26 @@ internal class AndroidCharacterLibraryDataSource(
             ChatRepository.deleteForCharacter(context, name)
         }
         if (deleteAssociations) {
-            // 世界书按名字关联，多张卡可以指同一本：还有别的卡在用的不能跟着这张卡一起删
-            val stillReferenced = CharacterRepository.referencedWorldBooks(context, excluding = name)
-            card?.let { it.enabledWorldBooks + it.world }
+            val stillReferenced = CharacterRepository.referencedWorldBookIds(context, excluding = name)
+            card?.enabledWorldBookIds
                 ?.asSequence()
                 ?.filter(String::isNotBlank)
                 ?.distinct()
                 ?.filter { it !in stillReferenced }
-                ?.forEach { WorldBookRepository.delete(context, it) }
-            // 内嵌正则不在这里处理：自有正则（linked_regex 指向自己）随卡 JSON 一起消失，
-            // 借用别人的（指向另一张卡）属于出借方自己的资产，删借用者不该清空它
+                ?.forEach { id ->
+                    runCatching { WorldBookRepository.loadById(context, id) }.getOrNull()
+                        ?.let { CharacterRepository.deleteWorldBook(context, it.name) }
+                }
+            val stillReferencedRegex = CharacterRepository.referencedRegexIds(context, excluding = name)
+            card?.enabledRegexIds
+                ?.asSequence()
+                ?.filter(String::isNotBlank)
+                ?.distinct()
+                ?.filter { it !in stillReferencedRegex }
+                ?.forEach { id ->
+                    val set = runCatching { RegexSetRepository.loadById(context, id) }.getOrNull()
+                    if (set != null && !set.global) CharacterRepository.deleteRegexSet(context, set.name)
+                }
         }
         CharacterRepository.delete(context, name)
     }

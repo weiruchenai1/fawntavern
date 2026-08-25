@@ -7,6 +7,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.JsonFileDir
+import me.rerere.fawntavern.data.RESOURCE_ID_FIELD
+import me.rerere.fawntavern.data.ensureResourceId
+import me.rerere.fawntavern.data.newResourceId
+import me.rerere.fawntavern.data.resourceId
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -23,9 +27,24 @@ object WorldBookRepository {
         JsonFileDir.listNames(context, WORLD_DIR)
 
     suspend fun load(context: Context, name: String): WorldBook = withContext(Dispatchers.IO) {
-        val file = JsonFileDir.file(context, WORLD_DIR, name)
-        if (!file.exists()) throw IllegalStateException("世界书不存在: $name")
-        WorldBookParser.parse(JSONObject(file.readText()), name)
+        writeMutex.withLock {
+            val file = JsonFileDir.file(context, WORLD_DIR, name)
+            if (!file.exists()) throw IllegalStateException("世界书不存在: $name")
+            val json = JSONObject(file.readText())
+            if (json.resourceId().isBlank()) {
+                json.ensureResourceId()
+                JsonFileDir.atomicWriteText(file, json.toString(2))
+            }
+            WorldBookParser.parse(json, name)
+        }
+    }
+
+    suspend fun loadById(context: Context, id: String): WorldBook {
+        listNames(context).forEach { name ->
+            val book = runCatching { load(context, name) }.getOrNull()
+            if (book?.id == id) return book
+        }
+        throw IllegalStateException("世界书不存在: $id")
     }
 
     suspend fun import(context: Context, uri: Uri): WorldBook = withContext(Dispatchers.IO) {
@@ -39,7 +58,12 @@ object WorldBookRepository {
             ?: fallback
         val name = writeMutex.withLock {
             JsonFileDir.uniqueName(context, WORLD_DIR, requestedName, fallback).also {
-                JsonFileDir.atomicWriteText(JsonFileDir.file(context, WORLD_DIR, it), text)
+                val incomingId = json.resourceId()
+                val id = incomingId.takeIf { value ->
+                    value.isNotBlank() && value !in resourceIdsUnlocked(context)
+                } ?: newResourceId()
+                json.put(RESOURCE_ID_FIELD, id)
+                JsonFileDir.atomicWriteText(JsonFileDir.file(context, WORLD_DIR, it), json.toString(2))
             }
         }
         WorldBookParser.parse(json, name)
@@ -52,11 +76,14 @@ object WorldBookRepository {
         writeMutex.withLock {
             val fallback = "worldbook_${System.currentTimeMillis()}"
             val name = JsonFileDir.uniqueName(context, WORLD_DIR, displayName, fallback)
+            val root = JSONObject()
+                .put(RESOURCE_ID_FIELD, newResourceId())
+                .put("entries", JSONObject())
             JsonFileDir.atomicWriteText(
                 JsonFileDir.file(context, WORLD_DIR, name),
-                JSONObject().put("entries", JSONObject()).toString(2),
+                root.toString(2),
             )
-            WorldBook(name = name)
+            WorldBookParser.parse(root, name)
         }
     }
 
@@ -69,7 +96,12 @@ object WorldBookRepository {
 
     /** Export the original JSON bytes so unknown SillyTavern fields are preserved. */
     suspend fun exportJsonBytes(context: Context, name: String): ByteArray = withContext(Dispatchers.IO) {
+        load(context, name)
         JsonFileDir.file(context, WORLD_DIR, name).readBytes()
+    }
+
+    suspend fun ensureAllIds(context: Context) {
+        listNames(context).forEach { load(context, it) }
     }
 
     /** 保存条目（就地 patch 原文件条目，只覆盖编辑过的键，保留 ST 私有/扩展字段）。 */
@@ -78,6 +110,7 @@ object WorldBookRepository {
         val file = JsonFileDir.file(context, WORLD_DIR, name)
         require(file.isFile) { "世界书不存在: $name" }
         val json = JSONObject(file.readText())
+        json.ensureResourceId()
         val entriesObj = patchableEntries(json)
         entries.forEach { entry ->
             val key = entry.id.toString()
@@ -133,6 +166,29 @@ object WorldBookRepository {
         JsonFileDir.atomicWriteText(file, json.toString(2))
         }
     }
+
+    /** 将角色卡内嵌书保存为新的独立世界书，并强制分配新的资源 ID。 */
+    suspend fun createFromCharacterBook(
+        context: Context,
+        requestedName: String,
+        book: JSONObject,
+    ): WorldBook = withContext(Dispatchers.IO) {
+        writeMutex.withLock {
+            val fallback = "worldbook_${System.currentTimeMillis()}"
+            val name = JsonFileDir.uniqueName(context, WORLD_DIR, requestedName, fallback)
+            val root = JSONObject(book.toString()).put(RESOURCE_ID_FIELD, newResourceId())
+            JsonFileDir.atomicWriteText(JsonFileDir.file(context, WORLD_DIR, name), root.toString(2))
+            WorldBookParser.parse(root, name)
+        }
+    }
+
+    private fun resourceIdsUnlocked(context: Context): Set<String> = worldDir(context).listFiles()
+        ?.asSequence()
+        ?.filter { it.extension == "json" }
+        ?.mapNotNull { runCatching { JSONObject(it.readText()).resourceId() }.getOrNull() }
+        ?.filter(String::isNotBlank)
+        ?.toSet()
+        .orEmpty()
 
     /**
      * 取出可原地 patch 的条目表。角色卡内嵌书抽出来的文件 entries 是数组（character_book 形态），

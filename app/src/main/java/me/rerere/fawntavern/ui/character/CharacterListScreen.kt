@@ -153,21 +153,31 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
         }
     }
 
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
-            try {
-                controller.import(uri)
-                Toast.makeText(context, resources.getString(R.string.character_imported), Toast.LENGTH_SHORT).show()
-                showAddSheet = false
-                refresh()
-            } catch (error: Exception) {
-                Toast.makeText(
-                    context,
-                    resources.getString(R.string.char_save_failed_fmt, error.message.orEmpty()),
-                    Toast.LENGTH_SHORT,
-                ).show()
+            showAddSheet = false
+            var imported = 0
+            var failed = 0
+            for (uri in uris) {
+                try {
+                    controller.import(uri)
+                    imported++
+                } catch (_: Exception) {
+                    failed++
+                }
             }
+            if (imported > 0) Toast.makeText(
+                context,
+                resources.getQuantityString(R.plurals.toast_imported_files_fmt, imported, imported),
+                Toast.LENGTH_SHORT,
+            ).show()
+            if (failed > 0) Toast.makeText(
+                context,
+                resources.getQuantityString(R.plurals.toast_import_failed_count_fmt, failed, failed),
+                Toast.LENGTH_SHORT,
+            ).show()
+            refresh()
         }
     }
 
