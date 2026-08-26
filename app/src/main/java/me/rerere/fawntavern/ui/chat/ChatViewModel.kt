@@ -4,10 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import me.rerere.fawntavern.core.diagnostics.SafeLog
-import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -75,20 +72,19 @@ internal class ChatViewModel(
 
     // ── 状态（写入只经由本类方法） ──
     private val modelController = ChatModelController(AndroidChatModelDataSource(app))
-    private val apiConfigRepository = container.apiConfigRepository
-    var apiConfig by mutableStateOf(apiConfigRepository.load()); private set
+    private val model = ChatModelStateHolder(modelController, container.apiConfigRepository)
+    val apiConfig get() = model.apiConfig
     private val uiSettingsController = ChatUiSettingsController(AndroidChatUiSettingsDataSource(app))
     var uiSettings by mutableStateOf(uiSettingsController.load()); private set
     /** 当前模型的思考预算档位（按模型记忆，随选模型切换）；AUTO = 不下发任何思考字段 */
-    var reasoning by mutableStateOf(modelController.reasoning(apiConfig.currentModel)); private set
+    val reasoning get() = model.reasoning
     /** 当前模型的图片生成控制项（按模型记忆）。 */
-    var imageGeneration by mutableStateOf(modelController.imageGeneration(apiConfig.currentModel)); private set
+    val imageGeneration get() = model.imageGeneration
     var sessions by mutableStateOf<List<ChatSession>>(emptyList()); private set
     var session by mutableStateOf<ChatSession?>(null); private set
     var currentCard by mutableStateOf<CharacterCard?>(null); private set
     /** 当前角色卡的图片（无图为 null，UI 回退到占位图标） */
     var charImageBitmap by mutableStateOf<Bitmap?>(null); private set
-    var generating by mutableStateOf(false); private set
     /**
      * 覆盖在分页列表之上的内存消息（按 ts 索引）：承载流式生成的实时内容、以及分支切换/编辑的
      * 乐观即时反馈。写库是异步的（DB→Room 失效→分页重刷有几帧时间差），overlay 在此期间顶替显示，
@@ -96,10 +92,6 @@ internal class ChatViewModel(
      * 并让滚动锚定像旧同步逻辑一样在下一帧就能读到新内容。
      */
     var overlays by mutableStateOf<Map<Long, ChatMessage>>(emptyMap()); private set
-    // selectModel 写的是持久化 store，displayModelSpec 读 store，二者非 state——自增它以强制 UI 刷新
-    var modelRevision by mutableIntStateOf(0); private set
-    /** 当前/最近一次生成的目标消息 ts（重答时指向被重答的消息），null = 尚未生成过 */
-    var genTargetTs by mutableStateOf<Long?>(null); private set
     private val userProfileController = ChatUserProfileController(AndroidChatUserProfileDataSource(app))
     var userName by mutableStateOf(userProfileController.loadName()); private set
     var userAvatarBitmap by mutableStateOf<Bitmap?>(null); private set
@@ -110,46 +102,35 @@ internal class ChatViewModel(
     var regexSetScripts by mutableStateOf<List<CharRegex>>(emptyList()); private set
     private var loadedPromptCharFile: String? = null
     private var promptContextRevision = 0L
-    // 输入草稿放这里，Activity 重建后不丢。BTF2 的 TextFieldState 即单一事实源，
-    // 输入框与展开面板持有同一实例，两边改动天然同步，不需要 onTextChange 回写
-    val inputState = TextFieldState()
-    /** [inputState] 的字符串视图：VM 内部与旧调用方按 String 读写，光标落到末尾 */
-    var inputText: String
-        get() = inputState.text.toString()
-        set(value) = inputState.setTextAndPlaceCursorAtEnd(value)
-    var attachments by mutableStateOf(listOf<Attachment>())
-    /** 正在编辑的消息 ts：非 null = 输入框处于编辑态，发送走更新而非追加 */
-    var editingTs by mutableStateOf<Long?>(null); private set
-
-    /** 启用的快捷回复（UI 插槽扩展提供），随扩展配置刷新 */
-    var quickReplies by mutableStateOf<List<QuickReply>>(emptyList()); private set
+    private val input = ChatInputStateHolder()
+    val inputState get() = input.textFieldState
 
     private val webSearchSettingsController =
         ChatWebSearchSettingsController(AndroidChatWebSearchSettingsDataSource(app))
-    private var webSearchSettings by mutableStateOf(webSearchSettingsController.load())
+    private val search = ChatSearchStateHolder(webSearchSettingsController)
     val searchEnabled: Boolean
-        get() = webSearchSettings.enabled
+        get() = search.enabled
     val searchProviderIndex: Int
-        get() = webSearchSettings.selectedIndex
+        get() = search.providerIndex
     val searchServices
-        get() = webSearchSettings.services
+        get() = search.services
     val searchProviderName: String
-        get() = webSearchSettings.providerName
+        get() = search.providerName
     val builtInSearchAvailable: Boolean
         get() {
-            modelRevision
+            model.revision
             val (provider, modelId) = currentProviderAndModel() ?: return false
             return provider.model(modelId)?.supportsBuiltInTool(BuiltInTool.SEARCH, provider) == true
         }
     val builtInSearchEnabled: Boolean
         get() {
-            modelRevision
+            model.revision
             val (provider, modelId) = currentProviderAndModel() ?: return false
             return BuiltInTool.SEARCH in (provider.model(modelId)?.tools ?: emptySet())
         }
     val imageGenerationAvailable: Boolean
         get() {
-            modelRevision
+            model.revision
             val (provider, modelId) = currentProviderAndModel() ?: return false
             return Modality.IMAGE in (provider.model(modelId)?.outputModalities ?: emptyList())
         }
@@ -181,13 +162,14 @@ internal class ChatViewModel(
         ChatGenerationCoordinator(
             scope = viewModelScope,
             stopCurrent = generation::stop,
-            onRunningChanged = { generating = it },
             onFailure = { error ->
                 SafeLog.error(CHAT_VIEW_MODEL_TAG, "generation_failed", error)
                 showMessage(ctx.getString(R.string.chat_generation_failed_fmt, error.message.orEmpty()))
             },
         )
     }
+    private val generating: Boolean
+        get() = generationCoordinator.isRunning
     private val messageCoordinator by lazy { ChatMessageCoordinator(chatRepository) }
     private val attachmentCoordinator by lazy {
         ChatAttachmentCoordinator(AndroidChatAttachmentDataSource(ctx, chatRepository))
@@ -269,9 +251,7 @@ internal class ChatViewModel(
                 if (session?.charFile.orEmpty() != charFile) return@collectLatest
                 applyPromptContext(loaded, image, revision)
                 // 恢复该角色的模型：角色记忆 > 默认模型聊天卡片
-                val spec = modelController.effectiveModelSpec(currentCard?.name, apiConfig).orEmpty()
-                reasoning = modelController.reasoning(spec)
-                imageGeneration = modelController.imageGeneration(spec)
+                model.refreshCharacter(currentCard?.name)
             }
         }
         // 切换会话即清空 overlay：overlay 按 ts 索引，而 ts 仅在会话内唯一，跨会话残留会误覆盖
@@ -297,12 +277,12 @@ internal class ChatViewModel(
                 overlays = overlays,
                 displayRegexScripts = displayRegexScripts,
             ),
-            input = ChatUiState.InputState(attachments, editingTs, quickReplies),
-            generation = ChatUiState.GenerationState(generating, genTargetTs),
+            input = input.uiState,
+            generation = generationCoordinator.uiState,
             profile = ChatUiState.ProfileState(userName, userAvatarBitmap, speakingTs, ttsUi),
             model = ChatUiState.ModelState(
                 apiConfig = apiConfig,
-                revision = modelRevision,
+                revision = model.revision,
                 displaySpec = displayModelSpec(),
                 reasoning = reasoning,
                 imageGeneration = imageGeneration,
@@ -322,7 +302,7 @@ internal class ChatViewModel(
     fun dispatch(action: ChatAction) {
         when (action) {
             ChatAction.SendMessage -> {
-                val scrollToBottom = editingTs == null
+                val scrollToBottom = input.editingTimestamp == null
                 handleOutcome(sendMessage(), scrollToBottom, hideKeyboard = true)
             }
             is ChatAction.UseQuickReply -> handleOutcome(
@@ -352,9 +332,9 @@ internal class ChatViewModel(
             ChatAction.ToggleSearch -> toggleSearch()
             ChatAction.ToggleBuiltInSearch -> toggleBuiltInSearch()
             is ChatAction.SelectSearchProvider -> selectSearchProvider(action.index)
-            is ChatAction.AddAttachments -> attachments = attachments + action.values
-            is ChatAction.RemoveAttachment -> attachments = attachments - action.value
-            is ChatAction.SetInputText -> inputText = action.text
+            is ChatAction.AddAttachments -> input.addAttachments(action.values)
+            is ChatAction.RemoveAttachment -> input.removeAttachment(action.value)
+            is ChatAction.SetInputText -> input.text = action.text
             ChatAction.CancelEdit -> cancelEdit()
             is ChatAction.StartEdit -> startEdit(action.timestamp)
             is ChatAction.SwitchAlternative -> switchAlt(action.timestamp, action.direction)
@@ -406,14 +386,11 @@ internal class ChatViewModel(
     // ── 配置 / 用户资料 ──
 
     /** 当前页面的模型：角色记忆 > ROLE_CHAT > apiConfig.currentModel 回退，全空时返回 null */
-    fun displayModelSpec(): String? = modelController.effectiveModelSpec(currentCard?.name, apiConfig)
+    fun displayModelSpec(): String? = model.effectiveModelSpec(currentCard?.name)
 
     /** 从 API 配置页返回时刷新：若模型仍在则保持，若模型被删除/禁用则切到全局配置的 currentModel 兜底 */
     fun reloadApiConfig() {
-        apiConfig = apiConfigRepository.load()
-        // displayModelSpec 负责角色记忆 > ROLE_CHAT > apiConfig.currentModel 的完整回退
-        reasoning = modelController.reasoning(displayModelSpec() ?: apiConfig.currentModel)
-        imageGeneration = modelController.imageGeneration(displayModelSpec() ?: apiConfig.currentModel)
+        model.reload(currentCard?.name)
     }
 
     /** 从偏好或字号页面返回时刷新聊天页使用的设置快照。 */
@@ -422,21 +399,15 @@ internal class ChatViewModel(
     }
 
     fun selectModel(providerId: String, modelId: String) {
-        val spec = "$providerId::$modelId"
-        reasoning = modelController.select(currentCard?.name, spec)
-        imageGeneration = modelController.imageGeneration(spec)
-        modelRevision++
+        model.select(currentCard?.name, providerId, modelId)
     }
 
     fun updateReasoning(level: ReasoningLevel) {
-        reasoning = level
-        // 思考档位按当前实际生效的模型记忆，而非可能已过期的 apiConfig.currentModel
-        modelController.saveReasoning(displayModelSpec() ?: apiConfig.currentModel, level)
+        model.updateReasoning(currentCard?.name, level)
     }
 
     fun updateImageGeneration(settings: ImageGenerationSettings) {
-        imageGeneration = settings
-        modelController.saveImageGeneration(displayModelSpec() ?: apiConfig.currentModel, settings)
+        model.updateImageGeneration(currentCard?.name, settings)
     }
 
     /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
@@ -511,7 +482,7 @@ internal class ChatViewModel(
     }
 
     fun currentProviderAndModel(): Pair<ApiProvider, String>? =
-        modelController.resolveProvider(currentCard?.name, apiConfig)
+        model.resolveProvider(currentCard?.name)
 
     // ── 会话管理 ──
 
@@ -633,16 +604,15 @@ internal class ChatViewModel(
     private fun sendMessage(): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
         if (loadedPromptCharFile != session?.charFile.orEmpty()) return SendOutcome.SKIPPED
-        val text = inputText.trim()
-        val atts = attachments
+        val text = input.text.trim()
+        val atts = input.attachments
         if (text.isBlank() && atts.isEmpty()) return SendOutcome.SKIPPED
         // 编辑态：只更新该消息文本，不追加新消息、不触发生成
-        val editTs = editingTs
+        val editTs = input.editingTimestamp
         if (editTs != null) {
             if (text.isBlank()) return SendOutcome.SKIPPED
             updateMessage(editTs, text)
-            editingTs = null
-            inputText = ""
+            input.finishEditing()
             return SendOutcome.STARTED
         }
         val (prov, modelId) = currentProviderAndModel() ?: return SendOutcome.NO_MODEL
@@ -650,8 +620,7 @@ internal class ChatViewModel(
         if (attachmentCoordinator.hasOversizedFile(atts)) {
             return SendOutcome.FILE_TOO_LARGE
         }
-        inputText = ""
-        attachments = emptyList()
+        input.clearDraft()
         generationCoordinator.launch generationTask@{
             var originalSession: ChatSession? = null
             var createdNewSession = false
@@ -736,25 +705,19 @@ internal class ChatViewModel(
     }
 
     private fun restoreDraftAfterFailedSend(text: String, sentAttachments: List<Attachment>) {
-        if (text.isNotBlank()) {
-            inputText = if (inputText.isBlank()) text else "$text\n$inputText"
-        }
-        val currentUris = attachments.mapTo(HashSet()) { it.uri }
-        attachments = sentAttachments.filter { it.uri !in currentUris } + attachments
+        input.restoreDraft(text, sentAttachments)
     }
 
     /** 进入编辑态：把该消息内容填入输入框，发送即更新该消息 */
     fun startEdit(ts: Long) {
         if (generating) return
         val msg = overlays[ts] ?: session?.messages?.firstOrNull { it.ts == ts } ?: return
-        editingTs = ts
-        inputText = msg.content
+        input.beginEditing(ts, msg.content)
     }
 
     /** 取消编辑：退出编辑态并清空输入 */
     fun cancelEdit() {
-        editingTs = null
-        inputText = ""
+        input.cancelEditing()
     }
 
     fun stopGenerate() {
@@ -763,7 +726,7 @@ internal class ChatViewModel(
 
     /** 切换联网搜索开关（持久化，面板开关据此点亮/熄灭） */
     fun toggleSearch() {
-        webSearchSettings = webSearchSettingsController.toggle(webSearchSettings)
+        search.toggle()
     }
 
     fun toggleBuiltInSearch() {
@@ -778,20 +741,19 @@ internal class ChatViewModel(
             model.tools + BuiltInTool.SEARCH
         })
         val updatedProvider = provider.copy(models = provider.models.toMutableList().also { it[modelIndex] = updated })
-        apiConfig = apiConfig.copy(providers = apiConfig.providers.map {
+        val updatedConfig = apiConfig.copy(providers = apiConfig.providers.map {
             if (it.id == provider.id) updatedProvider else it
         })
-        apiConfigRepository.save(apiConfig)
-        modelRevision++
+        model.updateApiConfig(updatedConfig)
     }
 
     /** 选择搜索服务商（面板卡片点击，按下标） */
     fun selectSearchProvider(index: Int) {
-        webSearchSettings = webSearchSettingsController.select(webSearchSettings, index)
+        search.selectProvider(index)
     }
 
     fun reloadSearchConfig() {
-        webSearchSettings = webSearchSettingsController.load()
+        search.reload()
     }
 
     /** 朗读/停止朗读指定 AI 消息：同一消息再次点击即停止，换消息则打断旧朗读 */
@@ -822,16 +784,16 @@ internal class ChatViewModel(
                 qr += ext.quickReplies(container.extensionGateway.config(ext.info.id))
             }
         }
-        quickReplies = qr
+        input.setQuickReplies(qr)
     }
 
     /** 点击快捷回复：send=true 直接发送，否则插入输入框末尾。 */
     private fun onQuickReply(qr: QuickReply): SendOutcome {
         return if (qr.send) {
-            inputText = qr.text
+            input.text = qr.text
             sendMessage()
         } else {
-            inputText += qr.text
+            input.text += qr.text
             SendOutcome.SKIPPED
         }
     }
@@ -911,7 +873,7 @@ internal class ChatViewModel(
             ),
             onStarted = { base, message ->
                 session = base
-                genTargetTs = message.ts
+                generationCoordinator.markTarget(message.ts)
                 overlays = overlays + (message.ts to message)
             },
             onLocalVariablesCommitted = { variables ->
