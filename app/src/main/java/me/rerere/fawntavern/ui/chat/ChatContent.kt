@@ -82,6 +82,13 @@ internal fun ChatContent(
     onSolidBackgroundChange: (Boolean) -> Unit = {},
     startAtSettings: Boolean = false,
 ) {
+    val state = vm.uiState
+    val conversation = state.conversation
+    val input = state.input
+    val generation = state.generation
+    val profile = state.profile
+    val model = state.model
+    val search = state.search
     val drawerState = rememberInteractiveDrawerState()
     val scope = rememberCoroutineScope()
     // ── 页面返回栈（纯 UI 状态） ──
@@ -89,7 +96,7 @@ internal fun ChatContent(
     fun navBack() { nav.removeLastOrNull() }
     // ── 弹层标志 ──
     var showAttachment by rememberSaveable { mutableStateOf(false) }
-    val modelSelector = rememberModelSelectorState(vm.displayModelSpec() ?: "", vm.apiConfig.providers)
+    val modelSelector = rememberModelSelectorState(model.displaySpec ?: "", model.apiConfig.providers)
     var showReasoningPicker by rememberSaveable { mutableStateOf(false) }
     var showImageGenerationSettings by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
@@ -137,14 +144,14 @@ internal fun ChatContent(
         }
     }
     // 附件落盘失败（提供方不报大小等兜底场景）：附件与输入已恢复，这里弹提示
-    LaunchedEffect(vm.sendError) {
-        vm.sendError?.let { err ->
+    LaunchedEffect(state.sendError) {
+        state.sendError?.let { err ->
             Toast.makeText(ctx, err, Toast.LENGTH_SHORT).show()
-            vm.consumeSendError()
+            vm.dispatch(ChatAction.ConsumeSendError)
         }
     }
-    LaunchedEffect(vm.promptContextFailures) {
-        val failures = vm.promptContextFailures
+    LaunchedEffect(state.promptContextFailures) {
+        val failures = state.promptContextFailures
         if (failures.isNotEmpty()) {
             val names = failures.map { it.name }.distinct().joinToString()
             Toast.makeText(
@@ -152,7 +159,7 @@ internal fun ChatContent(
                 resources.getString(R.string.prompt_context_load_failed_fmt, names),
                 Toast.LENGTH_LONG,
             ).show()
-            vm.consumePromptContextFailures()
+            vm.dispatch(ChatAction.ConsumePromptContextFailures)
         }
     }
 
@@ -180,14 +187,14 @@ internal fun ChatContent(
         }
     }
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        uris.forEach { uri -> vm.attachments = vm.attachments + Attachment(uri, isImage = true) }
+        vm.dispatch(ChatAction.AddAttachments(uris.map { Attachment(it, isImage = true) }))
     }
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        uris.forEach { uri -> vm.attachments = vm.attachments + Attachment(uri, isImage = mediaInput.isImage(uri)) }
+        vm.dispatch(ChatAction.AddAttachments(uris.map { Attachment(it, isImage = mediaInput.isImage(it)) }))
     }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         cameraImageUri?.let(Uri::parse)?.let { uri ->
-            if (ok) vm.attachments = vm.attachments + Attachment(uri, isImage = true)
+            if (ok) vm.dispatch(ChatAction.AddAttachments(listOf(Attachment(uri, isImage = true))))
             else mediaInput.discardCameraFile(uri)
         }
         cameraImageUri = null
@@ -195,7 +202,7 @@ internal fun ChatContent(
 
     // 抽屉里可能改了用户名/头像，关抽屉时刷新
     LaunchedEffect(drawerState.isOpen) {
-        if (!drawerState.isOpen) vm.reloadUserProfile()
+        if (!drawerState.isOpen) vm.dispatch(ChatAction.ReloadUserProfile)
     }
     // 打开抽屉（按钮或边缘手势）即收起键盘
     LaunchedEffect(drawerState) {
@@ -220,15 +227,15 @@ internal fun ChatContent(
     FloatingWindow(
         tag = "tts_controller",
         themeMode = themeMode,
-        visibility = vm.ttsUi.speaking,
+        visibility = profile.tts.speaking,
         initialOffsetX = ttsBarOffset.x,
         initialOffsetY = ttsBarOffset.y,
     ) {
         TtsFloatingBar(
-            state = vm.ttsUi,
+            state = profile.tts,
             onPause = vm::pauseTts,
             onResume = vm::resumeTts,
-            onStop = { vm.stopSpeaking() },
+            onStop = { vm.dispatch(ChatAction.StopSpeaking) },
             onFastForward = vm::fastForwardTts,
             onCycleSpeed = vm::cycleTtsSpeed,
         )
@@ -251,7 +258,7 @@ internal fun ChatContent(
             onBack = ::navBack,
             onNavigate = nav::add,
             onOpenSearchSession = { id ->
-                vm.openSession(id)
+                vm.dispatch(ChatAction.OpenSession(id))
                 drawerState.snapClose()
                 navBack()
             },
@@ -259,17 +266,17 @@ internal fun ChatContent(
         return
     }
 
-    vm.modelRevision // 读 state 建依赖：selectModel 后重读 displayModelSpec，刷新选中图标
-    val displaySpec = vm.displayModelSpec()
+    model.revision
+    val displaySpec = model.displaySpec
     val displayProvId = displaySpec?.substringBefore("::") ?: ""
     val displayModelId = displaySpec?.substringAfter("::", "") ?: ""
-    val displayProv = if (displaySpec != null) vm.apiConfig.providers.find { it.id == displayProvId && it.enabled } else null
+    val displayProv = if (displaySpec != null) model.apiConfig.providers.find { it.id == displayProvId && it.enabled } else null
 
     // 偏好和字号由 ViewModel 提供；设置页返回时统一刷新快照。
-    val prefs = vm.uiSettings
+    val prefs = state.settings
     val fontScale = prefs.fontScale
     val chatBarTitle = if (prefs.showChatBarCharacterName) {
-        (vm.currentCard?.name ?: vm.session?.charName ?: "")
+        (conversation.card?.name ?: conversation.current?.charName ?: "")
             .ifBlank { stringResource(R.string.default_character) }
     } else {
         null
@@ -330,22 +337,24 @@ internal fun ChatContent(
                     onCharSelect = { showCharPicker = true },
                     onCharList = { nav.add(Screen.Characters) },
                     onSearch = { nav.add(Screen.Search) },
-                    charName = vm.session?.charName ?: "",
-                    charImage = vm.charImageBitmap,
+                    charName = conversation.current?.charName ?: "",
+                    charImage = conversation.characterImage,
                     // 只显示当前角色卡的聊天列表
-                    sessions = vm.sessions.filter { it.charFile == (vm.session?.charFile ?: "") },
-                    currentSessionId = vm.session?.id,
+                    sessions = conversation.sessions.filter { it.charFile == (conversation.current?.charFile ?: "") },
+                    currentSessionId = conversation.current?.id,
                     onOpenSession = { id ->
                         scope.launch { drawerState.close() }
-                        vm.openSession(id)
+                        vm.dispatch(ChatAction.OpenSession(id))
                     },
                     onRenameSession = { id, title -> renameSession = id to title },
-                    onPinSession = vm::setSessionPinned,
-                    onRegenerateTitle = vm::regenerateTitle,
+                    onPinSession = { id, pinned -> vm.dispatch(ChatAction.SetSessionPinned(id, pinned)) },
+                    onRegenerateTitle = { vm.dispatch(ChatAction.RegenerateTitle(it)) },
                     onDeleteSession = { id -> deleteSessionId = id },
                     showChatListDate = prefs.showChatListDate,
                     longPressHaptic = prefs.longPressHaptic,
-                    onUserProfileChanged = vm::updateUserProfile,
+                    onUserProfileChanged = { name, description ->
+                        vm.dispatch(ChatAction.UpdateUserProfile(name, description))
+                    },
                 )
                 }
             },
@@ -358,33 +367,33 @@ internal fun ChatContent(
                         title = chatBarTitle,
                         subtitle = chatBarSubtitle,
                         onDrawer = { scope.launch { drawerState.open() } },
-                        onNewChat = { vm.newChat() },
+                        onNewChat = { vm.dispatch(ChatAction.NewChat) },
                     )
                 },
                 bottomBar = {
                     ChatBottomArea(
                         state = vm.inputState,
-                        attachments = vm.attachments,
-                        onRemoveAttachment = { vm.attachments = vm.attachments - it },
+                        attachments = input.attachments,
+                        onRemoveAttachment = { vm.dispatch(ChatAction.RemoveAttachment(it)) },
                         showAttachment = showAttachment,
                         onToggleAttachment = { showAttachment = !showAttachment },
-                        editing = vm.editingTs != null,
-                        onCancelEdit = { vm.cancelEdit() },
+                        editing = input.editingTimestamp != null,
+                        onCancelEdit = { vm.dispatch(ChatAction.CancelEdit) },
                         onExpand = {
                             if (vm.inputText.isNotBlank()) {
                                 copyPanel = CopyPanel(resources.getString(R.string.input_content), vm.inputText, editable = true)
                             }
                         },
                         currentModelId = displayModelId,
-                        reasoning = vm.reasoning,
-                        imageGenerationEnabled = vm.imageGenerationAvailable,
-                        generating = vm.generating,
-                        searchEnabled = vm.searchEnabled,
-                        searchProvider = vm.searchProviderName,
-                        builtInSearchEnabled = vm.builtInSearchEnabled,
-                        onStop = { vm.stopGenerate() },
+                        reasoning = model.reasoning,
+                        imageGenerationEnabled = model.imageGenerationAvailable,
+                        generating = generation.running,
+                        searchEnabled = search.enabled,
+                        searchProvider = search.providerName,
+                        builtInSearchEnabled = search.builtInEnabled,
+                        onStop = { vm.dispatch(ChatAction.StopGeneration) },
                         onSend = {
-                            val wasEditing = vm.editingTs != null
+                            val wasEditing = input.editingTimestamp != null
                             val outcome = vm.sendMessage()
                             if (outcome != ChatViewModel.SendOutcome.SKIPPED) keyboardController?.hide()
                             // 编辑是原地更新，不滚动到底部
@@ -401,7 +410,7 @@ internal fun ChatContent(
                         },
                         onGallery = { galleryLauncher.launch("image/*") },
                         onFile = { fileLauncher.launch("*/*") },
-                        quickReplies = vm.quickReplies,
+                        quickReplies = input.quickReplies,
                         onQuickReply = { qr ->
                             val outcome = vm.onQuickReply(qr)
                             if (outcome != ChatViewModel.SendOutcome.SKIPPED) keyboardController?.hide()
@@ -415,23 +424,23 @@ internal fun ChatContent(
                 // 的乐观即时反映）后供渲染与滚动锚定用。分页为空（未落盘的新会话，仅开场白）时回退到
                 // 内存会话，保证开场白可见、首帧不闪空。
                 val lazyMessages = vm.pagedMessages.collectAsLazyPagingItems()
-                val overlays = vm.overlays
-                val genTs = vm.genTargetTs
+                val overlays = conversation.overlays
+                val genTs = generation.targetTimestamp
                 val usePaging = lazyMessages.itemCount > 0
                 val pagedBase: List<ChatMessage> = lazyMessages.itemSnapshotList.items
-                    .ifEmpty { vm.session?.messages ?: emptyList() }
+                    .ifEmpty { conversation.current?.messages ?: emptyList() }
                 // 加载中视为已抵达底部：append 的 endOfPaginationReached 会在 refresh 时暂时重置，
                 // 此时若隐藏新 overlay，刚完成的消息会闪掉一帧再回来。
                 val append = lazyMessages.loadState.append
                 val allowOverlayAppend = !usePaging || append.endOfPaginationReached ||
                     append is LoadState.Loading || lazyMessages.loadState.refresh is LoadState.Loading
                 val msgs = mergeMessageWindow(pagedBase, overlays, allowOverlayAppend)
-                val webViewMessages = remember(msgs, vm.userName, vm.session?.charName) {
+                val webViewMessages = remember(msgs, profile.userName, conversation.current?.charName) {
                     JSONArray().apply {
                         msgs.forEachIndexed { index, message ->
                             put(JSONObject().apply {
                                 put("message_id", index)
-                                put("name", if (message.role == "user") vm.userName else vm.session?.charName.orEmpty())
+                                put("name", if (message.role == "user") profile.userName else conversation.current?.charName.orEmpty())
                                 put("role", message.role)
                                 put("is_hidden", false)
                                 put("message", message.content)
@@ -455,10 +464,12 @@ internal fun ChatContent(
                 val settledOverlayTs = settledOverlayTimestamps(
                     base = pagedBase,
                     overlays = overlays,
-                    generating = vm.generating,
+                    generating = generation.running,
                     generationTargetTs = genTs,
                 )
-                LaunchedEffect(settledOverlayTs) { settledOverlayTs.forEach { vm.clearOverlay(it) } }
+                LaunchedEffect(settledOverlayTs) {
+                    settledOverlayTs.forEach { vm.dispatch(ChatAction.ClearOverlay(it)) }
+                }
 
                 // ── 滚动状态机的外部输入 ──
                 // 每次重组把状态机依赖的最新值刷进去（等价 rememberUpdatedState：其协程只读
@@ -466,7 +477,7 @@ internal fun ChatContent(
                 val density = LocalDensity.current
                 scrollCtrl.inputs.apply {
                     // 只有生成目标是末条消息时才自动跟随钉底；重答中间消息时原地生成，视口不动
-                    generatingAtEnd = vm.generating && genTs != null && genTs == msgs.lastOrNull()?.ts
+                    generatingAtEnd = generation.running && genTs != null && genTs == msgs.lastOrNull()?.ts
                     hasMessages = msgs.isNotEmpty()
                     messageCount = msgs.size
                     bottomSlackPx = with(density) { 80.dp.toPx() }
@@ -485,9 +496,10 @@ internal fun ChatContent(
                         .collect { scrollCtrl.onSendOrReset() }
                 }
                 // 打开/切换会话：回到底部并重置。用 lastPinnedSessionId 跳过"从全屏页面返回后重入"的情况。
-                LaunchedEffect(vm.session?.id) {
-                    if (vm.session?.id != null && vm.session?.id != lastPinnedSessionId) {
-                        lastPinnedSessionId = vm.session?.id
+                LaunchedEffect(conversation.current?.id) {
+                    val sessionId = conversation.current?.id
+                    if (sessionId != null && sessionId != lastPinnedSessionId) {
+                        lastPinnedSessionId = sessionId
                         scrollCtrl.onSessionOpened()
                     }
                 }
@@ -542,7 +554,7 @@ internal fun ChatContent(
                                 if (usePaging && i < lazyMessages.itemCount) lazyMessages[i]
                                 if (msg.role == "user") {
                                     UserMsg(
-                                        name = vm.userName,
+                                        name = profile.userName,
                                         text = msg.content,
                                         images = msg.images,
                                         files = msg.files,
@@ -556,7 +568,7 @@ internal fun ChatContent(
                                         },
                                         onMore = { menuTargetIdx = msg.ts },
                                         scale = fontScale,
-                                        avatarBitmap = vm.userAvatarBitmap,
+                                        avatarBitmap = profile.userAvatar,
                                         showAvatar = prefs.showUserAvatar,
                                         showName = prefs.showUserName,
                                         showTimestamp = prefs.showUserTimestamp,
@@ -570,12 +582,12 @@ internal fun ChatContent(
                                     fun switchAltAnchored(dir: Int) {
                                         if (msg.alts.size < 2 || (msg.altIdx + dir) !in 0..msg.alts.lastIndex) return
                                         scrollCtrl.switchAnchored(index = i, isLast = i == msgs.lastIndex) {
-                                            vm.switchAlt(msg.ts, dir)
+                                            vm.dispatch(ChatAction.SwitchAlternative(msg.ts, dir))
                                         }
                                     }
                                     AIMsg(
                                         msg = msg,
-                                        isStreaming = vm.generating && msg.ts == genTs,
+                                        isStreaming = generation.running && msg.ts == genTs,
                                         onCopy = { copyText(msg.content) },
                                         onRegenerate = {
                                             maybeRegenerate {
@@ -585,13 +597,13 @@ internal fun ChatContent(
                                         onMore = { menuTargetIdx = msg.ts },
                                         onPrevAlt = { switchAltAnchored(-1) },
                                         onNextAlt = { switchAltAnchored(+1) },
-                                        onSpeak = { vm.speakMessage(msg.ts) },
-                                        speaking = vm.speakingTs == msg.ts,
+                                        onSpeak = { vm.dispatch(ChatAction.SpeakMessage(msg.ts)) },
+                                        speaking = profile.speakingTimestamp == msg.ts,
                                         scale = fontScale,
-                                        regexScripts = vm.displayRegexScripts,
+                                        regexScripts = conversation.displayRegexScripts,
                                         depth = msgs.size - 1 - i,
-                                        userName = vm.userName,
-                                        charName = vm.currentCard?.name ?: vm.session?.charName ?: "",
+                                        userName = profile.userName,
+                                        charName = conversation.card?.name ?: conversation.current?.charName ?: "",
                                         showModelIcon = prefs.showModelIcon,
                                         showModelName = prefs.showModelName,
                                         showModelTimestamp = prefs.showModelTimestamp,
@@ -602,18 +614,23 @@ internal fun ChatContent(
                                         thinkingMarkdown = prefs.thinkingMarkdown,
                                         renderPrefs = renderPrefs,
                                         chatMessagesJson = webViewMessages,
-                                        onSetInputText = { vm.inputText = it },
+                                        onSetInputText = { vm.dispatch(ChatAction.SetInputText(it)) },
                                         onSetChatMessage = { messageId, value ->
                                             val index = if (messageId < 0) msgs.size + messageId else messageId
                                             msgs.getOrNull(index)?.let { target ->
-                                                vm.updateMessage(target.ts, value)
+                                                vm.dispatch(ChatAction.UpdateMessage(target.ts, value))
                                             }
                                         },
                                         onSelectChatMessageSwipe = { messageId, swipeId ->
                                             val index = if (messageId < 0) msgs.size + messageId else messageId
                                             msgs.getOrNull(index)?.let { target ->
                                                 if (swipeId in target.alts.indices) {
-                                                    vm.switchAlt(target.ts, swipeId - target.altIdx)
+                                                    vm.dispatch(
+                                                        ChatAction.SwitchAlternative(
+                                                            target.ts,
+                                                            swipeId - target.altIdx,
+                                                        ),
+                                                    )
                                                 }
                                             }
                                         },
@@ -655,12 +672,14 @@ internal fun ChatContent(
     // ── 消息操作菜单 ──
     val menuTs = menuTargetIdx
     // 与渲染一致地取目标：overlay（流式/乐观态）优先，回退到内存会话
-    val menuMsg = menuTs?.let { ts -> vm.overlays[ts] ?: vm.session?.messages?.firstOrNull { it.ts == ts } }
+    val menuMsg = menuTs?.let { ts ->
+        conversation.overlays[ts] ?: conversation.current?.messages?.firstOrNull { it.ts == ts }
+    }
     if (menuTs != null && menuMsg != null) {
         MessageMenu(
             onDismiss = { menuTargetIdx = null },
             onSelectCopy = {
-                val sessionMessages = vm.session?.messages.orEmpty()
+                val sessionMessages = conversation.current?.messages.orEmpty()
                 val messageIndex = sessionMessages.indexOfFirst { it.ts == menuMsg.ts }
                 val previewMessages = if (messageIndex >= 0) {
                     sessionMessages.toMutableList().also { it[messageIndex] = menuMsg }
@@ -673,10 +692,14 @@ internal fun ChatContent(
                     text = menuMsg.content,
                     preview = TextCopyPreview(
                         applyDisplayTransforms = menuMsg.role == "assistant",
-                        regexScripts = if (menuMsg.role == "assistant") vm.displayRegexScripts else emptyList(),
+                        regexScripts = if (menuMsg.role == "assistant") {
+                            conversation.displayRegexScripts
+                        } else {
+                            emptyList()
+                        },
                         depth = previewMessages.lastIndex - previewIndex,
-                        userName = vm.userName,
-                        charName = vm.currentCard?.name ?: vm.session?.charName.orEmpty(),
+                        userName = profile.userName,
+                        charName = conversation.card?.name ?: conversation.current?.charName.orEmpty(),
                     ),
                 )
                 menuTargetIdx = null
@@ -689,14 +712,14 @@ internal fun ChatContent(
                 menuTargetIdx = null
             },
             onEdit = {
-                vm.startEdit(menuTs)
+                vm.dispatch(ChatAction.StartEdit(menuTs))
                 menuTargetIdx = null
             },
             onDeleteCurrentVersion = {
                 val ts = menuTs
                 maybeDeleteCurrentVersion {
-                    val wasLast = menuMsg.ts == vm.session?.messages?.lastOrNull()?.ts
-                    vm.deleteMessage(ts)
+                    val wasLast = menuMsg.ts == conversation.current?.messages?.lastOrNull()?.ts
+                    vm.dispatch(ChatAction.DeleteMessage(ts))
                     if (wasLast) scrollToBottomTrigger++
                 }
                 menuTargetIdx = null
@@ -704,8 +727,8 @@ internal fun ChatContent(
             onDeleteAllVersions = {
                 val ts = menuTs
                 maybeDeleteAllVersions {
-                    val wasLast = menuMsg.ts == vm.session?.messages?.lastOrNull()?.ts
-                    vm.deleteAllVersions(ts)
+                    val wasLast = menuMsg.ts == conversation.current?.messages?.lastOrNull()?.ts
+                    vm.dispatch(ChatAction.DeleteAllVersions(ts))
                     if (wasLast) scrollToBottomTrigger++
                 }
                 menuTargetIdx = null
@@ -721,7 +744,7 @@ internal fun ChatContent(
             title = panel.title,
             text = if (panel.editable) vm.inputText else panel.text,
             onCopyAll = { currentText ->
-                if (panel.editable) vm.inputText = currentText
+                if (panel.editable) vm.dispatch(ChatAction.SetInputText(currentText))
                 copyText(currentText)
                 copyPanel = null
             },
@@ -731,7 +754,7 @@ internal fun ChatContent(
                 copyPanel = null
             } else null,
             onDismiss = { currentText ->
-                if (panel.editable) vm.inputText = currentText
+                if (panel.editable) vm.dispatch(ChatAction.SetInputText(currentText))
                 copyPanel = null
             },
             editable = panel.editable,
@@ -745,7 +768,7 @@ internal fun ChatContent(
             label = stringResource(R.string.chat_title_label),
             onConfirm = { newTitle ->
                 if (newTitle.isNotBlank()) {
-                    vm.renameSession(id, newTitle)
+                    vm.dispatch(ChatAction.RenameSession(id, newTitle))
                     renameSession = null
                 }
             },
@@ -755,9 +778,9 @@ internal fun ChatContent(
 
     ChatConfirmationDialogs(
         showDeleteSession = deleteSessionId != null,
-        deleteSessionEnabled = GenerationActionGuard.allowsMutation(vm.generating),
+        deleteSessionEnabled = GenerationActionGuard.allowsMutation(generation.running),
         onDeleteSession = {
-            deleteSessionId?.let(vm::deleteSession)
+            deleteSessionId?.let { vm.dispatch(ChatAction.DeleteSession(it)) }
             deleteSessionId = null
         },
         onDismissDeleteSession = { deleteSessionId = null },
@@ -788,16 +811,16 @@ internal fun ChatContent(
     ModelSelectorSheet(
         state = modelSelector,
         onSelect = { providerId, modelId ->
-            vm.selectModel(providerId, modelId)
+            vm.dispatch(ChatAction.SelectModel(providerId, modelId))
         },
     )
 
     // ── 思考预算面板 ──
     if (showReasoningPicker) {
         ReasoningPickerSheet(
-            current = vm.reasoning,
+            current = model.reasoning,
             onSelect = {
-                vm.updateReasoning(it)
+                vm.dispatch(ChatAction.UpdateReasoning(it))
                 showReasoningPicker = false
             },
             onDismiss = { showReasoningPicker = false },
@@ -806,10 +829,10 @@ internal fun ChatContent(
 
     if (showImageGenerationSettings) {
         ImageGenerationSettingsSheet(
-            current = vm.imageGeneration,
+            current = model.imageGeneration,
             useOpenAiSizes = displayProv?.type.equals("openai", ignoreCase = true) &&
                 displayModelId.startsWith("gpt-image", ignoreCase = true),
-            onChange = vm::updateImageGeneration,
+            onChange = { vm.dispatch(ChatAction.UpdateImageGeneration(it)) },
             onDismiss = { showImageGenerationSettings = false },
         )
     }
@@ -817,9 +840,9 @@ internal fun ChatContent(
     // ── 角色选择面板 ──
     if (showCharPicker) {
         CharacterPickerSheet(
-            currentFileName = vm.session?.charFile ?: "",
+            currentFileName = conversation.current?.charFile ?: "",
             onSelect = { fileName, displayName ->
-                vm.openCharacter(fileName, displayName)
+                vm.dispatch(ChatAction.OpenCharacter(fileName, displayName))
                 showCharPicker = false
             },
             onDismiss = { showCharPicker = false },
@@ -828,17 +851,17 @@ internal fun ChatContent(
 
     // ── 联网搜索面板 ──
     if (showSearch) {
-        val searchServices = vm.searchServices
+        val searchServices = search.services
         SearchPickerSheet(
-            searchEnabled = vm.searchEnabled,
-            builtInSearchAvailable = vm.builtInSearchAvailable,
-            builtInSearchEnabled = vm.builtInSearchEnabled,
+            searchEnabled = search.enabled,
+            builtInSearchAvailable = search.builtInAvailable,
+            builtInSearchEnabled = search.builtInEnabled,
             services = searchServices,
             // 用 VM 的响应式下标做高亮；配置页删过提供商后可能越界，收敛回有效范围
-            selectedIndex = vm.searchProviderIndex.coerceIn(0, searchServices.lastIndex.coerceAtLeast(0)),
-            onToggleSearch = { vm.toggleSearch() },
-            onToggleBuiltInSearch = { vm.toggleBuiltInSearch() },
-            onSelectProvider = { vm.selectSearchProvider(it) },
+            selectedIndex = search.providerIndex.coerceIn(0, searchServices.lastIndex.coerceAtLeast(0)),
+            onToggleSearch = { vm.dispatch(ChatAction.ToggleSearch) },
+            onToggleBuiltInSearch = { vm.dispatch(ChatAction.ToggleBuiltInSearch) },
+            onSelectProvider = { vm.dispatch(ChatAction.SelectSearchProvider(it)) },
             onOpenConfig = {
                 showSearch = false
                 nav.add(Screen.WebSearch)

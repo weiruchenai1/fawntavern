@@ -11,7 +11,7 @@ data class ApiRequestSnapshot(
     val body: String = "",
 )
 
-internal class ApiRequestException(
+class ApiRequestException(
     val snapshot: ApiRequestSnapshot,
     cause: Exception,
 ) : Exception(cause.message, cause)

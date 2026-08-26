@@ -26,3 +26,4 @@ dependencyResolutionManagement {
 rootProject.name = "fawntavern"
 include(":app")
 include(":core:diagnostics")
+include(":core:network")

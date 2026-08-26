@@ -1,7 +1,7 @@
 package me.rerere.fawntavern.ui.chat
 
 import android.content.Context
-import me.rerere.fawntavern.data.chat.ChatRepository
+import me.rerere.fawntavern.data.chat.ChatDataRepository
 import me.rerere.fawntavern.data.settings.SearchHistoryStore
 
 internal data class ChatSearchHit(
@@ -20,6 +20,7 @@ internal interface ChatSearchDataSource {
 
 internal class AndroidChatSearchDataSource(
     private val context: Context,
+    private val repository: ChatDataRepository,
 ) : ChatSearchDataSource {
     override fun history(): List<String> = SearchHistoryStore.getHistory(context)
 
@@ -30,7 +31,7 @@ internal class AndroidChatSearchDataSource(
     override fun clearHistory() = SearchHistoryStore.clear(context)
 
     override suspend fun search(charFile: String, query: String): List<ChatSearchHit> =
-        ChatRepository.searchMessages(context, charFile, query).map { result ->
+        repository.searchMessages(charFile, query).map { result ->
             ChatSearchHit(
                 sessionId = result.sessionId,
                 title = result.title,

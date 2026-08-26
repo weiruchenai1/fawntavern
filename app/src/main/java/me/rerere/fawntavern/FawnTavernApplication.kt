@@ -20,9 +20,12 @@ import me.rerere.fawntavern.core.diagnostics.SafeLog
 import me.rerere.fawntavern.data.diagnostics.RemoteDiagnostics
 import me.rerere.fawntavern.data.settings.AppStatisticsStore
 import me.rerere.fawntavern.data.settings.PrivacyConsentStore
+import me.rerere.fawntavern.di.AppContainer
 import me.rerere.fawntavern.plugin.PluginManager
 
 class FawnTavernApplication : Application() {
+    internal val container by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { AppContainer(this) }
+
     sealed interface RecoveryState {
         data object AwaitingConsent : RecoveryState
         data object Recovering : RecoveryState

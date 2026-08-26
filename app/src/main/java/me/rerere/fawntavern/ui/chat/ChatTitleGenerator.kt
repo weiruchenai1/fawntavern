@@ -3,14 +3,16 @@ package me.rerere.fawntavern.ui.chat
 import android.content.Context
 import me.rerere.fawntavern.data.api.ApiConfig
 import me.rerere.fawntavern.data.api.ApiMessage
-import me.rerere.fawntavern.data.chat.ChatRepository
+import me.rerere.fawntavern.data.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.settings.DefaultModelStore
-import me.rerere.fawntavern.extension.HostServices
+import me.rerere.fawntavern.extension.ExtensionGateway
 
 /** 负责标题模型选择、上下文构造、调用和落盘。 */
 internal class ChatTitleGenerator(
     private val context: Context,
+    private val chatRepository: ChatDataRepository,
+    private val extensions: ExtensionGateway,
 ) {
     suspend fun generate(
         session: ChatSession,
@@ -32,14 +34,14 @@ internal class ChatTitleGenerator(
 
         val promptEntry = DefaultModelStore.get(context, DefaultModelStore.ROLE_TITLE)
         val promptTemplate = promptEntry.prompt.ifBlank { DefaultModelStore.DEFAULT_TITLE_PROMPT }
-        val title = HostServices(context, apiConfig).callModel(
+        val title = extensions.services(apiConfig).callModel(
             messages = listOf(ApiMessage("user", promptTemplate.replace("{content}", historyPreview))),
             params = null,
             modelId = "$providerId::$modelId",
         ).trim().take(80)
         if (title.isBlank()) return null
 
-        ChatRepository.updateTitle(context, session.id, title)
+        chatRepository.updateTitle(session.id, title)
         return title
     }
 }

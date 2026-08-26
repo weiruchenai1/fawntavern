@@ -15,8 +15,43 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+internal interface ChatSearchToolDataSource {
+    fun providerName(): String
+    suspend fun search(query: String): Pair<String, MsgSearch>
+}
+
+internal class AndroidChatSearchToolDataSource(
+    private val context: Context,
+) : ChatSearchToolDataSource {
+    override fun providerName(): String = SearchStore.getSelected(context).displayName
+
+    override suspend fun search(query: String): Pair<String, MsgSearch> {
+        val options = SearchStore.getSelected(context)
+        val result = createSearchService(options)
+            .search(query, SearchCommonOptions(SearchStore.getResultSize(context)), options)
+            .getOrThrow()
+        val items = JSONArray()
+        result.items.forEachIndexed { index, item ->
+            items.put(
+                JSONObject().put("index", index + 1).put("title", item.title)
+                    .put("url", item.url).put("content", item.text),
+            )
+        }
+        val payload = JSONObject().apply {
+            put("query", query)
+            result.answer?.takeIf { it.isNotBlank() }?.let { put("answer", it) }
+            put("items", items)
+        }
+        return payload.toString() to MsgSearch(
+            query = query,
+            provider = options.displayName,
+            items = result.items.map { SearchCitation(it.title, it.url, it.text) },
+        )
+    }
+}
+
 /** 生成流程使用的联网搜索工具声明与执行器。 */
-internal class ChatSearchTool(private val context: Context) {
+internal class ChatSearchTool(private val dataSource: ChatSearchToolDataSource) {
     fun spec(): ToolSpec {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         return ToolSpec(
@@ -34,32 +69,14 @@ internal class ChatSearchTool(private val context: Context) {
             if (call.name != "search_web") return null
             val query = queryOf(call)
             if (query.isBlank()) return null
-            return MsgSearch(query = query, provider = SearchStore.getSelected(context).displayName, searching = true)
+            return MsgSearch(query = query, provider = dataSource.providerName(), searching = true)
         }
 
         override suspend fun execute(call: ApiToolCall): Pair<String, MsgSearch?> {
             if (call.name != "search_web") return JSONObject().put("error", "unknown tool").toString() to null
             val query = queryOf(call)
             if (query.isBlank()) return JSONObject().put("error", "missing query").toString() to null
-            val options = SearchStore.getSelected(context)
-            val result = createSearchService(options)
-                .search(query, SearchCommonOptions(SearchStore.getResultSize(context)), options)
-                .getOrThrow()
-            val items = JSONArray()
-            result.items.forEachIndexed { index, item ->
-                items.put(JSONObject().put("index", index + 1).put("title", item.title)
-                    .put("url", item.url).put("content", item.text))
-            }
-            val payload = JSONObject().apply {
-                put("query", query)
-                result.answer?.takeIf { it.isNotBlank() }?.let { put("answer", it) }
-                put("items", items)
-            }
-            return payload.toString() to MsgSearch(
-                query = query,
-                provider = options.displayName,
-                items = result.items.map { SearchCitation(it.title, it.url, it.text) },
-            )
+            return dataSource.search(query)
         }
     }
 

@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 
 /** 全局 OkHttp 客户端：连接池/线程池全应用共享，SSE 用长读超时的派生实例 */
-internal object Http {
+object Http {
 
     private val cleartextHosts = setOf("localhost", "127.0.0.1", "10.0.2.2")
 

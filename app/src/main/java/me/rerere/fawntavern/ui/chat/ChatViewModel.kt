@@ -23,7 +23,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.PromptContextLoader
-import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
@@ -34,8 +33,8 @@ import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.chat.ChatMessage
-import me.rerere.fawntavern.data.chat.ChatRepository
 import me.rerere.fawntavern.data.chat.ChatSession
+import me.rerere.fawntavern.di.AppContainer
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.toCharRegex
@@ -49,7 +48,6 @@ import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.domain.PromptLog
 import me.rerere.fawntavern.extension.BuiltinExtensions
-import me.rerere.fawntavern.extension.ExtensionStore
 import me.rerere.fawntavern.extension.QuickReply
 import me.rerere.fawntavern.extension.QuickReplyProvider
 
@@ -62,7 +60,10 @@ private const val CHAT_VIEW_MODEL_TAG = "ChatViewModel"
  * 生成协程运行在 viewModelScope —— Activity 因深色模式/语言切换等重建时不中断，状态不丢失。
  * UI（ChatScreen）只读状态、调方法，不直接改。
  */
-internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
+internal class ChatViewModel(
+    app: Application,
+    private val container: AppContainer,
+) : AndroidViewModel(app) {
 
     /** 发送/重答的结果：UI 据此决定是否弹"先选模型"提示 */
     enum class SendOutcome { STARTED, NO_MODEL, SKIPPED, FILE_TOO_LARGE }
@@ -72,7 +73,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── 状态（写入只经由本类方法） ──
     private val modelController = ChatModelController(AndroidChatModelDataSource(app))
-    var apiConfig by mutableStateOf(ApiConfigStore.loadConfig(app)); private set
+    private val apiConfigRepository = container.apiConfigRepository
+    var apiConfig by mutableStateOf(apiConfigRepository.load()); private set
     private val uiSettingsController = ChatUiSettingsController(AndroidChatUiSettingsDataSource(app))
     var uiSettings by mutableStateOf(uiSettingsController.load()); private set
     /** 当前模型的思考预算档位（按模型记忆，随选模型切换）；AUTO = 不下发任何思考字段 */
@@ -172,7 +174,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val displayRegexScripts: List<CharRegex>
         get() = globalRegexScripts + presetRegex + regexSetScripts
 
-    private val generation = GenerationController()
+    private val chatRepository = container.chatRepository
+    private val generation = GenerationController(container.generationGateway)
     private val ctx: Application get() = getApplication()
     private val generationCoordinator by lazy {
         ChatGenerationCoordinator(
@@ -185,16 +188,33 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             },
         )
     }
-    private val messageCoordinator by lazy { ChatMessageCoordinator(ctx) }
+    private val messageCoordinator by lazy { ChatMessageCoordinator(chatRepository) }
     private val attachmentCoordinator by lazy {
-        ChatAttachmentCoordinator(AndroidChatAttachmentDataSource(ctx))
+        ChatAttachmentCoordinator(AndroidChatAttachmentDataSource(ctx, chatRepository))
     }
     private val sessionCoordinator by lazy {
-        ChatSessionCoordinator(AndroidChatSessionDataSource(ctx))
+        ChatSessionCoordinator(RepositoryChatSessionDataSource(chatRepository))
     }
-    private val generationRunner by lazy { ChatGenerationRunner(ctx, generation) }
+    private val generationRunner by lazy {
+        val promptAssembler = ChatPromptAssembler(
+            AndroidChatPromptEnvironment(ctx, container.extensionGateway),
+        )
+        ChatGenerationRunner(
+            chatRepository = chatRepository,
+            generation = generation,
+            resources = AndroidChatGenerationResources(ctx),
+            prepare = PrepareChatGenerationUseCase(chatRepository, promptAssembler),
+            commit = CommitChatGenerationUseCase(chatRepository),
+            searchTool = ChatSearchTool(AndroidChatSearchToolDataSource(ctx)),
+        )
+    }
     private val postGenerationCoordinator by lazy {
-        ChatPostGenerationCoordinator(ctx, viewModelScope)
+        ChatPostGenerationCoordinator(
+            ctx,
+            viewModelScope,
+            chatRepository,
+            container.extensionGateway,
+        )
     }
 
     /**
@@ -203,7 +223,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
      * 分页为空，UI 回退到 [session] 内存消息显示开场白。
      */
     val pagedMessages: Flow<PagingData<ChatMessage>> = chatPagingSource(
-        context = ctx,
+        repository = chatRepository,
         sessionIds = snapshotFlow { session?.id },
     ).cachedIn(viewModelScope)
 
@@ -225,17 +245,17 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 ctx.getString(R.string.default_character),
                 defaultPresetId,
             )
-            if (ChatRepository.count(ctx) == 0) {
+            if (chatRepository.count() == 0) {
                 session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName)
             }
-            ChatRepository.sessionsFlow(ctx).collect {
+            chatRepository.observeSessions().collect {
                 sessions = it
                 if (session == null) {
                     // 应用启动时新建对话：每次启动都从空白对话开始（内存态，发首条消息才落盘）
                     session = if (uiSettings.newChatOnLaunch) {
                         val card = loadCard(defaultName)
                         ConversationOps.newSession(card, defaultName, defaultName)
-                    } else it.firstOrNull()?.let { summary -> ChatRepository.get(ctx, summary.id) }
+                    } else it.firstOrNull()?.let { summary -> chatRepository.get(summary.id) }
                 }
             }
         }
@@ -267,6 +287,75 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         if (ttsControllerDelegate.isInitialized()) ttsController.release()
     }
 
+    val uiState: ChatUiState
+        get() = ChatUiState(
+            conversation = ChatUiState.ConversationState(
+                sessions = sessions,
+                current = session,
+                card = currentCard,
+                characterImage = charImageBitmap,
+                overlays = overlays,
+                displayRegexScripts = displayRegexScripts,
+            ),
+            input = ChatUiState.InputState(attachments, editingTs, quickReplies),
+            generation = ChatUiState.GenerationState(generating, genTargetTs),
+            profile = ChatUiState.ProfileState(userName, userAvatarBitmap, speakingTs, ttsUi),
+            model = ChatUiState.ModelState(
+                apiConfig = apiConfig,
+                revision = modelRevision,
+                displaySpec = displayModelSpec(),
+                reasoning = reasoning,
+                imageGeneration = imageGeneration,
+                imageGenerationAvailable = imageGenerationAvailable,
+            ),
+            search = ChatUiState.SearchState(
+                enabled = searchEnabled,
+                providerIndex = searchProviderIndex,
+                providerName = searchProviderName,
+                services = searchServices,
+                builtInAvailable = builtInSearchAvailable,
+                builtInEnabled = builtInSearchEnabled,
+            ),
+            settings = uiSettings,
+            promptContextFailures = promptContextFailures,
+            sendError = sendError,
+        )
+
+    fun dispatch(action: ChatAction) {
+        when (action) {
+            ChatAction.NewChat -> newChat()
+            is ChatAction.OpenSession -> openSession(action.id)
+            is ChatAction.DeleteSession -> deleteSession(action.id)
+            is ChatAction.RenameSession -> renameSession(action.id, action.title)
+            is ChatAction.SetSessionPinned -> setSessionPinned(action.id, action.pinned)
+            is ChatAction.RegenerateTitle -> regenerateTitle(action.id)
+            is ChatAction.OpenCharacter -> openCharacter(action.fileName, action.displayName)
+            is ChatAction.SelectModel -> selectModel(action.providerId, action.modelId)
+            is ChatAction.UpdateReasoning -> updateReasoning(action.level)
+            is ChatAction.UpdateImageGeneration -> updateImageGeneration(action.settings)
+            ChatAction.StopGeneration -> stopGenerate()
+            ChatAction.ToggleSearch -> toggleSearch()
+            ChatAction.ToggleBuiltInSearch -> toggleBuiltInSearch()
+            is ChatAction.SelectSearchProvider -> selectSearchProvider(action.index)
+            is ChatAction.AddAttachments -> attachments = attachments + action.values
+            is ChatAction.RemoveAttachment -> attachments = attachments - action.value
+            is ChatAction.SetInputText -> inputText = action.text
+            ChatAction.CancelEdit -> cancelEdit()
+            is ChatAction.StartEdit -> startEdit(action.timestamp)
+            is ChatAction.SwitchAlternative -> switchAlt(action.timestamp, action.direction)
+            is ChatAction.DeleteMessage -> deleteMessage(action.timestamp)
+            is ChatAction.DeleteAllVersions -> deleteAllVersions(action.timestamp)
+            is ChatAction.UpdateMessage -> updateMessage(action.timestamp, action.content)
+            is ChatAction.ClearOverlay -> clearOverlay(action.timestamp)
+            is ChatAction.SpeakMessage -> speakMessage(action.timestamp)
+            ChatAction.StopSpeaking -> stopSpeaking()
+            ChatAction.ReloadUserProfile -> reloadUserProfile()
+            is ChatAction.UpdateUserProfile -> updateUserProfile(action.name, action.description)
+            ChatAction.ConsumeSendError -> consumeSendError()
+            ChatAction.ConsumePromptContextFailures -> consumePromptContextFailures()
+        }
+    }
+
     // ── 配置 / 用户资料 ──
 
     /** 当前页面的模型：角色记忆 > ROLE_CHAT > apiConfig.currentModel 回退，全空时返回 null */
@@ -274,7 +363,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 从 API 配置页返回时刷新：若模型仍在则保持，若模型被删除/禁用则切到全局配置的 currentModel 兜底 */
     fun reloadApiConfig() {
-        apiConfig = ApiConfigStore.loadConfig(ctx)
+        apiConfig = apiConfigRepository.load()
         // displayModelSpec 负责角色记忆 > ROLE_CHAT > apiConfig.currentModel 的完整回退
         reasoning = modelController.reasoning(displayModelSpec() ?: apiConfig.currentModel)
         imageGeneration = modelController.imageGeneration(displayModelSpec() ?: apiConfig.currentModel)
@@ -449,7 +538,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun regenerateTitle(id: String) {
         viewModelScope.launch {
-            ChatRepository.get(ctx, id)?.let { generateTitle(it, force = true) }
+            chatRepository.get(id)?.let { generateTitle(it, force = true) }
         }
     }
 
@@ -457,17 +546,17 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshAfterDataManagement() {
         val revision = invalidatePromptContext()
         viewModelScope.launch {
-            val fresh = ChatRepository.listSummaries(ctx)
+            val fresh = chatRepository.listSummaries()
             sessions = fresh
             val cur = session
             if (cur != null && fresh.any { it.id == cur.id }) {
-                session = ChatRepository.get(ctx, cur.id)
+                session = chatRepository.get(cur.id)
             } else if (cur != null) {
                 val card = if (cur.charFile.isBlank()) null else loadCard(cur.charFile)
                 currentCard = card
                 // 角色卡还在：留在该角色（开场白）；角色卡被清了：回到内置默认角色卡
                 session = fresh.firstOrNull { it.charFile == cur.charFile }
-                    ?.let { ChatRepository.get(ctx, it.id) }
+                    ?.let { chatRepository.get(it.id) }
                     ?: if (card != null) {
                         ConversationOps.newSession(card, cur.charFile, cur.charName)
                     } else {
@@ -527,7 +616,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 return@generationTask
             }
             // 以 DB 为准取当前会话（内存态可能落后于分支切换等 DB 变更）；未落盘的新会话回退内存态
-            val existing = session?.id?.let { ChatRepository.get(ctx, it) }
+            val existing = session?.id?.let { chatRepository.get(it) }
             val src = existing ?: session ?: ChatSession()
             originalSession = src
             createdNewSession = existing == null
@@ -545,8 +634,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
             overlays = overlays + (userMsg.ts to userMsg)
             // 用户消息先落盘：生成中途 App 被杀/Activity 重建也不丢消息。
             // 已落盘会话只插新用户消息；未落盘的新会话整存一次（含开场白）
-            if (existing != null) ChatRepository.putMessage(ctx, base.id, userMsg)
-            else ChatRepository.save(ctx, base)
+            if (existing != null) chatRepository.putMessage(base.id, userMsg)
+            else chatRepository.save(base)
             runGeneration(base.id, prov, modelId, ChatGenerationMode.SEND, null)
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -554,8 +643,8 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 val before = originalSession
                 if (before != null) {
                     val rollbackSucceeded = runCatching {
-                        if (createdNewSession) ChatRepository.delete(ctx, before.id)
-                        else ChatRepository.save(ctx, before)
+                        if (createdNewSession) chatRepository.delete(before.id)
+                        else chatRepository.save(before)
                     }.onFailure { rollbackError ->
                         error.addSuppressed(rollbackError)
                         SafeLog.error(CHAT_VIEW_MODEL_TAG, "send_rollback_failed", rollbackError)
@@ -567,7 +656,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         restoreDraftAfterFailedSend(text, atts)
                         sendError = ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty())
                     } else {
-                        runCatching { ChatRepository.get(ctx, before.id) }
+                        runCatching { chatRepository.get(before.id) }
                             .onSuccess { persisted ->
                                 if (persisted != null && session?.id == before.id) session = persisted
                                 if (persisted != null) {
@@ -646,7 +735,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         apiConfig = apiConfig.copy(providers = apiConfig.providers.map {
             if (it.id == provider.id) updatedProvider else it
         })
-        ApiConfigStore.saveConfig(ctx, apiConfig)
+        apiConfigRepository.save(apiConfig)
         modelRevision++
     }
 
@@ -682,8 +771,10 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
     /** 重新计算 UI 插槽类扩展的产出（快捷回复等）。扩展配置变更后调用（如从扩展设置返回）。 */
     fun refreshExtensionSlots() {
         val qr = mutableListOf<QuickReply>()
-        for (ext in ExtensionStore.enabledExtensions(ctx)) {
-            if (ext is QuickReplyProvider) qr += ext.quickReplies(ExtensionStore.getConfig(ctx, ext.info.id))
+        for (ext in container.extensionGateway.enabledExtensions()) {
+            if (ext is QuickReplyProvider) {
+                qr += ext.quickReplies(container.extensionGateway.config(ext.info.id))
+            }
         }
         quickReplies = qr
     }
@@ -727,7 +818,7 @@ internal class ChatViewModel(app: Application) : AndroidViewModel(app) {
         // 走到这里说明其后没有 AI 回复（正常对话流总是有）：极罕见的用户消息连排场景，
         // 没有分支点可挂下文，直接截断到该用户消息后再生成（截断需先于生成完成，故同一协程内顺序执行）
         generationCoordinator.launch {
-            ChatRepository.truncateAfter(ctx, s.id, ts)
+            chatRepository.truncateAfter(s.id, ts)
             runGeneration(s.id, prov, modelId, ChatGenerationMode.SEND, null)
         }
         return SendOutcome.STARTED

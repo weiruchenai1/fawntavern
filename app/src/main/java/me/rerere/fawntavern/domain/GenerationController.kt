@@ -6,9 +6,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
-import me.rerere.fawntavern.data.api.ApiRequestException
+import me.rerere.fawntavern.data.api.ApiRequestSnapshot
 import me.rerere.fawntavern.data.api.ApiToolCall
-import me.rerere.fawntavern.data.api.ChatApi
 import me.rerere.fawntavern.data.api.GenParams
 import me.rerere.fawntavern.data.api.GeneratedImage
 import me.rerere.fawntavern.data.api.StreamEnd
@@ -25,25 +24,37 @@ import me.rerere.fawntavern.data.chat.MsgSearch
  * 支持函数工具多轮循环（联网搜索等）：模型发起工具调用 → [ToolExecutor] 执行 →
  * 结果以工具消息回传 → 续下一轮流式，直到模型不再调用工具。
  */
-internal fun interface GenerationStreamClient {
+internal data class GenerationStreamRequest(
+    val provider: ApiProvider,
+    val modelId: String,
+    val messages: List<ApiMessage>,
+    val params: GenParams?,
+    val tools: List<ToolSpec>,
+    val isCancelled: () -> Boolean,
+)
+
+internal sealed interface GenerationEvent {
+    data class ContentDelta(val content: String) : GenerationEvent
+    data class ReasoningDelta(val reasoning: String) : GenerationEvent
+}
+
+internal class GenerationCancelled : Exception()
+
+internal class GenerationRequestException(
+    val snapshot: ApiRequestSnapshot,
+    cause: Exception,
+) : Exception(cause.message, cause)
+
+internal fun interface GenerationGateway {
     suspend fun stream(
-        provider: ApiProvider,
-        modelId: String,
-        messages: List<ApiMessage>,
-        params: GenParams?,
-        tools: List<ToolSpec>,
-        isCancelled: () -> Boolean,
-        onDelta: (content: String, reasoning: String) -> Unit,
+        request: GenerationStreamRequest,
+        onEvent: (GenerationEvent) -> Unit,
     ): StreamEnd
 }
 
 internal class GenerationController(
-    private val streamClient: GenerationStreamClient = GenerationStreamClient { provider, modelId, messages,
-                                                                                params, tools, isCancelled, onDelta ->
-        ChatApi.streamChat(provider, modelId, messages, params, tools, isCancelled, onDelta)
-    },
+    private val gateway: GenerationGateway,
 ) {
-
     /** 工具执行器（由调用方提供）。搜索类工具同时产出时间线步骤状态（MsgSearch）。 */
     interface ToolExecutor {
         /** 执行前的时间线预览（如"搜索中"步骤）；null = 该调用不上时间线 */
@@ -141,15 +152,19 @@ internal class GenerationController(
                 val reasoningRoundStart = synchronized(lock) { reasoningBuf.length }
                 val estimatedInput = estimatePromptTokens()
                 promptTokens += estimatedInput
-                val end = streamClient.stream(
+                val end = gateway.stream(
+                    request = GenerationStreamRequest(
                     provider = provider,
                     modelId = modelId,
                     messages = apiMessages,
                     params = built.genParams,
                     tools = tools,
                     isCancelled = { stopFlag.get() },
-                ) { c, r ->
-                    if (stopFlag.get()) throw ChatApi.Stopped()
+                    ),
+                ) { event ->
+                    if (stopFlag.get()) throw GenerationCancelled()
+                    val c = (event as? GenerationEvent.ContentDelta)?.content.orEmpty()
+                    val r = (event as? GenerationEvent.ReasoningDelta)?.reasoning.orEmpty()
                     if (r.isNotEmpty()) {
                         if (reasoningStart == 0L) {
                             reasoningStart = System.currentTimeMillis()
@@ -218,7 +233,7 @@ internal class GenerationController(
                     val (result, final) = try {
                         toolExecutor.execute(call)
                     } catch (e: Exception) {
-                        if (e is ChatApi.Stopped) throw e
+                        if (e is GenerationCancelled) throw e
                         // 工具失败不打断生成：把错误回传给模型自行处理
                         org.json.JSONObject()
                             .put("error", e.message ?: "tool failed")
@@ -259,9 +274,9 @@ internal class GenerationController(
                 generationMs = (System.currentTimeMillis() - generationStartedAt).coerceAtLeast(1L),
                 requestSnapshots = requestSnapshots,
             )
-        } catch (_: ChatApi.Stopped) {
+        } catch (_: GenerationCancelled) {
         } catch (e: Exception) {
-            val displayError = if (e is ApiRequestException) {
+            val displayError = if (e is GenerationRequestException) {
                 if (e.snapshot !in requestSnapshots) {
                     requestSnapshots = requestSnapshots + e.snapshot
                     cur = cur.copy(requestSnapshots = requestSnapshots)

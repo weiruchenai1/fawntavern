@@ -3,10 +3,9 @@ package me.rerere.fawntavern.domain
 import kotlinx.coroutines.runBlocking
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ApiProvider
+import me.rerere.fawntavern.data.api.GenParams
 import me.rerere.fawntavern.data.api.ApiRequestSnapshot
-import me.rerere.fawntavern.data.api.ApiRequestException
 import me.rerere.fawntavern.data.api.ApiToolCall
-import me.rerere.fawntavern.data.api.ChatApi
 import me.rerere.fawntavern.data.api.GeneratedImage
 import me.rerere.fawntavern.data.api.StreamEnd
 import me.rerere.fawntavern.data.api.ToolSpec
@@ -21,10 +20,33 @@ import org.junit.Test
 
 class GenerationControllerTest {
     @Test
+    fun gatewayEventsAreMergedInEmissionOrder() = runBlocking {
+        val gateway = GenerationGateway { _, onEvent ->
+            onEvent(GenerationEvent.ReasoningDelta("think"))
+            onEvent(GenerationEvent.ContentDelta("answer"))
+            StreamEnd()
+        }
+
+        val result = GenerationController(gateway).run(
+            apiMessages = listOf(ApiMessage("user", "question")),
+            genMessage = ChatMessage(role = "assistant"),
+            provider = ApiProvider(id = "provider"),
+            modelId = "model",
+            built = PromptBuilder.Built(),
+            streaming = false,
+            errorText = { it.message.orEmpty() },
+            onUpdate = {},
+        )
+
+        assertEquals("think", result.reasoning)
+        assertEquals("answer", result.content)
+    }
+
+    @Test
     fun failedRequestStillPersistsItsSnapshot() = runBlocking {
         val snapshot = ApiRequestSnapshot("https://example.com/fail", "{\"model\":\"test\"}")
-        val client = GenerationStreamClient { _, _, _, _, _, _, _ ->
-            throw ApiRequestException(snapshot, IllegalStateException("provider failed"))
+        val client = testGateway { _, _, _, _, _, _, _ ->
+            throw GenerationRequestException(snapshot, IllegalStateException("provider failed"))
         }
 
         val result = GenerationController(client).run(
@@ -46,9 +68,9 @@ class GenerationControllerTest {
     @Test
     fun stopCancelsTheCurrentRound() = runBlocking {
         lateinit var controller: GenerationController
-        val client = GenerationStreamClient { _, _, _, _, _, isCancelled, _ ->
+        val client = testGateway { _, _, _, _, _, isCancelled, _ ->
             controller.stop()
-            if (isCancelled()) throw ChatApi.Stopped()
+            if (isCancelled()) throw GenerationCancelled()
             StreamEnd()
         }
         controller = GenerationController(client)
@@ -70,7 +92,7 @@ class GenerationControllerTest {
     @Test
     fun toolResultIsAddedBeforeSecondModelRound() = runBlocking {
         val requests = mutableListOf<List<ApiMessage>>()
-        val client = GenerationStreamClient { _, _, messages, _, _, _, onDelta ->
+        val client = testGateway { _, _, messages, _, _, _, onDelta ->
             requests += messages
             if (requests.size == 1) {
                 StreamEnd(
@@ -118,7 +140,7 @@ class GenerationControllerTest {
     @Test
     fun toolExecutionFailureIsReturnedAsValidJson() = runBlocking {
         val requests = mutableListOf<List<ApiMessage>>()
-        val client = GenerationStreamClient { _, _, messages, _, _, _, _ ->
+        val client = testGateway { _, _, messages, _, _, _, _ ->
             requests += messages
             if (requests.size == 1) {
                 StreamEnd(toolCalls = listOf(ApiToolCall("call-1", "search_web", "{}")))
@@ -154,7 +176,7 @@ class GenerationControllerTest {
     @Test
     fun generatedImagesArePersistedIntoTheFinalMessage() = runBlocking {
         val image = GeneratedImage(byteArrayOf(1, 2, 3), "image/png")
-        val client = GenerationStreamClient { _, _, _, _, _, _, _ ->
+        val client = testGateway { _, _, _, _, _, _, _ ->
             StreamEnd(generatedImages = listOf(image))
         }
 
@@ -182,7 +204,7 @@ class GenerationControllerTest {
     @Test
     fun automaticImageSizeUsesPersistedImageAspectRatio() = runBlocking {
         val image = GeneratedImage(byteArrayOf(1, 2, 3), "image/png")
-        val client = GenerationStreamClient { _, _, _, _, _, _, _ ->
+        val client = testGateway { _, _, _, _, _, _, _ ->
             StreamEnd(generatedImages = listOf(image))
         }
 
@@ -206,3 +228,31 @@ class GenerationControllerTest {
         assertEquals("3:2", result.alts.single().imageAspectRatio)
     }
 }
+
+private fun interface TestStreamClient {
+    suspend fun stream(
+        provider: ApiProvider,
+        modelId: String,
+        messages: List<ApiMessage>,
+        params: GenParams?,
+        tools: List<ToolSpec>,
+        isCancelled: () -> Boolean,
+        onDelta: (content: String, reasoning: String) -> Unit,
+    ): StreamEnd
+}
+
+private fun testGateway(client: TestStreamClient): GenerationGateway =
+    GenerationGateway { request, onEvent ->
+        client.stream(
+            provider = request.provider,
+            modelId = request.modelId,
+            messages = request.messages,
+            params = request.params,
+            tools = request.tools,
+            isCancelled = request.isCancelled,
+            onDelta = { content, reasoning ->
+                if (content.isNotEmpty()) onEvent(GenerationEvent.ContentDelta(content))
+                if (reasoning.isNotEmpty()) onEvent(GenerationEvent.ReasoningDelta(reasoning))
+            },
+        )
+    }

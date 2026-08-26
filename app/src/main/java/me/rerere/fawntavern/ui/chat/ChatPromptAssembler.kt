@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.ui.chat
 
 import android.content.Context
+import java.io.File
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.character.CharRegex
@@ -12,16 +13,39 @@ import me.rerere.fawntavern.data.settings.GlobalVariableStore
 import me.rerere.fawntavern.data.settings.UserProfileStore
 import me.rerere.fawntavern.data.settings.WorldInfoSettingsStore
 import me.rerere.fawntavern.data.worldbook.WorldBook
+import me.rerere.fawntavern.data.worldbook.WorldInfoSettings
 import me.rerere.fawntavern.domain.MacroVariableState
 import me.rerere.fawntavern.domain.PromptBuilder
-import me.rerere.fawntavern.extension.ExtensionStore
+import me.rerere.fawntavern.extension.ExtensionGateway
 import me.rerere.fawntavern.extension.PromptContext
 import me.rerere.fawntavern.extension.PromptContributor
+import me.rerere.fawntavern.extension.Extension
 import org.json.JSONObject
 
-/** 生成前的静态上下文组装；持久化变量提交仍由 ViewModel 负责。 */
-internal class ChatPromptAssembler(
+internal interface ChatPromptEnvironment {
+    fun enabledExtensions(): List<Extension>
+    fun extensionConfig(id: String): String
+    fun globalVariables(): Map<String, String>
+    fun userDescription(): String
+    fun worldInfoSettings(): WorldInfoSettings
+    fun filesDir(): File
+}
+
+internal class AndroidChatPromptEnvironment(
     private val context: Context,
+    private val extensions: ExtensionGateway,
+) : ChatPromptEnvironment {
+    override fun enabledExtensions(): List<Extension> = extensions.enabledExtensions()
+    override fun extensionConfig(id: String): String = extensions.config(id)
+    override fun globalVariables(): Map<String, String> = GlobalVariableStore.get(context)
+    override fun userDescription(): String = UserProfileStore.getDescription(context)
+    override fun worldInfoSettings(): WorldInfoSettings = WorldInfoSettingsStore.get(context)
+    override fun filesDir(): File = context.filesDir
+}
+
+/** 生成前的静态上下文组装；变量提交由生成提交用例负责。 */
+internal class ChatPromptAssembler(
+    private val environment: ChatPromptEnvironment,
 ) {
     data class Request(
         val session: ChatSession,
@@ -51,7 +75,7 @@ internal class ChatPromptAssembler(
         val extraPost = mutableListOf<PromptBuilder.Piece>()
         val extraDepth = mutableListOf<PromptBuilder.DepthPiece>()
         var historySkip = 0
-        val enabledExtensions = ExtensionStore.enabledExtensions(context)
+        val enabledExtensions = environment.enabledExtensions()
         for (extension in enabledExtensions) {
             if (extension !is PromptContributor) continue
             val contribution = extension.contribute(
@@ -60,7 +84,7 @@ internal class ChatPromptAssembler(
                     charName = request.card?.name ?: request.session.charName,
                     userName = request.userName,
                     extState = request.session.extState[extension.info.id] ?: "",
-                    config = ExtensionStore.getConfig(context, extension.info.id),
+                    config = environment.extensionConfig(extension.info.id),
                 ),
             )
             val source = PromptBuilder.PromptSource.EXTENSION
@@ -80,19 +104,19 @@ internal class ChatPromptAssembler(
         val promptHistory = request.promptHistory.trimHistory(historySkip, request.trimSummarizedHistory)
         val variableState = MacroVariableState(
             localVariables = request.session.localVariables,
-            globalVariables = GlobalVariableStore.get(context),
+            globalVariables = environment.globalVariables(),
         )
         val built = PromptBuilder.build(
             card = request.card,
             userName = request.userName,
-            userDescription = UserProfileStore.getDescription(context),
+            userDescription = environment.userDescription(),
             worldBooks = request.worldBooks,
             preset = request.preset,
             history = buildHistory,
             promptRegex = request.promptRegex,
             timedWi = request.session.timedWi,
             updateTimed = request.updateTimed,
-            wiSettings = WorldInfoSettingsStore.get(context),
+            wiSettings = environment.worldInfoSettings(),
             reasoning = request.reasoning,
             extraPre = extraPre,
             extraPost = extraPost,
@@ -113,7 +137,7 @@ internal class ChatPromptAssembler(
             apiMessages = PromptBuilder.assemble(
                 built = built,
                 history = promptHistory,
-                baseDir = context.filesDir,
+                baseDir = environment.filesDir(),
                 mutateLastUserMessage = request.commitVariables,
             ),
             variableState = variableState,

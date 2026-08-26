@@ -5,17 +5,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import me.rerere.fawntavern.data.api.ApiConfig
-import me.rerere.fawntavern.data.chat.ChatRepository
+import me.rerere.fawntavern.data.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatSession
-import me.rerere.fawntavern.extension.ExtensionStore
+import me.rerere.fawntavern.extension.ExtensionGateway
 import me.rerere.fawntavern.extension.GenerationContext
 import me.rerere.fawntavern.extension.GenerationLifecycle
-import me.rerere.fawntavern.extension.HostServices
 
 internal class ChatPostGenerationCoordinator(
     private val context: Context,
     private val scope: CoroutineScope,
-    private val titleGenerator: ChatTitleGenerator = ChatTitleGenerator(context),
+    private val chatRepository: ChatDataRepository,
+    private val extensions: ExtensionGateway,
+    private val titleGenerator: ChatTitleGenerator =
+        ChatTitleGenerator(context, chatRepository, extensions),
 ) {
     fun runExtensions(
         session: ChatSession,
@@ -26,10 +28,10 @@ internal class ChatPostGenerationCoordinator(
         onSessionRefreshed: (ChatSession) -> Unit,
     ) {
         scope.launch {
-            val services = HostServices(context, apiConfig)
+            val services = extensions.services(apiConfig)
             var ran = false
-            var latest = ChatRepository.get(context, session.id) ?: session
-            for (extension in ExtensionStore.enabledExtensions(context)) {
+            var latest = chatRepository.get(session.id) ?: session
+            for (extension in extensions.enabledExtensions()) {
                 if (extension !is GenerationLifecycle) continue
                 ran = true
                 try {
@@ -39,17 +41,17 @@ internal class ChatPostGenerationCoordinator(
                             charName = characterName,
                             userName = userName,
                             extState = latest.extState[extension.info.id].orEmpty(),
-                            config = ExtensionStore.getConfig(context, extension.info.id),
+                            config = extensions.config(extension.info.id),
                         ),
                         services,
                     )
                 } catch (error: Exception) {
                     SafeLog.warn(TAG, "extension_generation_hook_failed", error)
                 }
-                latest = ChatRepository.get(context, session.id) ?: latest
+                latest = chatRepository.get(session.id) ?: latest
             }
             if (ran && isCurrent()) {
-                ChatRepository.get(context, session.id)?.let(onSessionRefreshed)
+                chatRepository.get(session.id)?.let(onSessionRefreshed)
             }
         }
     }

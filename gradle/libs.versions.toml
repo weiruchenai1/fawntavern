@@ -16,6 +16,7 @@ room = "2.8.4"
 paging = "3.5.0"
 ksp = "2.3.11"
 kotlinxSerializationJson = "1.11.0"
+kotlinxCoroutines = "1.10.2"
 jsoup = "1.23.1"
 floatingx = "2.3.7"
 coil = "3.5.0"
@@ -64,6 +65,7 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 androidx-paging-runtime = { group = "androidx.paging", name = "paging-runtime-ktx", version.ref = "paging" }
 androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 floatingx = { group = "io.github.petterpx", name = "floatingx", version.ref = "floatingx" }
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }

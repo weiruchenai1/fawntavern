@@ -1,7 +1,6 @@
 package me.rerere.fawntavern.ui.chat
 
-import android.content.Context
-import me.rerere.fawntavern.data.chat.ChatRepository
+import me.rerere.fawntavern.data.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.domain.ConversationOps
@@ -15,17 +14,17 @@ internal interface ChatSessionDataSource {
     suspend fun updatePinned(id: String, pinned: Boolean)
 }
 
-internal class AndroidChatSessionDataSource(
-    private val context: Context,
+internal class RepositoryChatSessionDataSource(
+    private val repository: ChatDataRepository,
 ) : ChatSessionDataSource {
-    override suspend fun listSummaries(): List<ChatSession> = ChatRepository.listSummaries(context)
-    override suspend fun get(id: String): ChatSession? = ChatRepository.get(context, id)
-    override suspend fun save(session: ChatSession) = ChatRepository.save(context, session)
-    override suspend fun delete(id: String) = ChatRepository.delete(context, id)
+    override suspend fun listSummaries(): List<ChatSession> = repository.listSummaries()
+    override suspend fun get(id: String): ChatSession? = repository.get(id)
+    override suspend fun save(session: ChatSession) = repository.save(session)
+    override suspend fun delete(id: String) = repository.delete(id)
     override suspend fun updateTitle(id: String, title: String) =
-        ChatRepository.updateTitle(context, id, title)
+        repository.updateTitle(id, title)
     override suspend fun updatePinned(id: String, pinned: Boolean) =
-        ChatRepository.updatePinned(context, id, pinned)
+        repository.updatePinned(id, pinned)
 }
 
 internal data class DeletedSessionChoice(
