@@ -30,7 +30,8 @@ import me.rerere.fawntavern.ui.worldbook.WorldBookListScreen
 internal fun ChatDestinationHost(
     destination: ChatDestination,
     stateHolder: SaveableStateHolder,
-    viewModel: ChatViewModel,
+    state: ChatUiState,
+    onAction: (ChatAction) -> Unit,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
     solidBackground: Boolean,
@@ -44,14 +45,14 @@ internal fun ChatDestinationHost(
         ChatDestination.Translator -> {
             TranslatorScreen(
                 onBack = onBack,
-                apiConfig = viewModel.apiConfig,
-                fallbackModelSpec = viewModel.displayModelSpec().orEmpty(),
+                apiConfig = state.model.apiConfig,
+                fallbackModelSpec = state.model.displaySpec.orEmpty(),
             )
         }
         ChatDestination.Statistics -> { StatisticsScreen(onBack = onBack) }
         ChatDestination.Search -> {
             SearchScreen(
-                charFile = viewModel.session?.charFile.orEmpty(),
+                charFile = state.conversation.current?.charFile.orEmpty(),
                 onBack = onBack,
                 onOpenSession = onOpenSearchSession,
             )
@@ -60,16 +61,16 @@ internal fun ChatDestinationHost(
             FontSizeScreen(
                 onBack = {
                     onBack()
-                    viewModel.reloadUiSettings()
+                    onAction(ChatAction.ReloadUiSettings)
                 },
-                currentScale = viewModel.uiSettings.fontScale,
+                currentScale = state.settings.fontScale,
             )
         }
         ChatDestination.Preferences -> {
             PreferencesScreen(
                 onBack = {
                     onBack()
-                    viewModel.reloadUiSettings()
+                    onAction(ChatAction.ReloadUiSettings)
                 },
                 solidBackground = solidBackground,
                 onSolidBackgroundChange = onSolidBackgroundChange,
@@ -89,33 +90,33 @@ internal fun ChatDestinationHost(
             DataManagementScreen(
                 onBack = {
                     onBack()
-                    viewModel.refreshAfterDataManagement()
+                    onAction(ChatAction.RefreshAfterDataManagement)
                 },
-                destructiveActionsEnabled = GenerationActionGuard.allowsMutation(viewModel.generating),
+                destructiveActionsEnabled = GenerationActionGuard.allowsMutation(state.generation.running),
             )
         }
         ChatDestination.ApiConfig -> {
             ApiConfigScreen(onBack = {
                 onBack()
-                viewModel.reloadApiConfig()
+                onAction(ChatAction.ReloadApiConfig)
             })
         }
         ChatDestination.WorldBooks -> {
             WorldBookListScreen(onBack = {
                 onBack()
-                viewModel.reloadPromptData()
+                onAction(ChatAction.ReloadPromptData)
             })
         }
         ChatDestination.Characters -> {
             CharacterListScreen(onBack = {
                 onBack()
-                viewModel.refreshCurrentCard()
+                onAction(ChatAction.RefreshCurrentCard)
             })
         }
         ChatDestination.Presets -> {
             PresetListScreen(onBack = {
                 onBack()
-                viewModel.reloadPromptData()
+                onAction(ChatAction.ReloadPromptData)
             })
         }
         ChatDestination.Settings -> {
@@ -143,7 +144,7 @@ internal fun ChatDestinationHost(
         ChatDestination.Extensions -> {
             ExtensionsScreen(onBack = {
                 onBack()
-                viewModel.refreshExtensionSlots()
+                onAction(ChatAction.RefreshExtensionSlots)
             })
         }
         ChatDestination.About -> { AboutScreen(onBack = onBack) }
@@ -151,14 +152,14 @@ internal fun ChatDestinationHost(
         ChatDestination.WebSearch -> {
             WebSearchConfigScreen(onBack = {
                 onBack()
-                viewModel.reloadSearchConfig()
+                onAction(ChatAction.ReloadSearchConfig)
             })
         }
         ChatDestination.Tts -> { TtsConfigScreen(onBack = onBack) }
         ChatDestination.Regex -> {
             RegexListScreen(onBack = {
                 onBack()
-                viewModel.reloadPromptData()
+                onAction(ChatAction.ReloadPromptData)
             })
         }
         }

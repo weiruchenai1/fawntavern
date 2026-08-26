@@ -17,8 +17,10 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
@@ -65,11 +67,11 @@ internal class ChatViewModel(
     private val container: AppContainer,
 ) : AndroidViewModel(app) {
 
-    /** 发送/重答的结果：UI 据此决定是否弹"先选模型"提示 */
-    enum class SendOutcome { STARTED, NO_MODEL, SKIPPED, FILE_TOO_LARGE }
+    /** Internal result mapped to one-shot [ChatEffect] values by [dispatch]. */
+    private enum class SendOutcome { STARTED, NO_MODEL, SKIPPED, FILE_TOO_LARGE }
 
-    /** 发送时附件落盘失败的提示（一次性消费：UI 弹完清空）；过大在 SendOutcome 里同步拦截，这里是兜底 */
-    var sendError by mutableStateOf<String?>(null); private set
+    private val effectChannel = Channel<ChatEffect>(Channel.BUFFERED)
+    val effects: Flow<ChatEffect> = effectChannel.receiveAsFlow()
 
     // ── 状态（写入只经由本类方法） ──
     private val modelController = ChatModelController(AndroidChatModelDataSource(app))
@@ -106,8 +108,6 @@ internal class ChatViewModel(
     var activePreset by mutableStateOf<StPreset?>(null); private set
     var globalRegexScripts by mutableStateOf<List<CharRegex>>(emptyList()); private set
     var regexSetScripts by mutableStateOf<List<CharRegex>>(emptyList()); private set
-    var promptContextFailures by mutableStateOf<List<PromptContextLoader.LoadFailure>>(emptyList())
-        private set
     private var loadedPromptCharFile: String? = null
     private var promptContextRevision = 0L
     // 输入草稿放这里，Activity 重建后不丢。BTF2 的 TextFieldState 即单一事实源，
@@ -184,7 +184,7 @@ internal class ChatViewModel(
             onRunningChanged = { generating = it },
             onFailure = { error ->
                 SafeLog.error(CHAT_VIEW_MODEL_TAG, "generation_failed", error)
-                sendError = ctx.getString(R.string.chat_generation_failed_fmt, error.message.orEmpty())
+                showMessage(ctx.getString(R.string.chat_generation_failed_fmt, error.message.orEmpty()))
             },
         )
     }
@@ -317,12 +317,27 @@ internal class ChatViewModel(
                 builtInEnabled = builtInSearchEnabled,
             ),
             settings = uiSettings,
-            promptContextFailures = promptContextFailures,
-            sendError = sendError,
         )
 
     fun dispatch(action: ChatAction) {
         when (action) {
+            ChatAction.SendMessage -> {
+                val scrollToBottom = editingTs == null
+                handleOutcome(sendMessage(), scrollToBottom, hideKeyboard = true)
+            }
+            is ChatAction.UseQuickReply -> handleOutcome(
+                onQuickReply(action.reply),
+                scrollToBottom = true,
+                hideKeyboard = true,
+            )
+            is ChatAction.RegenerateAssistant -> handleOutcome(
+                regenerateAi(action.timestamp),
+                action.scrollToBottom,
+            )
+            is ChatAction.RegenerateAfterUser -> handleOutcome(
+                regenerateAfterUser(action.timestamp),
+                action.scrollToBottom,
+            )
             ChatAction.NewChat -> newChat()
             is ChatAction.OpenSession -> openSession(action.id)
             is ChatAction.DeleteSession -> deleteSession(action.id)
@@ -349,11 +364,43 @@ internal class ChatViewModel(
             is ChatAction.ClearOverlay -> clearOverlay(action.timestamp)
             is ChatAction.SpeakMessage -> speakMessage(action.timestamp)
             ChatAction.StopSpeaking -> stopSpeaking()
+            ChatAction.PauseSpeaking -> pauseTts()
+            ChatAction.ResumeSpeaking -> resumeTts()
+            ChatAction.FastForwardSpeaking -> fastForwardTts()
+            ChatAction.CycleSpeakingSpeed -> cycleTtsSpeed()
             ChatAction.ReloadUserProfile -> reloadUserProfile()
             is ChatAction.UpdateUserProfile -> updateUserProfile(action.name, action.description)
-            ChatAction.ConsumeSendError -> consumeSendError()
-            ChatAction.ConsumePromptContextFailures -> consumePromptContextFailures()
+            ChatAction.ReloadUiSettings -> reloadUiSettings()
+            ChatAction.RefreshAfterDataManagement -> refreshAfterDataManagement()
+            ChatAction.ReloadApiConfig -> reloadApiConfig()
+            ChatAction.ReloadPromptData -> reloadPromptData()
+            ChatAction.RefreshCurrentCard -> refreshCurrentCard()
+            ChatAction.RefreshExtensionSlots -> refreshExtensionSlots()
+            ChatAction.ReloadSearchConfig -> reloadSearchConfig()
         }
+    }
+
+    private fun handleOutcome(
+        outcome: SendOutcome,
+        scrollToBottom: Boolean,
+        hideKeyboard: Boolean = false,
+    ) {
+        if (hideKeyboard && outcome != SendOutcome.SKIPPED) {
+            effectChannel.trySend(ChatEffect.HideKeyboard)
+        }
+        when (outcome) {
+            SendOutcome.STARTED -> if (scrollToBottom) effectChannel.trySend(ChatEffect.ScrollToBottom)
+            SendOutcome.NO_MODEL -> {
+                showMessage(ctx.getString(R.string.select_model_first))
+                effectChannel.trySend(ChatEffect.OpenModelSelector)
+            }
+            SendOutcome.FILE_TOO_LARGE -> showMessage(ctx.getString(R.string.file_too_large_to_send))
+            SendOutcome.SKIPPED -> Unit
+        }
+    }
+
+    private fun showMessage(text: String, long: Boolean = false) {
+        effectChannel.trySend(ChatEffect.ShowMessage(text, long))
     }
 
     // ── 配置 / 用户资料 ──
@@ -452,13 +499,15 @@ internal class ChatViewModel(
         activeWorldBooks = loaded.worldBooks
         activePreset = loaded.preset
         regexSetScripts = loaded.regexSetScripts
-        promptContextFailures = loaded.failures
+        if (loaded.failures.isNotEmpty()) {
+            val names = loaded.failures.map { it.name }.distinct().joinToString()
+            showMessage(
+                ctx.getString(R.string.prompt_context_load_failed_fmt, names),
+                long = true,
+            )
+        }
         charImageBitmap = image
         loadedPromptCharFile = loaded.charFile
-    }
-
-    fun consumePromptContextFailures() {
-        promptContextFailures = emptyList()
     }
 
     fun currentProviderAndModel(): Pair<ApiProvider, String>? =
@@ -581,7 +630,7 @@ internal class ChatViewModel(
 
     // ── 发送 / 重答 ──
 
-    fun sendMessage(): SendOutcome {
+    private fun sendMessage(): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
         if (loadedPromptCharFile != session?.charFile.orEmpty()) return SendOutcome.SKIPPED
         val text = inputText.trim()
@@ -612,7 +661,7 @@ internal class ChatViewModel(
             val persisted = attachmentCoordinator.persist(atts)
             if (persisted == null) {
                 restoreDraftAfterFailedSend(text, atts)
-                sendError = ctx.getString(R.string.attachment_send_failed)
+                showMessage(ctx.getString(R.string.attachment_send_failed))
                 return@generationTask
             }
             // 以 DB 为准取当前会话（内存态可能落后于分支切换等 DB 变更）；未落盘的新会话回退内存态
@@ -654,7 +703,7 @@ internal class ChatViewModel(
                         val originalTimestamps = before.messages.mapTo(HashSet()) { it.ts }
                         overlays = overlays.filterKeys { it in originalTimestamps }
                         restoreDraftAfterFailedSend(text, atts)
-                        sendError = ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty())
+                        showMessage(ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty()))
                     } else {
                         runCatching { chatRepository.get(before.id) }
                             .onSuccess { persisted ->
@@ -668,25 +717,22 @@ internal class ChatViewModel(
                                 error.addSuppressed(refreshError)
                                 SafeLog.error(CHAT_VIEW_MODEL_TAG, "send_rollback_refresh_failed", refreshError)
                             }
-                        sendError = ctx.getString(
-                            R.string.chat_send_rollback_failed_fmt,
-                            error.message.orEmpty(),
+                        showMessage(
+                            ctx.getString(
+                                R.string.chat_send_rollback_failed_fmt,
+                                error.message.orEmpty(),
+                            ),
                         )
                     }
                 } else {
                     runCatching { attachmentCoordinator.collectUnused() }
                     restoreDraftAfterFailedSend(text, atts)
-                    sendError = ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty())
+                    showMessage(ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty()))
                 }
                 SafeLog.error(CHAT_VIEW_MODEL_TAG, "send_message_failed", error)
             }
         }
         return SendOutcome.STARTED
-    }
-
-    /** 消费附件发送失败提示：UI 弹完 Toast 后清空，避免下次重组重复弹出 */
-    fun consumeSendError() {
-        sendError = null
     }
 
     private fun restoreDraftAfterFailedSend(text: String, sentAttachments: List<Attachment>) {
@@ -780,7 +826,7 @@ internal class ChatViewModel(
     }
 
     /** 点击快捷回复：send=true 直接发送，否则插入输入框末尾。 */
-    fun onQuickReply(qr: QuickReply): SendOutcome {
+    private fun onQuickReply(qr: QuickReply): SendOutcome {
         return if (qr.send) {
             inputText = qr.text
             sendMessage()
@@ -791,7 +837,7 @@ internal class ChatViewModel(
     }
 
     /** AI 消息重答：保留旧版本，新回复作为新版本（可左右切换）；其后的消息保留，由所有版本共享 */
-    fun regenerateAi(ts: Long): SendOutcome {
+    private fun regenerateAi(ts: Long): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
         if (loadedPromptCharFile != session?.charFile.orEmpty()) return SendOutcome.SKIPPED
         val s = session ?: return SendOutcome.SKIPPED
@@ -806,7 +852,7 @@ internal class ChatViewModel(
     }
 
     /** 用户消息重答：对其后的 AI 回复生成新版本 */
-    fun regenerateAfterUser(ts: Long): SendOutcome {
+    private fun regenerateAfterUser(ts: Long): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
         if (loadedPromptCharFile != session?.charFile.orEmpty()) return SendOutcome.SKIPPED
         val s = session ?: return SendOutcome.SKIPPED

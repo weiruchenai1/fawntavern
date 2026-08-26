@@ -20,8 +20,6 @@ internal data class ChatUiState(
     val model: ModelState,
     val search: SearchState,
     val settings: ChatUiSettings,
-    val promptContextFailures: List<me.rerere.fawntavern.data.PromptContextLoader.LoadFailure>,
-    val sendError: String?,
 ) {
     data class ConversationState(
         val sessions: List<ChatSession>,
@@ -70,6 +68,16 @@ internal data class ChatUiState(
 }
 
 internal sealed interface ChatAction {
+    data object SendMessage : ChatAction
+    data class UseQuickReply(val reply: QuickReply) : ChatAction
+    data class RegenerateAssistant(
+        val timestamp: Long,
+        val scrollToBottom: Boolean,
+    ) : ChatAction
+    data class RegenerateAfterUser(
+        val timestamp: Long,
+        val scrollToBottom: Boolean,
+    ) : ChatAction
     data object NewChat : ChatAction
     data class OpenSession(val id: String) : ChatAction
     data class DeleteSession(val id: String) : ChatAction
@@ -96,8 +104,24 @@ internal sealed interface ChatAction {
     data class ClearOverlay(val timestamp: Long) : ChatAction
     data class SpeakMessage(val timestamp: Long) : ChatAction
     data object StopSpeaking : ChatAction
+    data object PauseSpeaking : ChatAction
+    data object ResumeSpeaking : ChatAction
+    data object FastForwardSpeaking : ChatAction
+    data object CycleSpeakingSpeed : ChatAction
     data object ReloadUserProfile : ChatAction
     data class UpdateUserProfile(val name: String, val description: String) : ChatAction
-    data object ConsumeSendError : ChatAction
-    data object ConsumePromptContextFailures : ChatAction
+    data object ReloadUiSettings : ChatAction
+    data object RefreshAfterDataManagement : ChatAction
+    data object ReloadApiConfig : ChatAction
+    data object ReloadPromptData : ChatAction
+    data object RefreshCurrentCard : ChatAction
+    data object RefreshExtensionSlots : ChatAction
+    data object ReloadSearchConfig : ChatAction
+}
+
+internal sealed interface ChatEffect {
+    data class ShowMessage(val text: String, val long: Boolean = false) : ChatEffect
+    data object OpenModelSelector : ChatEffect
+    data object ScrollToBottom : ChatEffect
+    data object HideKeyboard : ChatEffect
 }

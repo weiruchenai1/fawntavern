@@ -20,7 +20,11 @@ fun ChatScreen(
         factory = ChatViewModelFactory(application, application.container),
     )
     ChatContent(
-        vm = viewModel,
+        state = viewModel.uiState,
+        inputState = viewModel.inputState,
+        pagedMessages = viewModel.pagedMessages,
+        effects = viewModel.effects,
+        onAction = viewModel::dispatch,
         themeMode = themeMode,
         onThemeModeChange = onThemeModeChange,
         solidBackground = solidBackground,

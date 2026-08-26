@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.input.TextFieldState
 import me.rerere.fawntavern.ui.components.FloatingWindow
 import me.rerere.fawntavern.ui.components.rememberInteractiveDrawerState
 import me.rerere.fawntavern.ui.components.InteractiveDrawer
@@ -53,8 +54,10 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
+import androidx.paging.PagingData
 import androidx.paging.compose.collectAsLazyPagingItems
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,14 +78,17 @@ private typealias Screen = ChatDestination
 
 @Composable
 internal fun ChatContent(
-    vm: ChatViewModel,
+    state: ChatUiState,
+    inputState: TextFieldState,
+    pagedMessages: Flow<PagingData<ChatMessage>>,
+    effects: Flow<ChatEffect>,
+    onAction: (ChatAction) -> Unit,
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeModeChange: (ThemeMode) -> Unit = {},
     solidBackground: Boolean = false,
     onSolidBackgroundChange: (Boolean) -> Unit = {},
     startAtSettings: Boolean = false,
 ) {
-    val state = vm.uiState
     val conversation = state.conversation
     val input = state.input
     val generation = state.generation
@@ -129,40 +135,21 @@ internal fun ChatContent(
         Toast.makeText(ctx, resources.getString(R.string.copied), Toast.LENGTH_SHORT).show()
     }
 
-    // 发送/重答的统一善后：成功则钉到底部（重答中间消息时不滚动，原地生成）；
-    // 未选模型则提示并打开模型选择面板
-    fun handleOutcome(outcome: ChatViewModel.SendOutcome, scroll: Boolean = true) {
-        when (outcome) {
-            ChatViewModel.SendOutcome.STARTED -> if (scroll) scrollToBottomTrigger++
-            ChatViewModel.SendOutcome.NO_MODEL -> {
-                Toast.makeText(ctx, resources.getString(R.string.select_model_first), Toast.LENGTH_SHORT).show()
-                modelSelector.open()
+    // One-shot UI work is emitted by the ViewModel and consumed only at this route boundary.
+    LaunchedEffect(effects) {
+        effects.collect { effect ->
+            when (effect) {
+                is ChatEffect.ShowMessage -> Toast.makeText(
+                    ctx,
+                    effect.text,
+                    if (effect.long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT,
+                ).show()
+                ChatEffect.OpenModelSelector -> modelSelector.open()
+                ChatEffect.ScrollToBottom -> scrollToBottomTrigger++
+                ChatEffect.HideKeyboard -> keyboardController?.hide()
             }
-            ChatViewModel.SendOutcome.SKIPPED -> {}
-            ChatViewModel.SendOutcome.FILE_TOO_LARGE ->
-                Toast.makeText(ctx, resources.getString(R.string.file_too_large_to_send), Toast.LENGTH_SHORT).show()
         }
     }
-    // 附件落盘失败（提供方不报大小等兜底场景）：附件与输入已恢复，这里弹提示
-    LaunchedEffect(state.sendError) {
-        state.sendError?.let { err ->
-            Toast.makeText(ctx, err, Toast.LENGTH_SHORT).show()
-            vm.dispatch(ChatAction.ConsumeSendError)
-        }
-    }
-    LaunchedEffect(state.promptContextFailures) {
-        val failures = state.promptContextFailures
-        if (failures.isNotEmpty()) {
-            val names = failures.map { it.name }.distinct().joinToString()
-            Toast.makeText(
-                ctx,
-                resources.getString(R.string.prompt_context_load_failed_fmt, names),
-                Toast.LENGTH_LONG,
-            ).show()
-            vm.dispatch(ChatAction.ConsumePromptContextFailures)
-        }
-    }
-
     // ── 附件选取 launcher（相册/文件均可多选；文件里选到图片按 MIME 归为图片）──
     val saveTxtLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain"),
@@ -187,14 +174,14 @@ internal fun ChatContent(
         }
     }
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        vm.dispatch(ChatAction.AddAttachments(uris.map { Attachment(it, isImage = true) }))
+        onAction(ChatAction.AddAttachments(uris.map { Attachment(it, isImage = true) }))
     }
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        vm.dispatch(ChatAction.AddAttachments(uris.map { Attachment(it, isImage = mediaInput.isImage(it)) }))
+        onAction(ChatAction.AddAttachments(uris.map { Attachment(it, isImage = mediaInput.isImage(it)) }))
     }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         cameraImageUri?.let(Uri::parse)?.let { uri ->
-            if (ok) vm.dispatch(ChatAction.AddAttachments(listOf(Attachment(uri, isImage = true))))
+            if (ok) onAction(ChatAction.AddAttachments(listOf(Attachment(uri, isImage = true))))
             else mediaInput.discardCameraFile(uri)
         }
         cameraImageUri = null
@@ -202,7 +189,7 @@ internal fun ChatContent(
 
     // 抽屉里可能改了用户名/头像，关抽屉时刷新
     LaunchedEffect(drawerState.isOpen) {
-        if (!drawerState.isOpen) vm.dispatch(ChatAction.ReloadUserProfile)
+        if (!drawerState.isOpen) onAction(ChatAction.ReloadUserProfile)
     }
     // 打开抽屉（按钮或边缘手势）即收起键盘
     LaunchedEffect(drawerState) {
@@ -233,11 +220,11 @@ internal fun ChatContent(
     ) {
         TtsFloatingBar(
             state = profile.tts,
-            onPause = vm::pauseTts,
-            onResume = vm::resumeTts,
-            onStop = { vm.dispatch(ChatAction.StopSpeaking) },
-            onFastForward = vm::fastForwardTts,
-            onCycleSpeed = vm::cycleTtsSpeed,
+            onPause = { onAction(ChatAction.PauseSpeaking) },
+            onResume = { onAction(ChatAction.ResumeSpeaking) },
+            onStop = { onAction(ChatAction.StopSpeaking) },
+            onFastForward = { onAction(ChatAction.FastForwardSpeaking) },
+            onCycleSpeed = { onAction(ChatAction.CycleSpeakingSpeed) },
         )
     }
 
@@ -250,7 +237,8 @@ internal fun ChatContent(
         ChatDestinationHost(
             destination = activeDestination,
             stateHolder = screenStateHolder,
-            viewModel = vm,
+            state = state,
+            onAction = onAction,
             themeMode = themeMode,
             onThemeModeChange = onThemeModeChange,
             solidBackground = solidBackground,
@@ -258,7 +246,7 @@ internal fun ChatContent(
             onBack = ::navBack,
             onNavigate = nav::add,
             onOpenSearchSession = { id ->
-                vm.dispatch(ChatAction.OpenSession(id))
+                onAction(ChatAction.OpenSession(id))
                 drawerState.snapClose()
                 navBack()
             },
@@ -344,16 +332,16 @@ internal fun ChatContent(
                     currentSessionId = conversation.current?.id,
                     onOpenSession = { id ->
                         scope.launch { drawerState.close() }
-                        vm.dispatch(ChatAction.OpenSession(id))
+                        onAction(ChatAction.OpenSession(id))
                     },
                     onRenameSession = { id, title -> renameSession = id to title },
-                    onPinSession = { id, pinned -> vm.dispatch(ChatAction.SetSessionPinned(id, pinned)) },
-                    onRegenerateTitle = { vm.dispatch(ChatAction.RegenerateTitle(it)) },
+                    onPinSession = { id, pinned -> onAction(ChatAction.SetSessionPinned(id, pinned)) },
+                    onRegenerateTitle = { onAction(ChatAction.RegenerateTitle(it)) },
                     onDeleteSession = { id -> deleteSessionId = id },
                     showChatListDate = prefs.showChatListDate,
                     longPressHaptic = prefs.longPressHaptic,
                     onUserProfileChanged = { name, description ->
-                        vm.dispatch(ChatAction.UpdateUserProfile(name, description))
+                        onAction(ChatAction.UpdateUserProfile(name, description))
                     },
                 )
                 }
@@ -367,21 +355,22 @@ internal fun ChatContent(
                         title = chatBarTitle,
                         subtitle = chatBarSubtitle,
                         onDrawer = { scope.launch { drawerState.open() } },
-                        onNewChat = { vm.dispatch(ChatAction.NewChat) },
+                        onNewChat = { onAction(ChatAction.NewChat) },
                     )
                 },
                 bottomBar = {
                     ChatBottomArea(
-                        state = vm.inputState,
+                        state = inputState,
                         attachments = input.attachments,
-                        onRemoveAttachment = { vm.dispatch(ChatAction.RemoveAttachment(it)) },
+                        onRemoveAttachment = { onAction(ChatAction.RemoveAttachment(it)) },
                         showAttachment = showAttachment,
                         onToggleAttachment = { showAttachment = !showAttachment },
                         editing = input.editingTimestamp != null,
-                        onCancelEdit = { vm.dispatch(ChatAction.CancelEdit) },
+                        onCancelEdit = { onAction(ChatAction.CancelEdit) },
                         onExpand = {
-                            if (vm.inputText.isNotBlank()) {
-                                copyPanel = CopyPanel(resources.getString(R.string.input_content), vm.inputText, editable = true)
+                            val text = inputState.text.toString()
+                            if (text.isNotBlank()) {
+                                copyPanel = CopyPanel(resources.getString(R.string.input_content), text, editable = true)
                             }
                         },
                         currentModelId = displayModelId,
@@ -391,13 +380,10 @@ internal fun ChatContent(
                         searchEnabled = search.enabled,
                         searchProvider = search.providerName,
                         builtInSearchEnabled = search.builtInEnabled,
-                        onStop = { vm.dispatch(ChatAction.StopGeneration) },
+                        onStop = { onAction(ChatAction.StopGeneration) },
                         onSend = {
-                            val wasEditing = input.editingTimestamp != null
-                            val outcome = vm.sendMessage()
-                            if (outcome != ChatViewModel.SendOutcome.SKIPPED) keyboardController?.hide()
+                            onAction(ChatAction.SendMessage)
                             // 编辑是原地更新，不滚动到底部
-                            handleOutcome(outcome, scroll = !wasEditing)
                         },
                         onSelectModel = { modelSelector.open() },
                         onSelectReasoning = { showReasoningPicker = true },
@@ -412,9 +398,7 @@ internal fun ChatContent(
                         onFile = { fileLauncher.launch("*/*") },
                         quickReplies = input.quickReplies,
                         onQuickReply = { qr ->
-                            val outcome = vm.onQuickReply(qr)
-                            if (outcome != ChatViewModel.SendOutcome.SKIPPED) keyboardController?.hide()
-                            handleOutcome(outcome)
+                            onAction(ChatAction.UseQuickReply(qr))
                         },
                         enterToSend = prefs.enterToSend,
                     )
@@ -423,7 +407,7 @@ internal fun ChatContent(
                 // 消息列表来自 Paging 3（DB 为准），已加载页叠加内存 overlay（流式内容 / 分支切换编辑
                 // 的乐观即时反映）后供渲染与滚动锚定用。分页为空（未落盘的新会话，仅开场白）时回退到
                 // 内存会话，保证开场白可见、首帧不闪空。
-                val lazyMessages = vm.pagedMessages.collectAsLazyPagingItems()
+                val lazyMessages = pagedMessages.collectAsLazyPagingItems()
                 val overlays = conversation.overlays
                 val genTs = generation.targetTimestamp
                 val usePaging = lazyMessages.itemCount > 0
@@ -468,7 +452,7 @@ internal fun ChatContent(
                     generationTargetTs = genTs,
                 )
                 LaunchedEffect(settledOverlayTs) {
-                    settledOverlayTs.forEach { vm.dispatch(ChatAction.ClearOverlay(it)) }
+                    settledOverlayTs.forEach { onAction(ChatAction.ClearOverlay(it)) }
                 }
 
                 // ── 滚动状态机的外部输入 ──
@@ -505,15 +489,13 @@ internal fun ChatContent(
                 }
                 // 生成结束：仍在跟随且生成目标是末条消息则钉住底部（正文切 Markdown、工具栏出现会改高度）。
                 // 用 snapshotFlow.drop(1) 跳过当前值，避免从全屏页面返回时（正在生成中才离开的罕见场景）误钉底。
-                LaunchedEffect(Unit) {
-                    snapshotFlow { vm.generating }
-                        .drop(1)
-                        .collect { generating ->
-                            if (!generating && vm.genTargetTs != null &&
-                                vm.genTargetTs == msgsNow.lastOrNull()?.ts) {
-                                scrollCtrl.onGenerationFinished()
-                            }
-                        }
+                var lastObservedGenerating by remember { mutableStateOf(generation.running) }
+                LaunchedEffect(generation.running, generation.targetTimestamp) {
+                    if (lastObservedGenerating && !generation.running &&
+                        generation.targetTimestamp == msgsNow.lastOrNull()?.ts) {
+                        scrollCtrl.onGenerationFinished()
+                    }
+                    lastObservedGenerating = generation.running
                 }
                 // 键盘弹出只在贴底时跟随上移；在上方读历史时视口保持不动。
                 // 跟随动作走状态机的统一入口，与流式跟随共用同一套手势让位判断。
@@ -563,7 +545,12 @@ internal fun ChatContent(
                                             // 其后紧跟的 AI 回复在中间时原地重答，不滚到底部
                                             maybeRegenerate {
                                                 val midRegen = i + 1 < msgs.lastIndex && msgs[i + 1].role == "assistant"
-                                                handleOutcome(vm.regenerateAfterUser(msg.ts), scroll = !midRegen)
+                                                onAction(
+                                                    ChatAction.RegenerateAfterUser(
+                                                        timestamp = msg.ts,
+                                                        scrollToBottom = !midRegen,
+                                                    ),
+                                                )
                                             }
                                         },
                                         onMore = { menuTargetIdx = msg.ts },
@@ -582,7 +569,7 @@ internal fun ChatContent(
                                     fun switchAltAnchored(dir: Int) {
                                         if (msg.alts.size < 2 || (msg.altIdx + dir) !in 0..msg.alts.lastIndex) return
                                         scrollCtrl.switchAnchored(index = i, isLast = i == msgs.lastIndex) {
-                                            vm.dispatch(ChatAction.SwitchAlternative(msg.ts, dir))
+                                            onAction(ChatAction.SwitchAlternative(msg.ts, dir))
                                         }
                                     }
                                     AIMsg(
@@ -591,13 +578,18 @@ internal fun ChatContent(
                                         onCopy = { copyText(msg.content) },
                                         onRegenerate = {
                                             maybeRegenerate {
-                                                handleOutcome(vm.regenerateAi(msg.ts), scroll = i == msgs.lastIndex)
+                                                onAction(
+                                                    ChatAction.RegenerateAssistant(
+                                                        timestamp = msg.ts,
+                                                        scrollToBottom = i == msgs.lastIndex,
+                                                    ),
+                                                )
                                             }
                                         },
                                         onMore = { menuTargetIdx = msg.ts },
                                         onPrevAlt = { switchAltAnchored(-1) },
                                         onNextAlt = { switchAltAnchored(+1) },
-                                        onSpeak = { vm.dispatch(ChatAction.SpeakMessage(msg.ts)) },
+                                        onSpeak = { onAction(ChatAction.SpeakMessage(msg.ts)) },
                                         speaking = profile.speakingTimestamp == msg.ts,
                                         scale = fontScale,
                                         regexScripts = conversation.displayRegexScripts,
@@ -614,18 +606,18 @@ internal fun ChatContent(
                                         thinkingMarkdown = prefs.thinkingMarkdown,
                                         renderPrefs = renderPrefs,
                                         chatMessagesJson = webViewMessages,
-                                        onSetInputText = { vm.dispatch(ChatAction.SetInputText(it)) },
+                                        onSetInputText = { onAction(ChatAction.SetInputText(it)) },
                                         onSetChatMessage = { messageId, value ->
                                             val index = if (messageId < 0) msgs.size + messageId else messageId
                                             msgs.getOrNull(index)?.let { target ->
-                                                vm.dispatch(ChatAction.UpdateMessage(target.ts, value))
+                                                onAction(ChatAction.UpdateMessage(target.ts, value))
                                             }
                                         },
                                         onSelectChatMessageSwipe = { messageId, swipeId ->
                                             val index = if (messageId < 0) msgs.size + messageId else messageId
                                             msgs.getOrNull(index)?.let { target ->
                                                 if (swipeId in target.alts.indices) {
-                                                    vm.dispatch(
+                                                    onAction(
                                                         ChatAction.SwitchAlternative(
                                                             target.ts,
                                                             swipeId - target.altIdx,
@@ -712,14 +704,14 @@ internal fun ChatContent(
                 menuTargetIdx = null
             },
             onEdit = {
-                vm.dispatch(ChatAction.StartEdit(menuTs))
+                onAction(ChatAction.StartEdit(menuTs))
                 menuTargetIdx = null
             },
             onDeleteCurrentVersion = {
                 val ts = menuTs
                 maybeDeleteCurrentVersion {
                     val wasLast = menuMsg.ts == conversation.current?.messages?.lastOrNull()?.ts
-                    vm.dispatch(ChatAction.DeleteMessage(ts))
+                    onAction(ChatAction.DeleteMessage(ts))
                     if (wasLast) scrollToBottomTrigger++
                 }
                 menuTargetIdx = null
@@ -728,7 +720,7 @@ internal fun ChatContent(
                 val ts = menuTs
                 maybeDeleteAllVersions {
                     val wasLast = menuMsg.ts == conversation.current?.messages?.lastOrNull()?.ts
-                    vm.dispatch(ChatAction.DeleteAllVersions(ts))
+                    onAction(ChatAction.DeleteAllVersions(ts))
                     if (wasLast) scrollToBottomTrigger++
                 }
                 menuTargetIdx = null
@@ -742,9 +734,9 @@ internal fun ChatContent(
     copyPanel?.let { panel ->
         TextCopySheet(
             title = panel.title,
-            text = if (panel.editable) vm.inputText else panel.text,
+            text = if (panel.editable) inputState.text.toString() else panel.text,
             onCopyAll = { currentText ->
-                if (panel.editable) vm.dispatch(ChatAction.SetInputText(currentText))
+                if (panel.editable) onAction(ChatAction.SetInputText(currentText))
                 copyText(currentText)
                 copyPanel = null
             },
@@ -754,7 +746,7 @@ internal fun ChatContent(
                 copyPanel = null
             } else null,
             onDismiss = { currentText ->
-                if (panel.editable) vm.dispatch(ChatAction.SetInputText(currentText))
+                if (panel.editable) onAction(ChatAction.SetInputText(currentText))
                 copyPanel = null
             },
             editable = panel.editable,
@@ -768,7 +760,7 @@ internal fun ChatContent(
             label = stringResource(R.string.chat_title_label),
             onConfirm = { newTitle ->
                 if (newTitle.isNotBlank()) {
-                    vm.dispatch(ChatAction.RenameSession(id, newTitle))
+                    onAction(ChatAction.RenameSession(id, newTitle))
                     renameSession = null
                 }
             },
@@ -780,7 +772,7 @@ internal fun ChatContent(
         showDeleteSession = deleteSessionId != null,
         deleteSessionEnabled = GenerationActionGuard.allowsMutation(generation.running),
         onDeleteSession = {
-            deleteSessionId?.let { vm.dispatch(ChatAction.DeleteSession(it)) }
+            deleteSessionId?.let { onAction(ChatAction.DeleteSession(it)) }
             deleteSessionId = null
         },
         onDismissDeleteSession = { deleteSessionId = null },
@@ -811,7 +803,7 @@ internal fun ChatContent(
     ModelSelectorSheet(
         state = modelSelector,
         onSelect = { providerId, modelId ->
-            vm.dispatch(ChatAction.SelectModel(providerId, modelId))
+            onAction(ChatAction.SelectModel(providerId, modelId))
         },
     )
 
@@ -820,7 +812,7 @@ internal fun ChatContent(
         ReasoningPickerSheet(
             current = model.reasoning,
             onSelect = {
-                vm.dispatch(ChatAction.UpdateReasoning(it))
+                onAction(ChatAction.UpdateReasoning(it))
                 showReasoningPicker = false
             },
             onDismiss = { showReasoningPicker = false },
@@ -832,7 +824,7 @@ internal fun ChatContent(
             current = model.imageGeneration,
             useOpenAiSizes = displayProv?.type.equals("openai", ignoreCase = true) &&
                 displayModelId.startsWith("gpt-image", ignoreCase = true),
-            onChange = { vm.dispatch(ChatAction.UpdateImageGeneration(it)) },
+            onChange = { onAction(ChatAction.UpdateImageGeneration(it)) },
             onDismiss = { showImageGenerationSettings = false },
         )
     }
@@ -842,7 +834,7 @@ internal fun ChatContent(
         CharacterPickerSheet(
             currentFileName = conversation.current?.charFile ?: "",
             onSelect = { fileName, displayName ->
-                vm.dispatch(ChatAction.OpenCharacter(fileName, displayName))
+                onAction(ChatAction.OpenCharacter(fileName, displayName))
                 showCharPicker = false
             },
             onDismiss = { showCharPicker = false },
@@ -859,9 +851,9 @@ internal fun ChatContent(
             services = searchServices,
             // 用 VM 的响应式下标做高亮；配置页删过提供商后可能越界，收敛回有效范围
             selectedIndex = search.providerIndex.coerceIn(0, searchServices.lastIndex.coerceAtLeast(0)),
-            onToggleSearch = { vm.dispatch(ChatAction.ToggleSearch) },
-            onToggleBuiltInSearch = { vm.dispatch(ChatAction.ToggleBuiltInSearch) },
-            onSelectProvider = { vm.dispatch(ChatAction.SelectSearchProvider(it)) },
+            onToggleSearch = { onAction(ChatAction.ToggleSearch) },
+            onToggleBuiltInSearch = { onAction(ChatAction.ToggleBuiltInSearch) },
+            onSelectProvider = { onAction(ChatAction.SelectSearchProvider(it)) },
             onOpenConfig = {
                 showSearch = false
                 nav.add(Screen.WebSearch)
