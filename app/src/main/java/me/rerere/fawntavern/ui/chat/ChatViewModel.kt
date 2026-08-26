@@ -93,8 +93,8 @@ internal class ChatViewModel(
      */
     var overlays by mutableStateOf<Map<Long, ChatMessage>>(emptyMap()); private set
     private val userProfileController = ChatUserProfileController(AndroidChatUserProfileDataSource(app))
-    var userName by mutableStateOf(userProfileController.loadName()); private set
-    var userAvatarBitmap by mutableStateOf<Bitmap?>(null); private set
+    private val profile = ChatProfileStateHolder(userProfileController)
+    val userName get() = profile.name
     // 当前角色关联的世界书/预设（随角色卡切换加载，生成时进入 Prompt 拼装）
     var activeWorldBooks by mutableStateOf<List<WorldBook>>(emptyList()); private set
     var activePreset by mutableStateOf<StPreset?>(null); private set
@@ -279,7 +279,7 @@ internal class ChatViewModel(
             ),
             input = input.uiState,
             generation = generationCoordinator.uiState,
-            profile = ChatUiState.ProfileState(userName, userAvatarBitmap, speakingTs, ttsUi),
+            profile = ChatUiState.ProfileState(userName, profile.avatar, speakingTs, ttsUi),
             model = ChatUiState.ModelState(
                 apiConfig = apiConfig,
                 revision = model.revision,
@@ -413,9 +413,7 @@ internal class ChatViewModel(
     /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
     fun reloadUserProfile() {
         viewModelScope.launch {
-            val profile = withContext(Dispatchers.IO) { userProfileController.load() }
-            userName = profile.name
-            userAvatarBitmap = profile.avatar
+            withContext(Dispatchers.IO) { profile.reload() }
         }
     }
 
@@ -1008,7 +1006,7 @@ internal class ChatViewModel(
     }
 
     fun updateUserProfile(name: String, description: String) {
-        userProfileController.save(name, description)
+        profile.save(name, description)
         reloadUserProfile()
         viewModelScope.launch {
             globalRegexScripts = loadGlobalRegex()
