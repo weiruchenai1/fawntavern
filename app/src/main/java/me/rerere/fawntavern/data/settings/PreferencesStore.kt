@@ -4,61 +4,6 @@ import androidx.core.content.edit
 
 import android.content.Context
 
-/** 消息导航按钮（顶部/上一条/下一条/底部）的显示模式 */
-enum class NavButtonsMode { ALWAYS, ON_SCROLL, NEVER }
-
-/** 全局偏好设置（除颜色模式/语言/字号等独立 Store 之外的所有可配置项） */
-data class Preferences(
-    // ── 主题设置 ──
-    /** 纯色背景：开启时背景用纯黑/纯白，其余表面用半透明灰 */
-    val solidBackground: Boolean = false,
-    // ── 聊天项显示 ──
-    val showChatBarCharacterName: Boolean = true,
-    val showChatBarModelName: Boolean = true,
-    val showChatBarProvider: Boolean = true,
-    val showUserAvatar: Boolean = true,
-    val showUserName: Boolean = true,
-    val showUserTimestamp: Boolean = false,
-    val showUserActions: Boolean = true,
-    val showModelIcon: Boolean = true,
-    val showModelName: Boolean = true,
-    val showModelTimestamp: Boolean = false,
-    val showTokenUsage: Boolean = false,
-    val showTokenSpeed: Boolean = false,
-    val showGenerationTime: Boolean = false,
-
-    // ── 渲染设置 ──
-    val htmlCssRendering: Boolean = true,
-    val javascriptSupport: Boolean = false,
-    val mathRendering: Boolean = false,
-    val userMarkdown: Boolean = true,
-    val thinkingMarkdown: Boolean = true,
-    val characterMarkdown: Boolean = true,
-    val autoCollapseCode: Boolean = false,
-    /** 超过该行数自动折叠代码块 */
-    val codeCollapseLines: Int = 5,
-
-    // ── 行为与启动 ──
-    val autoCollapseThinking: Boolean = true,
-    val confirmRegenerate: Boolean = false,
-    val confirmDeleteCurrentVersion: Boolean = true,
-    val confirmDeleteAllVersions: Boolean = true,
-    val navButtonsMode: NavButtonsMode = NavButtonsMode.ON_SCROLL,
-    val showChatListDate: Boolean = false,
-    val newChatOnCharSwitch: Boolean = false,
-    val newChatOnDeleteTopic: Boolean = false,
-    val newChatOnLaunch: Boolean = true,
-    val enterToSend: Boolean = false,
-
-    // ── 触觉反馈 ──
-    /** 设置页开关切换时的触觉反馈 */
-    val switchHaptic: Boolean = true,
-    /** 侧边栏（抽屉）开合触觉反馈 */
-    val sidebarHaptic: Boolean = true,
-    /** 长按触觉反馈 */
-    val longPressHaptic: Boolean = true,
-)
-
 /** 偏好设置 — SharedPreferences 持久化（扁平键，默认值取自 [Preferences]） */
 object PreferencesStore {
     private const val PREFS = "preferences"

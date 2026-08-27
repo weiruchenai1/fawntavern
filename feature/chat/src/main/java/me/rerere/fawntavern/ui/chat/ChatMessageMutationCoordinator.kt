@@ -4,8 +4,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.domain.chat.ChatMessageCoordinator
 
-/** Coordinates optimistic message updates with serialized persistence and reconciliation. */
-internal class ChatMessageMutationCoordinator(
+/** 协调消息的乐观更新、串行持久化和结果对齐。 */
+class ChatMessageMutationCoordinator(
     private val scope: CoroutineScope,
     private val persistence: ChatMessageCoordinator,
     private val conversation: ChatConversationStateHolder,

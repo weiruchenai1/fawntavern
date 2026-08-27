@@ -18,17 +18,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
-/** TTS 朗读的整体状态（供悬浮工具栏展示与控制） */
-data class TtsUiState(
-    val speaking: Boolean = false,
-    val paused: Boolean = false,
-    val positionMs: Long = 0,
-    val durationMs: Long = 0,
-    val speed: Float = 1.0f,
-    val chunkIndex: Int = 0,   // 0-based 当前分片
-    val totalChunks: Int = 0,
-)
-
 /**
  * TTS 朗读编排器：
  * 长文本分片 → 逐片合成 → 顺序播放。支持暂停/继续/快进/变速，播放状态实时外露。

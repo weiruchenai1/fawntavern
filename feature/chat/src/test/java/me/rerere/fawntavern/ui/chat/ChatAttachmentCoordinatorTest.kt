@@ -59,10 +59,13 @@ class ChatAttachmentCoordinatorTest {
         var collectCalls = 0
 
         override fun isTooLarge(uri: Uri): Boolean = uri in oversized
+
         override suspend fun persistImage(uri: Uri): String? =
             if (uri == failAt) null else "attachments/image.jpg"
+
         override suspend fun persistFile(uri: Uri): MsgFile? =
             if (uri == failAt) null else MsgFile("file.txt", "attachments/file.txt")
+
         override suspend fun collectUnused() {
             collectCalls++
         }

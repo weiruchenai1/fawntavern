@@ -1,14 +1,26 @@
 package me.rerere.fawntavern.ui.chat
 
+import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
-import me.rerere.fawntavern.domain.ConversationOps
+import me.rerere.fawntavern.data.chat.MessageAlternatives
+import me.rerere.fawntavern.data.character.CharRegex
+import me.rerere.fawntavern.data.character.CharacterCard
 
-/** Owns the active conversation, its summaries, and transient message overlays. */
-internal class ChatConversationStateHolder {
+data class ChatConversationState(
+    val sessions: List<ChatSession>,
+    val current: ChatSession?,
+    val card: CharacterCard?,
+    val characterImage: Bitmap?,
+    val overlays: Map<Long, ChatMessage>,
+    val displayRegexScripts: List<CharRegex>,
+)
+
+/** 持有当前会话、会话摘要和尚未与分页数据对齐的消息覆盖层。 */
+class ChatConversationStateHolder {
     var sessions by mutableStateOf<List<ChatSession>>(emptyList())
         private set
 
@@ -40,7 +52,7 @@ internal class ChatConversationStateHolder {
         val message = overlays[timestamp]
             ?: current?.messages?.firstOrNull { it.ts == timestamp }
             ?: return null
-        val switched = ConversationOps.switchAltOne(message, direction) ?: return null
+        val switched = MessageAlternatives.switch(message, direction) ?: return null
         putOverlay(switched)
         return switched
     }

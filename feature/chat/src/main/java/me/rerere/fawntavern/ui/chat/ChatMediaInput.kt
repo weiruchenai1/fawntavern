@@ -9,14 +9,14 @@ private val IMAGE_FILE_EXTENSIONS = setOf(
     "png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "heif", "avif",
 )
 
-internal fun isImageAttachment(mimeType: String?, path: String?): Boolean {
+fun isImageAttachment(mimeType: String?, path: String?): Boolean {
     if (mimeType != null) return mimeType.startsWith("image/", ignoreCase = true)
     val extension = path?.substringAfterLast('/')?.substringAfterLast('.', missingDelimiterValue = "")
         ?: return false
     return extension.lowercase() in IMAGE_FILE_EXTENSIONS
 }
 
-internal class ChatMediaInput(
+class ChatMediaInput(
     private val context: Context,
 ) {
     fun isImage(uri: Uri): Boolean =

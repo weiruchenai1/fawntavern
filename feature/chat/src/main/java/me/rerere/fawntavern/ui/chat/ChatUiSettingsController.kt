@@ -1,12 +1,9 @@
 package me.rerere.fawntavern.ui.chat
 
-import android.content.Context
-import me.rerere.fawntavern.data.settings.FontSizeStore
 import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.Preferences
-import me.rerere.fawntavern.data.settings.PreferencesStore
 
-internal data class ChatUiSettings(
+data class ChatUiSettings(
     val fontScale: Float,
     val showChatBarCharacterName: Boolean,
     val showChatBarModelName: Boolean,
@@ -43,21 +40,13 @@ internal data class ChatUiSettings(
     val longPressHaptic: Boolean,
 )
 
-internal interface ChatUiSettingsDataSource {
+interface ChatUiSettingsDataSource {
     fun preferences(): Preferences
     fun fontScale(): Float
 }
 
-internal class AndroidChatUiSettingsDataSource(
-    private val context: Context,
-) : ChatUiSettingsDataSource {
-    override fun preferences(): Preferences = PreferencesStore.get(context)
-
-    override fun fontScale(): Float = FontSizeStore.getScale(context)
-}
-
-/** 将聊天页需要的设置投影为一次性快照，避免 Compose 页面直接访问持久化层。 */
-internal class ChatUiSettingsController(
+/** 将持久化偏好投影为聊天界面需要的一次性快照。 */
+class ChatUiSettingsController(
     private val dataSource: ChatUiSettingsDataSource,
 ) {
     fun load(): ChatUiSettings {

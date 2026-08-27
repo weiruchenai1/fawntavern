@@ -27,7 +27,6 @@ import com.composables.icons.lucide.Bolt
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.search.SearchServiceOptions
 import me.rerere.fawntavern.ui.api.ProviderIcon
 
 /**
@@ -40,7 +39,7 @@ internal fun SearchPickerSheet(
     searchEnabled: Boolean,
     builtInSearchAvailable: Boolean,
     builtInSearchEnabled: Boolean,
-    services: List<SearchServiceOptions>,
+    services: List<ChatSearchService>,
     selectedIndex: Int,
     onToggleSearch: () -> Unit,
     onToggleBuiltInSearch: () -> Unit,

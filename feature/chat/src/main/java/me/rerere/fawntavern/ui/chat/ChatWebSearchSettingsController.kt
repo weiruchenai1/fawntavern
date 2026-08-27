@@ -1,41 +1,28 @@
 package me.rerere.fawntavern.ui.chat
 
-import android.content.Context
-import me.rerere.fawntavern.data.search.SearchServiceOptions
-import me.rerere.fawntavern.data.settings.SearchStore
+data class ChatSearchService(
+    val id: String,
+    val displayName: String,
+)
 
-internal data class ChatWebSearchSettings(
+data class ChatWebSearchSettings(
     val enabled: Boolean,
     val selectedIndex: Int,
-    val services: List<SearchServiceOptions>,
+    val services: List<ChatSearchService>,
 ) {
     val providerName: String
         get() = services.getOrNull(selectedIndex)?.displayName.orEmpty()
 }
 
-internal interface ChatWebSearchSettingsDataSource {
+interface ChatWebSearchSettingsDataSource {
     fun enabled(): Boolean
     fun setEnabled(enabled: Boolean)
     fun selectedIndex(): Int
     fun setSelectedIndex(index: Int)
-    fun services(): List<SearchServiceOptions>
+    fun services(): List<ChatSearchService>
 }
 
-internal class AndroidChatWebSearchSettingsDataSource(
-    private val context: Context,
-) : ChatWebSearchSettingsDataSource {
-    override fun enabled(): Boolean = SearchStore.isEnabled(context)
-
-    override fun setEnabled(enabled: Boolean) = SearchStore.setEnabled(context, enabled)
-
-    override fun selectedIndex(): Int = SearchStore.getSelectedIndex(context)
-
-    override fun setSelectedIndex(index: Int) = SearchStore.setSelectedIndex(context, index)
-
-    override fun services(): List<SearchServiceOptions> = SearchStore.getServices(context)
-}
-
-internal class ChatWebSearchSettingsController(
+class ChatWebSearchSettingsController(
     private val dataSource: ChatWebSearchSettingsDataSource,
 ) {
     fun load(): ChatWebSearchSettings {
@@ -59,6 +46,6 @@ internal class ChatWebSearchSettingsController(
         return current.copy(selectedIndex = selected)
     }
 
-    private fun clampIndex(index: Int, services: List<SearchServiceOptions>): Int =
+    private fun clampIndex(index: Int, services: List<ChatSearchService>): Int =
         index.coerceIn(0, services.lastIndex.coerceAtLeast(0))
 }

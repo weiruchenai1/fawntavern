@@ -1,14 +1,19 @@
 package me.rerere.fawntavern.ui.chat
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
-/** 统一持有单个生成任务的互斥状态与生命周期。 */
-internal class ChatGenerationCoordinator(
+data class ChatGenerationState(
+    val running: Boolean,
+    val targetTimestamp: Long?,
+)
+
+/** 统一持有单个生成任务的交互状态与生命周期。 */
+class ChatGenerationCoordinator(
     private val scope: CoroutineScope,
     private val stopCurrent: () -> Unit,
     private val onRunningChanged: (Boolean) -> Unit = {},
@@ -20,8 +25,8 @@ internal class ChatGenerationCoordinator(
     var targetTimestamp by mutableStateOf<Long?>(null)
         private set
 
-    val uiState: ChatUiState.GenerationState
-        get() = ChatUiState.GenerationState(
+    val state: ChatGenerationState
+        get() = ChatGenerationState(
             running = isRunning,
             targetTimestamp = targetTimestamp,
         )

@@ -263,7 +263,7 @@ internal class ChatViewModel(
 
     val uiState: ChatUiState
         get() = ChatUiState(
-            conversation = ChatUiState.ConversationState(
+            conversation = ChatConversationState(
                 sessions = sessions,
                 current = session,
                 card = currentCard,
@@ -271,9 +271,9 @@ internal class ChatViewModel(
                 overlays = overlays,
                 displayRegexScripts = displayRegexScripts,
             ),
-            input = input.uiState,
+            input = input.state,
             generation = generationOrchestrator.uiState,
-            profile = ChatUiState.ProfileState(
+            profile = ChatProfileState(
                 userName,
                 profile.avatar,
                 tts.speakingTimestamp,
@@ -287,7 +287,7 @@ internal class ChatViewModel(
                 imageGeneration = imageGeneration,
                 imageGenerationAvailable = modelCapabilities.imageGenerationAvailable,
             ),
-            search = ChatUiState.SearchState(
+            search = ChatSearchState(
                 enabled = searchEnabled,
                 providerIndex = searchProviderIndex,
                 providerName = searchProviderName,

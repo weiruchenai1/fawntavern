@@ -7,8 +7,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import me.rerere.fawntavern.extension.QuickReply
 
-/** Owns input data that must survive recomposition and Activity recreation with the ViewModel. */
-internal class ChatInputStateHolder {
+data class ChatInputState(
+    val attachments: List<Attachment>,
+    val editingTimestamp: Long?,
+    val quickReplies: List<QuickReply>,
+)
+
+/** 持有需要跨重组和 Activity 重建保留的输入状态。 */
+class ChatInputStateHolder {
     val textFieldState = TextFieldState()
 
     var attachments by mutableStateOf<List<Attachment>>(emptyList())
@@ -24,8 +30,8 @@ internal class ChatInputStateHolder {
         get() = textFieldState.text.toString()
         set(value) = textFieldState.setTextAndPlaceCursorAtEnd(value)
 
-    val uiState: ChatUiState.InputState
-        get() = ChatUiState.InputState(
+    val state: ChatInputState
+        get() = ChatInputState(
             attachments = attachments,
             editingTimestamp = editingTimestamp,
             quickReplies = quickReplies,

@@ -4,9 +4,17 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import me.rerere.fawntavern.data.speech.TtsUiState
 
-/** Owns the user profile snapshot rendered by the chat surface. */
-internal class ChatProfileStateHolder(
+data class ChatProfileState(
+    val userName: String,
+    val userAvatar: Bitmap?,
+    val speakingTimestamp: Long?,
+    val tts: TtsUiState,
+)
+
+/** 持有聊天界面使用的用户资料快照。 */
+class ChatProfileStateHolder(
     private val controller: ChatUserProfileController,
 ) {
     var name by mutableStateOf(controller.loadName())

@@ -41,8 +41,8 @@ internal class ChatGenerationOrchestrator(
     val isRunning: Boolean
         get() = generationState.isRunning
 
-    val uiState: ChatUiState.GenerationState
-        get() = generationState.uiState
+    val uiState: ChatGenerationState
+        get() = generationState.state
 
     fun launch(block: suspend () -> Unit): Boolean = generationState.launch(block)
 

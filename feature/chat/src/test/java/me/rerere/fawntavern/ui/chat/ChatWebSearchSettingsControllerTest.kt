@@ -1,6 +1,5 @@
 package me.rerere.fawntavern.ui.chat
 
-import me.rerere.fawntavern.data.search.SearchServiceOptions
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -43,17 +42,25 @@ class ChatWebSearchSettingsControllerTest {
         assertFalse(initial.enabled)
     }
 
-    private fun service(id: String) = SearchServiceOptions.BingLocalOptions(id)
+    private fun service(id: String) = ChatSearchService(id, id)
 
     private class FakeWebSearchSettingsDataSource : ChatWebSearchSettingsDataSource {
         var enabledValue = false
         var selected = 0
-        var values: List<SearchServiceOptions> = emptyList()
+        var values: List<ChatSearchService> = emptyList()
 
         override fun enabled(): Boolean = enabledValue
-        override fun setEnabled(enabled: Boolean) { enabledValue = enabled }
+
+        override fun setEnabled(enabled: Boolean) {
+            enabledValue = enabled
+        }
+
         override fun selectedIndex(): Int = selected
-        override fun setSelectedIndex(index: Int) { selected = index }
-        override fun services(): List<SearchServiceOptions> = values
+
+        override fun setSelectedIndex(index: Int) {
+            selected = index
+        }
+
+        override fun services(): List<ChatSearchService> = values
     }
 }
