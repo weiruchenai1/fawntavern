@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import me.rerere.fawntavern.data.api.ApiRequestSnapshot
-import me.rerere.fawntavern.domain.ConversationOps
 
 /** 聊天会话存储：Room 数据库（sessions + messages 两张表），写入后 Flow 自动重发 */
 object ChatRepository {
@@ -164,7 +163,7 @@ object ChatRepository {
     suspend fun switchAlt(context: Context, sessionId: String, ts: Long, dir: Int): Boolean {
         val d = dao(context)
         val m = d.getMessage(sessionId, ts)?.toModel() ?: return false
-        val upd = ConversationOps.switchAltOne(m, dir) ?: return false
+        val upd = MessageAlternatives.switch(m, dir) ?: return false
         d.upsertMessage(upd.toEntity(sessionId))
         d.touchSession(sessionId, System.currentTimeMillis())
         return true
@@ -174,7 +173,7 @@ object ChatRepository {
     suspend fun deleteMessage(context: Context, sessionId: String, ts: Long) {
         val d = dao(context)
         val m = d.getMessage(sessionId, ts)?.toModel() ?: return
-        val upd = ConversationOps.deleteAltOne(m)
+        val upd = MessageAlternatives.deleteCurrent(m)
         if (upd == null) d.deleteMessageRow(sessionId, ts)
         else d.upsertMessage(upd.toEntity(sessionId))
         d.touchSession(sessionId, System.currentTimeMillis())

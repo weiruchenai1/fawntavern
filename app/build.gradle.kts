@@ -117,6 +117,7 @@ dependencies {
     implementation(project(":core:diagnostics"))
     implementation(project(":core:model"))
     implementation(project(":core:network"))
+    implementation(project(":domain:generation"))
     implementation(files("libs/crashreport-4.1.9.3.aar"))
 
     val firebaseBom = platform(libs.firebase.bom)

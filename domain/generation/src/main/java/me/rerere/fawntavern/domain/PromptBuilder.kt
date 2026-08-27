@@ -21,7 +21,7 @@ import me.rerere.fawntavern.data.worldbook.WorldInfoSettings
  *    历史逐条套发送侧正则、文件附件内联为文本块、图片编码 base64、深度注入按位插入。
  * UI 与 ViewModel 不感知拼装细节。
  */
-internal object PromptBuilder {
+object PromptBuilder {
 
     /** 提示块来源标签（仅供 Prompt 日志展示，不影响拼装结果） */
     enum class PromptSource {

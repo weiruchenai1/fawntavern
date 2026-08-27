@@ -1,10 +1,9 @@
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
-    namespace = "me.rerere.fawntavern.core.model"
+    namespace = "me.rerere.fawntavern.domain.generation"
     compileSdk = 37
 
     defaultConfig {
@@ -18,7 +17,10 @@ android {
 }
 
 dependencies {
-    api(libs.kotlinx.serialization.json)
+    api(project(":core:model"))
+    api(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit)
+    testImplementation(libs.json)
+    testImplementation(libs.kotlinx.coroutines.core)
 }

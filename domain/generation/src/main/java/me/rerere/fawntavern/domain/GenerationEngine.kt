@@ -19,7 +19,7 @@ import me.rerere.fawntavern.data.chat.PersistedGeneratedImage
  * 支持函数工具多轮循环（联网搜索等）：模型发起工具调用 → [GenerationToolExecutor] 执行 →
  * 结果以工具消息回传 → 续下一轮流式，直到模型不再调用工具。
  */
-internal class GenerationEngine(
+class GenerationEngine(
     private val gateway: GenerationGateway,
 ) {
     private companion object {

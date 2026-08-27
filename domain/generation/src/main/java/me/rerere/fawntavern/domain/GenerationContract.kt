@@ -8,7 +8,7 @@ import me.rerere.fawntavern.data.api.StreamEnd
 import me.rerere.fawntavern.data.api.ToolSpec
 import me.rerere.fawntavern.data.chat.MsgSearch
 
-internal data class GenerationStreamRequest(
+data class GenerationStreamRequest(
     val providerId: String,
     val modelId: String,
     val messages: List<ApiMessage>,
@@ -17,26 +17,26 @@ internal data class GenerationStreamRequest(
     val isCancelled: () -> Boolean,
 )
 
-internal sealed interface GenerationEvent {
+sealed interface GenerationEvent {
     data class ContentDelta(val content: String) : GenerationEvent
     data class ReasoningDelta(val reasoning: String) : GenerationEvent
 }
 
-internal class GenerationCancelled : Exception()
+class GenerationCancelled : Exception()
 
-internal class GenerationRequestException(
+class GenerationRequestException(
     val snapshot: ApiRequestSnapshot,
     cause: Exception,
 ) : Exception(cause.message, cause)
 
-internal fun interface GenerationGateway {
+fun interface GenerationGateway {
     suspend fun stream(
         request: GenerationStreamRequest,
         onEvent: (GenerationEvent) -> Unit,
     ): StreamEnd
 }
 
-internal interface GenerationToolExecutor {
+interface GenerationToolExecutor {
     fun describe(call: ApiToolCall): MsgSearch?
     suspend fun execute(call: ApiToolCall): Pair<String, MsgSearch?>
 }

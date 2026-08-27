@@ -1,7 +1,7 @@
 package me.rerere.fawntavern.domain
 
 /** Conservative token estimate used for context budgeting when provider usage is unavailable. */
-internal object TokenEstimator {
+object TokenEstimator {
     fun estimate(text: String): Int {
         var cjk = 0
         var other = 0

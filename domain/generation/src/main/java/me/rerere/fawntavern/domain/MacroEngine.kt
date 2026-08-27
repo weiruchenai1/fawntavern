@@ -10,7 +10,7 @@ import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.chat.ChatMessage
 
 /** All dynamic data visible to macros during one render pass. */
-internal data class MacroContext(
+data class MacroContext(
     val charName: String = "",
     val userName: String = "",
     val card: CharacterCard? = null,
@@ -32,7 +32,7 @@ internal data class MacroContext(
 )
 
 /** Mutable state shared by every macro expansion in one generation transaction. */
-internal class MacroVariableState(
+class MacroVariableState(
     localVariables: Map<String, String> = emptyMap(),
     globalVariables: Map<String, String> = emptyMap(),
 ) {

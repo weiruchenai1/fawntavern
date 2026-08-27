@@ -7,7 +7,7 @@ import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.chat.ChatMessage
 
 /** Assembles compiled prompt pieces, message history, and attachments into provider messages. */
-internal object PromptMessageAssembler {
+object PromptMessageAssembler {
     private const val FILE_TEXT_MAX_CHARS = 100_000
 
     fun assemble(

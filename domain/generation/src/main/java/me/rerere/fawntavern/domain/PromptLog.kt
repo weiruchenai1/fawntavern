@@ -6,10 +6,10 @@ import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.GenParams
 
 /** 最终发送的一条消息（不含 base64 图片，只记录张数，避免日志占用大量内存） */
-internal data class LoggedMessage(val role: String, val content: String, val imageCount: Int)
+data class LoggedMessage(val role: String, val content: String, val imageCount: Int)
 
 /** 一次生成请求最终组装出的完整 prompt 快照 */
-internal data class PromptLogEntry(
+data class PromptLogEntry(
     val time: Long,
     val providerName: String,
     val modelId: String,
@@ -37,7 +37,7 @@ object PromptLog {
     var enabled: Boolean = false
 
     private val _entries = MutableStateFlow<List<PromptLogEntry>>(emptyList())
-    internal val entries: StateFlow<List<PromptLogEntry>> = _entries
+    val entries: StateFlow<List<PromptLogEntry>> = _entries
 
     /** 由生成执行器调用；[enabled] 为 false 时不记录 */
     internal fun record(

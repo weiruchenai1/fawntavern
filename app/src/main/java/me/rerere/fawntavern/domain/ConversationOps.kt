@@ -3,6 +3,7 @@ package me.rerere.fawntavern.domain
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
+import me.rerere.fawntavern.data.chat.MessageAlternatives
 import me.rerere.fawntavern.data.chat.MsgAlt
 import me.rerere.fawntavern.data.chat.MsgFile
 
@@ -62,52 +63,14 @@ internal object ConversationOps {
     // ── 单条消息的纯变换（DB 粒度落盘用）：只作用于本消息，下文由所有版本共享，不受影响 ──
 
     /** 左右切换本消息版本：无实际切换返回 null */
-    fun switchAltOne(m: ChatMessage, dir: Int): ChatMessage? {
-        if (m.alts.size < 2) return null
-        val ni = (m.altIdx + dir).coerceIn(0, m.alts.lastIndex)
-        if (ni == m.altIdx) return null
-        val newAlts = m.alts.toMutableList()
-        // 镜像字段先写回当前版本：编辑过的内容切走再切回不丢
-        newAlts[m.altIdx] = newAlts[m.altIdx].copy(
-            content = m.content, reasoning = m.reasoning, model = m.model,
-            reasoningMs = m.reasoningMs, searches = m.searches, images = m.images,
-            imageAspectRatio = m.imageAspectRatio,
-            requestSnapshots = m.requestSnapshots,
-            promptTokens = m.promptTokens, completionTokens = m.completionTokens,
-            cachedTokens = m.cachedTokens,
-            generationMs = m.generationMs)
-        val target = newAlts[ni]
-        return m.copy(content = target.content, reasoning = target.reasoning,
-            model = target.model, reasoningMs = target.reasoningMs, searches = target.searches,
-            images = target.images, imageAspectRatio = target.imageAspectRatio,
-            requestSnapshots = target.requestSnapshots,
-            promptTokens = target.promptTokens, completionTokens = target.completionTokens,
-            cachedTokens = target.cachedTokens,
-            generationMs = target.generationMs,
-            alts = newAlts, altIdx = ni)
-    }
+    fun switchAltOne(m: ChatMessage, dir: Int): ChatMessage? =
+        MessageAlternatives.switch(m, dir)
 
     /**
      * 删除本消息的当前版本：多版本时就近切到相邻版本并返回新消息；单版本返回 null 表示应整条删除。
      */
-    fun deleteAltOne(m: ChatMessage): ChatMessage? {
-        if (m.alts.size <= 1) return null
-        val newAlts = m.alts.toMutableList().also { it.removeAt(m.altIdx) }
-        val newIdx = m.altIdx.coerceAtMost(newAlts.lastIndex)
-        val cur = newAlts[newIdx]
-        val single = newAlts.size == 1
-        return m.copy(
-            content = cur.content, reasoning = cur.reasoning,
-            model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
-            images = cur.images, imageAspectRatio = cur.imageAspectRatio,
-            requestSnapshots = cur.requestSnapshots,
-            promptTokens = cur.promptTokens, completionTokens = cur.completionTokens,
-            cachedTokens = cur.cachedTokens,
-            generationMs = cur.generationMs,
-            alts = if (single) emptyList() else newAlts,
-            altIdx = if (single) 0 else newIdx,
-        )
-    }
+    fun deleteAltOne(m: ChatMessage): ChatMessage? =
+        MessageAlternatives.deleteCurrent(m)
 
     /** 重答准备（单消息版）：在本消息上开一个空白新版本并切换过去，由生成器流式填充 */
     fun startVariantOne(m: ChatMessage, modelId: String): ChatMessage {
