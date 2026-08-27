@@ -1,6 +1,5 @@
 package me.rerere.fawntavern.ui.chat
 
-import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -70,8 +69,6 @@ import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.noRippleClickable
-
-internal data class Attachment(val uri: Uri, val isImage: Boolean)
 
 @Composable
 private fun KelivoDrawerIcon(modifier: Modifier = Modifier) {

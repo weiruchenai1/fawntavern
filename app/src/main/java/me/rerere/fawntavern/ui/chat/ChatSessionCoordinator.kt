@@ -1,23 +1,29 @@
 package me.rerere.fawntavern.ui.chat
 
+import kotlinx.coroutines.flow.Flow
 import me.rerere.fawntavern.data.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.domain.ConversationOps
 
 internal interface ChatSessionDataSource {
+    fun observeSessions(): Flow<List<ChatSession>>
     suspend fun listSummaries(): List<ChatSession>
+    suspend fun count(): Int
     suspend fun get(id: String): ChatSession?
     suspend fun save(session: ChatSession)
     suspend fun delete(id: String)
     suspend fun updateTitle(id: String, title: String)
     suspend fun updatePinned(id: String, pinned: Boolean)
+    suspend fun truncateAfter(id: String, timestamp: Long)
 }
 
 internal class RepositoryChatSessionDataSource(
     private val repository: ChatDataRepository,
 ) : ChatSessionDataSource {
+    override fun observeSessions(): Flow<List<ChatSession>> = repository.observeSessions()
     override suspend fun listSummaries(): List<ChatSession> = repository.listSummaries()
+    override suspend fun count(): Int = repository.count()
     override suspend fun get(id: String): ChatSession? = repository.get(id)
     override suspend fun save(session: ChatSession) = repository.save(session)
     override suspend fun delete(id: String) = repository.delete(id)
@@ -25,6 +31,8 @@ internal class RepositoryChatSessionDataSource(
         repository.updateTitle(id, title)
     override suspend fun updatePinned(id: String, pinned: Boolean) =
         repository.updatePinned(id, pinned)
+    override suspend fun truncateAfter(id: String, timestamp: Long) =
+        repository.truncateAfter(id, timestamp)
 }
 
 internal data class DeletedSessionChoice(
@@ -49,7 +57,11 @@ internal fun chooseSessionAfterDelete(
 internal class ChatSessionCoordinator(
     private val dataSource: ChatSessionDataSource,
 ) {
+    fun observeSessions(): Flow<List<ChatSession>> = dataSource.observeSessions()
+
     suspend fun listSummaries(): List<ChatSession> = dataSource.listSummaries()
+
+    suspend fun count(): Int = dataSource.count()
 
     suspend fun open(id: String): ChatSession? = dataSource.get(id)
 
@@ -87,5 +99,9 @@ internal class ChatSessionCoordinator(
 
     suspend fun setPinned(id: String, pinned: Boolean) {
         dataSource.updatePinned(id, pinned)
+    }
+
+    suspend fun truncateAfter(id: String, timestamp: Long) {
+        dataSource.truncateAfter(id, timestamp)
     }
 }

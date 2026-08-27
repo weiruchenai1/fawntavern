@@ -1,19 +1,13 @@
 package me.rerere.fawntavern.ui.chat
 
 import android.app.Application
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import me.rerere.fawntavern.core.diagnostics.SafeLog
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
@@ -21,7 +15,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.PromptContextLoader
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
@@ -30,18 +23,8 @@ import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.api.supportsBuiltInTool
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
-import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
-import me.rerere.fawntavern.di.AppContainer
-import me.rerere.fawntavern.data.preset.StPreset
-import me.rerere.fawntavern.data.preset.PresetRepository
-import me.rerere.fawntavern.data.preset.toCharRegex
-import me.rerere.fawntavern.data.regex.RegexSetRepository
-import me.rerere.fawntavern.data.speech.TtsUiState
-import me.rerere.fawntavern.data.settings.PromptLogStore
-import me.rerere.fawntavern.data.worldbook.WorldBook
-import me.rerere.fawntavern.domain.ConversationOps
 import me.rerere.fawntavern.domain.GenerationController
 import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.domain.PromptBuilder
@@ -53,15 +36,15 @@ import me.rerere.fawntavern.extension.QuickReplyProvider
 private const val CHAT_VIEW_MODEL_TAG = "ChatViewModel"
 
 /**
- * 聊天状态容器：只负责持有 UI 状态、调度协程和落盘。
+ * 聊天状态容器：组合 UI 状态持有者并把界面动作调度到用例/协调器。
  * 业务逻辑在 domain 层：Prompt 拼装 → [PromptBuilder]，
- * 会话/消息纯变换 → [ConversationOps]，流式生成 → [GenerationController]。
+ * 会话/消息变换由状态持有者与用例处理，流式生成由 [GenerationController] 处理。
  * 生成协程运行在 viewModelScope —— Activity 因深色模式/语言切换等重建时不中断，状态不丢失。
- * UI（ChatScreen）只读状态、调方法，不直接改。
+ * UI（ChatScreen）只读取 [uiState]、发送 [ChatAction]、处理 [ChatEffect]。
  */
 internal class ChatViewModel(
     app: Application,
-    private val container: AppContainer,
+    private val dependencies: ChatFeatureDependencies,
 ) : AndroidViewModel(app) {
 
     /** Internal result mapped to one-shot [ChatEffect] values by [dispatch]. */
@@ -71,92 +54,74 @@ internal class ChatViewModel(
     val effects: Flow<ChatEffect> = effectChannel.receiveAsFlow()
 
     // ── 状态（写入只经由本类方法） ──
-    private val modelController = ChatModelController(AndroidChatModelDataSource(app))
-    private val model = ChatModelStateHolder(modelController, container.apiConfigRepository)
-    val apiConfig get() = model.apiConfig
-    private val uiSettingsController = ChatUiSettingsController(AndroidChatUiSettingsDataSource(app))
-    var uiSettings by mutableStateOf(uiSettingsController.load()); private set
+    private val model = ChatModelStateHolder(
+        ChatModelController(dependencies.modelDataSource),
+        dependencies.apiConfigRepository,
+    )
+    private val apiConfig get() = model.apiConfig
+    private val uiSettings = ChatUiSettingsStateHolder(
+        ChatUiSettingsController(dependencies.uiSettingsDataSource),
+    )
     /** 当前模型的思考预算档位（按模型记忆，随选模型切换）；AUTO = 不下发任何思考字段 */
-    val reasoning get() = model.reasoning
+    private val reasoning get() = model.reasoning
     /** 当前模型的图片生成控制项（按模型记忆）。 */
-    val imageGeneration get() = model.imageGeneration
-    var sessions by mutableStateOf<List<ChatSession>>(emptyList()); private set
-    var session by mutableStateOf<ChatSession?>(null); private set
-    var currentCard by mutableStateOf<CharacterCard?>(null); private set
-    /** 当前角色卡的图片（无图为 null，UI 回退到占位图标） */
-    var charImageBitmap by mutableStateOf<Bitmap?>(null); private set
+    private val imageGeneration get() = model.imageGeneration
+    private val conversation = ChatConversationStateHolder()
+    private val sessions get() = conversation.sessions
+    private val session get() = conversation.current
+    private val promptContext = ChatPromptContextStateHolder()
+    private val promptContextDataSource = dependencies.promptContextDataSource
+    private val currentCard get() = promptContext.card
     /**
      * 覆盖在分页列表之上的内存消息（按 ts 索引）：承载流式生成的实时内容、以及分支切换/编辑的
      * 乐观即时反馈。写库是异步的（DB→Room 失效→分页重刷有几帧时间差），overlay 在此期间顶替显示，
      * 待分页把该 ts 的最终内容补齐后由 UI 调 [clearOverlay] 撤下——避免空帧/陈旧内容闪烁，
      * 并让滚动锚定像旧同步逻辑一样在下一帧就能读到新内容。
      */
-    var overlays by mutableStateOf<Map<Long, ChatMessage>>(emptyMap()); private set
-    private val userProfileController = ChatUserProfileController(AndroidChatUserProfileDataSource(app))
-    private val profile = ChatProfileStateHolder(userProfileController)
-    val userName get() = profile.name
-    // 当前角色关联的世界书/预设（随角色卡切换加载，生成时进入 Prompt 拼装）
-    var activeWorldBooks by mutableStateOf<List<WorldBook>>(emptyList()); private set
-    var activePreset by mutableStateOf<StPreset?>(null); private set
-    var globalRegexScripts by mutableStateOf<List<CharRegex>>(emptyList()); private set
-    var regexSetScripts by mutableStateOf<List<CharRegex>>(emptyList()); private set
-    private var loadedPromptCharFile: String? = null
-    private var promptContextRevision = 0L
+    private val overlays get() = conversation.overlays
+    private val profile = ChatProfileStateHolder(
+        ChatUserProfileController(dependencies.userProfileDataSource),
+    )
+    private val userName get() = profile.name
     private val input = ChatInputStateHolder()
     val inputState get() = input.textFieldState
 
-    private val webSearchSettingsController =
-        ChatWebSearchSettingsController(AndroidChatWebSearchSettingsDataSource(app))
-    private val search = ChatSearchStateHolder(webSearchSettingsController)
-    val searchEnabled: Boolean
+    private val search = ChatSearchStateHolder(
+        ChatWebSearchSettingsController(dependencies.searchSettingsDataSource),
+    )
+    private val searchEnabled: Boolean
         get() = search.enabled
-    val searchProviderIndex: Int
+    private val searchProviderIndex: Int
         get() = search.providerIndex
-    val searchServices
+    private val searchServices
         get() = search.services
-    val searchProviderName: String
+    private val searchProviderName: String
         get() = search.providerName
-    val builtInSearchAvailable: Boolean
+    private val builtInSearchAvailable: Boolean
         get() {
             model.revision
             val (provider, modelId) = currentProviderAndModel() ?: return false
             return provider.model(modelId)?.supportsBuiltInTool(BuiltInTool.SEARCH, provider) == true
         }
-    val builtInSearchEnabled: Boolean
+    private val builtInSearchEnabled: Boolean
         get() {
             model.revision
             val (provider, modelId) = currentProviderAndModel() ?: return false
             return BuiltInTool.SEARCH in (provider.model(modelId)?.tools ?: emptySet())
         }
-    val imageGenerationAvailable: Boolean
+    private val imageGenerationAvailable: Boolean
         get() {
             model.revision
             val (provider, modelId) = currentProviderAndModel() ?: return false
             return Modality.IMAGE in (provider.model(modelId)?.outputModalities ?: emptyList())
         }
-    /** 正在朗读的 AI 消息 ts（点击朗读图标后置位，读完/停止时清空） */
-    var speakingTs by mutableStateOf<Long?>(null); private set
-    /** TTS 朗读实时状态（悬浮工具栏展示/控制用），随引擎播放同步更新 */
-    var ttsUi by mutableStateOf(TtsUiState()); private set
+    private val tts = ChatTtsStateHolder(app, viewModelScope)
 
-    private val ttsControllerDelegate = lazy {
-        ChatTtsController(ctx).also { controller ->
-            viewModelScope.launch { controller.ui.collect { ttsUi = it } }
-            viewModelScope.launch { controller.speakingTs.collect { speakingTs = it } }
-        }
-    }
-    private val ttsController by ttsControllerDelegate
+    private val displayRegexScripts: List<CharRegex>
+        get() = promptContext.displayRegex
 
-    /** 当前预设私有的正则（关联该预设的聊天才生效），转成引擎统一类型 */
-    private val presetRegex: List<CharRegex>
-        get() = activePreset?.regexScripts?.map { it.toCharRegex() } ?: emptyList()
-
-    /** 生效正则：全局启用的正则集 + 当前预设 + 角色关联的正则集。 */
-    val displayRegexScripts: List<CharRegex>
-        get() = globalRegexScripts + presetRegex + regexSetScripts
-
-    private val chatRepository = container.chatRepository
-    private val generation = GenerationController(container.generationGateway)
+    private val chatRepository = dependencies.chatRepository
+    private val generation = GenerationController(dependencies.generationGateway)
     private val ctx: Application get() = getApplication()
     private val generationCoordinator by lazy {
         ChatGenerationCoordinator(
@@ -172,22 +137,26 @@ internal class ChatViewModel(
         get() = generationCoordinator.isRunning
     private val messageCoordinator by lazy { ChatMessageCoordinator(chatRepository) }
     private val attachmentCoordinator by lazy {
-        ChatAttachmentCoordinator(AndroidChatAttachmentDataSource(ctx, chatRepository))
+        ChatAttachmentCoordinator(dependencies.attachmentDataSource)
+    }
+    private val sendChatMessage by lazy {
+        SendChatMessageUseCase(chatRepository, attachmentCoordinator)
+    }
+    private val refreshChatData by lazy {
+        RefreshChatDataUseCase(chatRepository, promptContextDataSource)
     }
     private val sessionCoordinator by lazy {
         ChatSessionCoordinator(RepositoryChatSessionDataSource(chatRepository))
     }
     private val generationRunner by lazy {
-        val promptAssembler = ChatPromptAssembler(
-            AndroidChatPromptEnvironment(ctx, container.extensionGateway),
-        )
+        val promptAssembler = ChatPromptAssembler(dependencies.promptEnvironment)
         ChatGenerationRunner(
             chatRepository = chatRepository,
             generation = generation,
-            resources = AndroidChatGenerationResources(ctx),
+            resources = dependencies.generationResources,
             prepare = PrepareChatGenerationUseCase(chatRepository, promptAssembler),
             commit = CommitChatGenerationUseCase(chatRepository),
-            searchTool = ChatSearchTool(AndroidChatSearchToolDataSource(ctx)),
+            searchTool = ChatSearchTool(dependencies.searchToolDataSource),
         )
     }
     private val postGenerationCoordinator by lazy {
@@ -195,7 +164,7 @@ internal class ChatViewModel(
             ctx,
             viewModelScope,
             chatRepository,
-            container.extensionGateway,
+            dependencies.extensionGateway,
         )
     }
 
@@ -214,30 +183,36 @@ internal class ChatViewModel(
         BuiltinExtensions.registerAll()
         refreshExtensionSlots()
         // Prompt 调试日志开关：把持久化设置同步到内存 sink（关闭时生成不记录）
-        PromptLog.enabled = PromptLogStore.isEnabled(app)
+        PromptLog.enabled = dependencies.promptLogEnabled
         // 会话列表来自 Repository 的 Flow：任何 save/delete/clear 后自动刷新
         viewModelScope.launch {
-            val defaultPresetName = PresetRepository.ensureDefaultPreset(
-                ctx,
+            val defaultName = promptContextDataSource.ensureDefaultCharacter(
                 ctx.getString(R.string.default_preset),
-            )
-            val defaultPresetId = PresetRepository.load(ctx, defaultPresetName).id
-            val defaultName = CharacterRepository.ensureDefaultCard(
-                ctx,
                 ctx.getString(R.string.default_character),
-                defaultPresetId,
             )
-            if (chatRepository.count() == 0) {
-                session = ConversationOps.newSession(loadCard(defaultName), defaultName, defaultName)
+            if (sessionCoordinator.count() == 0) {
+                conversation.setCurrent(
+                    sessionCoordinator.create(
+                        loadCard(defaultName),
+                        defaultName,
+                        defaultName,
+                        persist = false,
+                    ),
+                )
             }
-            chatRepository.observeSessions().collect {
-                sessions = it
+            sessionCoordinator.observeSessions().collect {
+                conversation.setSessions(it)
                 if (session == null) {
                     // 应用启动时新建对话：每次启动都从空白对话开始（内存态，发首条消息才落盘）
-                    session = if (uiSettings.newChatOnLaunch) {
+                    conversation.setCurrent(if (uiSettings.value.newChatOnLaunch) {
                         val card = loadCard(defaultName)
-                        ConversationOps.newSession(card, defaultName, defaultName)
-                    } else it.firstOrNull()?.let { summary -> chatRepository.get(summary.id) }
+                        sessionCoordinator.create(
+                            card,
+                            defaultName,
+                            defaultName,
+                            persist = false,
+                        )
+                    } else it.firstOrNull()?.let { summary -> sessionCoordinator.open(summary.id) })
                 }
             }
         }
@@ -246,25 +221,18 @@ internal class ChatViewModel(
             snapshotFlow { session?.charFile }.collectLatest { file ->
                 val charFile = file.orEmpty()
                 val revision = invalidatePromptContext()
-                val loaded = PromptContextLoader.load(ctx, charFile)
-                val image = if (charFile.isBlank()) null else loadCharImage(charFile)
+                val snapshot = promptContextDataSource.load(charFile)
                 if (session?.charFile.orEmpty() != charFile) return@collectLatest
-                applyPromptContext(loaded, image, revision)
+                applyPromptContext(snapshot, revision)
                 // 恢复该角色的模型：角色记忆 > 默认模型聊天卡片
                 model.refreshCharacter(currentCard?.name)
             }
-        }
-        // 切换会话即清空 overlay：overlay 按 ts 索引，而 ts 仅在会话内唯一，跨会话残留会误覆盖
-        // 另一会话里同 ts 的消息。生成中会话切换被禁用（generating 时 openSession/openCharacter 直接返回），
-        // 故生成用的 overlay 不会被此清除。
-        viewModelScope.launch {
-            snapshotFlow { session?.id }.collect { overlays = emptyMap() }
         }
         reloadUserProfile()
     }
 
     override fun onCleared() {
-        if (ttsControllerDelegate.isInitialized()) ttsController.release()
+        tts.release()
     }
 
     val uiState: ChatUiState
@@ -273,13 +241,18 @@ internal class ChatViewModel(
                 sessions = sessions,
                 current = session,
                 card = currentCard,
-                characterImage = charImageBitmap,
+                characterImage = promptContext.characterImage,
                 overlays = overlays,
                 displayRegexScripts = displayRegexScripts,
             ),
             input = input.uiState,
             generation = generationCoordinator.uiState,
-            profile = ChatUiState.ProfileState(userName, profile.avatar, speakingTs, ttsUi),
+            profile = ChatUiState.ProfileState(
+                userName,
+                profile.avatar,
+                tts.speakingTimestamp,
+                tts.uiState,
+            ),
             model = ChatUiState.ModelState(
                 apiConfig = apiConfig,
                 revision = model.revision,
@@ -296,7 +269,7 @@ internal class ChatViewModel(
                 builtInAvailable = builtInSearchAvailable,
                 builtInEnabled = builtInSearchEnabled,
             ),
-            settings = uiSettings,
+            settings = uiSettings.value,
         )
 
     fun dispatch(action: ChatAction) {
@@ -386,49 +359,50 @@ internal class ChatViewModel(
     // ── 配置 / 用户资料 ──
 
     /** 当前页面的模型：角色记忆 > ROLE_CHAT > apiConfig.currentModel 回退，全空时返回 null */
-    fun displayModelSpec(): String? = model.effectiveModelSpec(currentCard?.name)
+    private fun displayModelSpec(): String? = model.effectiveModelSpec(currentCard?.name)
 
     /** 从 API 配置页返回时刷新：若模型仍在则保持，若模型被删除/禁用则切到全局配置的 currentModel 兜底 */
-    fun reloadApiConfig() {
+    private fun reloadApiConfig() {
         model.reload(currentCard?.name)
     }
 
     /** 从偏好或字号页面返回时刷新聊天页使用的设置快照。 */
-    fun reloadUiSettings() {
-        uiSettings = uiSettingsController.load()
+    private fun reloadUiSettings() {
+        uiSettings.reload()
     }
 
-    fun selectModel(providerId: String, modelId: String) {
+    private fun selectModel(providerId: String, modelId: String) {
         model.select(currentCard?.name, providerId, modelId)
     }
 
-    fun updateReasoning(level: ReasoningLevel) {
+    private fun updateReasoning(level: ReasoningLevel) {
         model.updateReasoning(currentCard?.name, level)
     }
 
-    fun updateImageGeneration(settings: ImageGenerationSettings) {
+    private fun updateImageGeneration(settings: ImageGenerationSettings) {
         model.updateImageGeneration(currentCard?.name, settings)
     }
 
     /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
-    fun reloadUserProfile() {
+    private fun reloadUserProfile() {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { profile.reload() }
+            val loaded = withContext(Dispatchers.IO) { profile.load() }
+            profile.apply(loaded)
         }
     }
 
     /** 从角色列表/编辑器返回时刷新当前卡：字段或图片可能已被编辑 */
-    fun refreshCurrentCard() {
+    private fun refreshCurrentCard() {
         val file = session?.charFile ?: return
         if (file.isBlank()) return
         val revision = invalidatePromptContext()
         viewModelScope.launch {
-            applyPromptContext(PromptContextLoader.load(ctx, file), loadCharImage(file), revision)
+            applyPromptContext(promptContextDataSource.load(file), revision)
         }
     }
 
     /** 从世界书/预设页返回或数据管理后刷新：关联内容与预设私有正则可能已被增删改 */
-    fun reloadPromptData() {
+    private fun reloadPromptData() {
         val revision = invalidatePromptContext()
         viewModelScope.launch {
             loadPromptData(revision)
@@ -437,161 +411,132 @@ internal class ChatViewModel(
 
     /** 按当前角色卡加载关联的世界书与预设；保留可用项并向 UI 上报损坏项。 */
     /** 全局启用的正则集（global=true）：对所有聊天生效，与角色关联的集分两条路加载、互不重复 */
-    private suspend fun loadGlobalRegex(): List<CharRegex> =
-        RegexSetRepository.loadAll(ctx)
-            .filter { it.global }
-            .flatMap { set -> set.scripts.map { it.toCharRegex() } }
-
     private suspend fun loadPromptData(revision: Long) {
         val file = session?.charFile.orEmpty()
-        globalRegexScripts = loadGlobalRegex()
-        applyPromptContext(
-            PromptContextLoader.load(ctx, file),
-            if (file.isBlank()) null else loadCharImage(file),
-            revision,
-        )
+        promptContext.setGlobalRegex(promptContextDataSource.loadGlobalRegex())
+        applyPromptContext(promptContextDataSource.load(file), revision)
     }
 
     private fun invalidatePromptContext(): Long {
-        loadedPromptCharFile = null
-        return ++promptContextRevision
+        return promptContext.invalidate()
     }
 
     private fun applyPromptContext(
-        loaded: PromptContextLoader.Loaded,
-        image: Bitmap?,
+        snapshot: ChatPromptContextSnapshot,
         revision: Long,
     ) {
-        if (promptContextRevision != revision) return
-        if (session?.charFile.orEmpty() != loaded.charFile) return
-        currentCard = loaded.card
-        activeWorldBooks = loaded.worldBooks
-        activePreset = loaded.preset
-        regexSetScripts = loaded.regexSetScripts
-        if (loaded.failures.isNotEmpty()) {
-            val names = loaded.failures.map { it.name }.distinct().joinToString()
+        val failures = promptContext.apply(
+            loaded = snapshot.loaded,
+            image = snapshot.image,
+            expectedRevision = revision,
+            currentCharFile = session?.charFile.orEmpty(),
+        ) ?: return
+        if (failures.isNotEmpty()) {
+            val names = failures.map { it.name }.distinct().joinToString()
             showMessage(
                 ctx.getString(R.string.prompt_context_load_failed_fmt, names),
                 long = true,
             )
         }
-        charImageBitmap = image
-        loadedPromptCharFile = loaded.charFile
     }
 
-    fun currentProviderAndModel(): Pair<ApiProvider, String>? =
+    private fun currentProviderAndModel(): Pair<ApiProvider, String>? =
         model.resolveProvider(currentCard?.name)
 
     // ── 会话管理 ──
 
-    fun openSession(id: String) {
+    private fun openSession(id: String) {
         if (generating) return
         // 悬浮窗是系统级、独立于会话：切换会话不停朗读
         viewModelScope.launch {
-            sessionCoordinator.open(id)?.let { session = it }
+            sessionCoordinator.open(id)?.let(conversation::setCurrent)
         }
     }
 
     /** 顶栏"新聊天"：当前已是无用户消息的新聊天则不重复创建 */
-    fun newChat() {
+    private fun newChat() {
         val cur = session
         val alreadyNew = cur != null && cur.messages.none { it.role == "user" }
         if (generating || alreadyNew) return
         viewModelScope.launch {
-            session = sessionCoordinator.create(
-                card = currentCard,
-                charFile = cur?.charFile ?: "",
-                charName = cur?.charName ?: "",
-                persist = true,
+            conversation.setCurrent(
+                sessionCoordinator.create(
+                    card = currentCard,
+                    charFile = cur?.charFile ?: "",
+                    charName = cur?.charName ?: "",
+                    persist = true,
+                ),
             )
         }
     }
 
     /** 角色选择面板：切到该角色最近的会话；没有则在内存里开新会话（发消息前不落盘）。
      *  偏好"切换角色时新建对话"开启时每次都新建，不再回到该角色的旧会话。 */
-    fun openCharacter(fileName: String, displayName: String) {
+    private fun openCharacter(fileName: String, displayName: String) {
         if (generating) return
         viewModelScope.launch {
-            if (!uiSettings.newChatOnCharSwitch) {
+            if (!uiSettings.value.newChatOnCharSwitch) {
                 val existing = sessions.firstOrNull { it.charFile == fileName }
                 if (existing != null) {
-                    session = sessionCoordinator.open(existing.id) ?: existing
+                    conversation.setCurrent(sessionCoordinator.open(existing.id) ?: existing)
                     return@launch
                 }
             }
             val card = if (fileName.isBlank()) null else loadCard(fileName)
-            currentCard = card
-            session = sessionCoordinator.create(card, fileName, displayName, persist = false)
+            promptContext.setCard(card)
+            conversation.setCurrent(
+                sessionCoordinator.create(card, fileName, displayName, persist = false),
+            )
         }
     }
 
-    fun deleteSession(id: String) {
+    private fun deleteSession(id: String) {
         if (!GenerationActionGuard.allowsMutation(generating)) return
         viewModelScope.launch {
             val replacement = sessionCoordinator.delete(
                 id = id,
                 currentSession = session,
                 currentCard = currentCard,
-                newChatOnDeleteTopic = uiSettings.newChatOnDeleteTopic,
+                newChatOnDeleteTopic = uiSettings.value.newChatOnDeleteTopic,
             )
-            if (session?.id == id) session = replacement
+            if (session?.id == id) conversation.setCurrent(replacement)
         }
     }
 
-    fun renameSession(id: String, title: String) {
+    private fun renameSession(id: String, title: String) {
         val trimmed = title.trim()
         if (trimmed.isBlank()) return
         viewModelScope.launch {
             sessionCoordinator.rename(id, trimmed)
-            if (session?.id == id) session = session?.copy(title = trimmed)
+            conversation.updateCurrent(id) { it.copy(title = trimmed) }
         }
     }
 
-    fun setSessionPinned(id: String, pinned: Boolean) {
+    private fun setSessionPinned(id: String, pinned: Boolean) {
         viewModelScope.launch {
             sessionCoordinator.setPinned(id, pinned)
-            if (session?.id == id) session = session?.copy(pinned = pinned)
+            conversation.updateCurrent(id) { it.copy(pinned = pinned) }
         }
     }
 
-    fun regenerateTitle(id: String) {
+    private fun regenerateTitle(id: String) {
         viewModelScope.launch {
-            chatRepository.get(id)?.let { generateTitle(it, force = true) }
+            sessionCoordinator.open(id)?.let { generateTitle(it, force = true) }
         }
     }
 
     /** 数据管理页可能清空了聊天记录/角色卡，返回时重新加载并校验当前会话 */
-    fun refreshAfterDataManagement() {
+    private fun refreshAfterDataManagement() {
         val revision = invalidatePromptContext()
         viewModelScope.launch {
-            val fresh = chatRepository.listSummaries()
-            sessions = fresh
-            val cur = session
-            if (cur != null && fresh.any { it.id == cur.id }) {
-                session = chatRepository.get(cur.id)
-            } else if (cur != null) {
-                val card = if (cur.charFile.isBlank()) null else loadCard(cur.charFile)
-                currentCard = card
-                // 角色卡还在：留在该角色（开场白）；角色卡被清了：回到内置默认角色卡
-                session = fresh.firstOrNull { it.charFile == cur.charFile }
-                    ?.let { chatRepository.get(it.id) }
-                    ?: if (card != null) {
-                        ConversationOps.newSession(card, cur.charFile, cur.charName)
-                    } else {
-                        val defaultPresetName = PresetRepository.ensureDefaultPreset(
-                            ctx,
-                            ctx.getString(R.string.default_preset),
-                        )
-                        val defaultPresetId = PresetRepository.load(ctx, defaultPresetName).id
-                        val defName = CharacterRepository.ensureDefaultCard(
-                            ctx,
-                            ctx.getString(R.string.default_character),
-                            defaultPresetId,
-                        )
-                        currentCard = loadCard(defName)
-                        ConversationOps.newSession(currentCard, defName, defName)
-                    }
-            }
+            val refreshed = refreshChatData(
+                currentSession = session,
+                defaultPresetName = ctx.getString(R.string.default_preset),
+                defaultCharacterName = ctx.getString(R.string.default_character),
+            )
+            conversation.setSessions(refreshed.summaries)
+            if (refreshed.replaceCard) promptContext.setCard(refreshed.resolvedCard)
+            if (refreshed.replaceCurrent) conversation.setCurrent(refreshed.currentSession)
             // 世界书/预设（含预设私有正则）也可能被清空
             loadPromptData(revision)
         }
@@ -601,7 +546,7 @@ internal class ChatViewModel(
 
     private fun sendMessage(): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
-        if (loadedPromptCharFile != session?.charFile.orEmpty()) return SendOutcome.SKIPPED
+        if (!promptContext.isLoadedFor(session?.charFile.orEmpty())) return SendOutcome.SKIPPED
         val text = input.text.trim()
         val atts = input.attachments
         if (text.isBlank() && atts.isEmpty()) return SendOutcome.SKIPPED
@@ -620,83 +565,40 @@ internal class ChatViewModel(
         }
         input.clearDraft()
         generationCoordinator.launch generationTask@{
-            var originalSession: ChatSession? = null
-            var createdNewSession = false
-            try {
-            // 附件先拷入自有目录（content URI 的读权限是临时的，落盘副本才能支撑历史展示与重答）。
-            // 任一落盘失败（提供方不报大小、读取中途出错等）都中止发送并恢复输入与附件
-            val persisted = attachmentCoordinator.persist(atts)
-            if (persisted == null) {
-                restoreDraftAfterFailedSend(text, atts)
-                showMessage(ctx.getString(R.string.attachment_send_failed))
-                return@generationTask
-            }
-            // 以 DB 为准取当前会话（内存态可能落后于分支切换等 DB 变更）；未落盘的新会话回退内存态
-            val existing = session?.id?.let { chatRepository.get(it) }
-            val src = existing ?: session ?: ChatSession()
-            originalSession = src
-            createdNewSession = existing == null
-            val base = ConversationOps.appendUserMessage(
-                src,
-                text,
-                persisted.images,
-                persisted.files,
-            )
-            session = base
-            val userMsg = base.messages.last()
-            // 新用户消息即时进 overlay：putMessage 触发的分页 refresh 要过几帧才把它纳入 pagedBase，
-            // 这期间渲染列表若少这一条，发送瞬间的贴底/滚动会按"少一条"的高度算，加载图标落不到真正底部。
-            // 放进 overlay 后任何时刻列表都不缺它，分页补齐后由 settle 逻辑自动撤下。
-            overlays = overlays + (userMsg.ts to userMsg)
-            // 用户消息先落盘：生成中途 App 被杀/Activity 重建也不丢消息。
-            // 已落盘会话只插新用户消息；未落盘的新会话整存一次（含开场白）
-            if (existing != null) chatRepository.putMessage(base.id, userMsg)
-            else chatRepository.save(base)
-            runGeneration(base.id, prov, modelId, ChatGenerationMode.SEND, null)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                val before = originalSession
-                if (before != null) {
-                    val rollbackSucceeded = runCatching {
-                        if (createdNewSession) chatRepository.delete(before.id)
-                        else chatRepository.save(before)
-                    }.onFailure { rollbackError ->
-                        error.addSuppressed(rollbackError)
-                        SafeLog.error(CHAT_VIEW_MODEL_TAG, "send_rollback_failed", rollbackError)
-                    }.isSuccess
-                    if (rollbackSucceeded) {
-                        if (session?.id == before.id) session = before
-                        val originalTimestamps = before.messages.mapTo(HashSet()) { it.ts }
-                        overlays = overlays.filterKeys { it in originalTimestamps }
-                        restoreDraftAfterFailedSend(text, atts)
-                        showMessage(ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty()))
-                    } else {
-                        runCatching { chatRepository.get(before.id) }
-                            .onSuccess { persisted ->
-                                if (persisted != null && session?.id == before.id) session = persisted
-                                if (persisted != null) {
-                                    val persistedTimestamps = persisted.messages.mapTo(HashSet()) { it.ts }
-                                    overlays = overlays.filterKeys { it in persistedTimestamps }
-                                }
-                            }
-                            .onFailure { refreshError ->
-                                error.addSuppressed(refreshError)
-                                SafeLog.error(CHAT_VIEW_MODEL_TAG, "send_rollback_refresh_failed", refreshError)
-                            }
-                        showMessage(
-                            ctx.getString(
-                                R.string.chat_send_rollback_failed_fmt,
-                                error.message.orEmpty(),
-                            ),
-                        )
-                    }
-                } else {
-                    runCatching { attachmentCoordinator.collectUnused() }
+            when (val result = sendChatMessage(
+                currentSession = { session },
+                text = text,
+                pendingAttachments = atts,
+                onPrepared = { prepared, userMessage ->
+                    conversation.setCurrent(prepared)
+                    conversation.putOverlay(userMessage)
+                },
+                generate = { sessionId ->
+                    runGeneration(sessionId, prov, modelId, ChatGenerationMode.SEND, null)
+                },
+            )) {
+                SendChatMessageResult.Completed -> Unit
+                SendChatMessageResult.AttachmentFailed -> {
                     restoreDraftAfterFailedSend(text, atts)
-                    showMessage(ctx.getString(R.string.chat_send_failed_fmt, error.message.orEmpty()))
+                    showMessage(ctx.getString(R.string.attachment_send_failed))
                 }
-                SafeLog.error(CHAT_VIEW_MODEL_TAG, "send_message_failed", error)
+                is SendChatMessageResult.Failed -> {
+                    result.restoredSession?.let { restored ->
+                        if (session?.id == restored.id) conversation.setCurrent(restored)
+                    }
+                    result.retainedTimestamps?.let(conversation::retainOverlays)
+                    restoreDraftAfterFailedSend(text, atts)
+                    val message = if (result.rollbackFailed) {
+                        ctx.getString(
+                            R.string.chat_send_rollback_failed_fmt,
+                            result.error.message.orEmpty(),
+                        )
+                    } else {
+                        ctx.getString(R.string.chat_send_failed_fmt, result.error.message.orEmpty())
+                    }
+                    showMessage(message)
+                    SafeLog.error(CHAT_VIEW_MODEL_TAG, "send_message_failed", result.error)
+                }
             }
         }
         return SendOutcome.STARTED
@@ -707,27 +609,27 @@ internal class ChatViewModel(
     }
 
     /** 进入编辑态：把该消息内容填入输入框，发送即更新该消息 */
-    fun startEdit(ts: Long) {
+    private fun startEdit(ts: Long) {
         if (generating) return
         val msg = overlays[ts] ?: session?.messages?.firstOrNull { it.ts == ts } ?: return
         input.beginEditing(ts, msg.content)
     }
 
     /** 取消编辑：退出编辑态并清空输入 */
-    fun cancelEdit() {
+    private fun cancelEdit() {
         input.cancelEditing()
     }
 
-    fun stopGenerate() {
+    private fun stopGenerate() {
         generationCoordinator.stop()
     }
 
     /** 切换联网搜索开关（持久化，面板开关据此点亮/熄灭） */
-    fun toggleSearch() {
+    private fun toggleSearch() {
         search.toggle()
     }
 
-    fun toggleBuiltInSearch() {
+    private fun toggleBuiltInSearch() {
         val (provider, modelId) = currentProviderAndModel() ?: return
         val modelIndex = provider.models.indexOfFirst { it.id == modelId }
         if (modelIndex < 0) return
@@ -746,40 +648,40 @@ internal class ChatViewModel(
     }
 
     /** 选择搜索服务商（面板卡片点击，按下标） */
-    fun selectSearchProvider(index: Int) {
+    private fun selectSearchProvider(index: Int) {
         search.selectProvider(index)
     }
 
-    fun reloadSearchConfig() {
+    private fun reloadSearchConfig() {
         search.reload()
     }
 
     /** 朗读/停止朗读指定 AI 消息：同一消息再次点击即停止，换消息则打断旧朗读 */
-    fun speakMessage(ts: Long) {
+    private fun speakMessage(ts: Long) {
         val s = session ?: return
         val msg = overlays[ts] ?: s.messages.firstOrNull { it.ts == ts } ?: return
-        ttsController.speak(ts, msg.content)
+        tts.speak(ts, msg.content)
     }
 
-    fun stopSpeaking() {
-        ttsController.stop()
+    private fun stopSpeaking() {
+        tts.stop()
     }
 
-    fun pauseTts() = ttsController.pause()
-    fun resumeTts() = ttsController.resume()
-    fun fastForwardTts() = ttsController.fastForward()
+    private fun pauseTts() = tts.pause()
+    private fun resumeTts() = tts.resume()
+    private fun fastForwardTts() = tts.fastForward()
 
     /** 循环切换朗读速度：0.8x → 1.0x → 1.2x → 1.5x → 0.8x */
-    fun cycleTtsSpeed() {
-        ttsController.cycleSpeed()
+    private fun cycleTtsSpeed() {
+        tts.cycleSpeed()
     }
 
     /** 重新计算 UI 插槽类扩展的产出（快捷回复等）。扩展配置变更后调用（如从扩展设置返回）。 */
-    fun refreshExtensionSlots() {
+    private fun refreshExtensionSlots() {
         val qr = mutableListOf<QuickReply>()
-        for (ext in container.extensionGateway.enabledExtensions()) {
+        for (ext in dependencies.extensionGateway.enabledExtensions()) {
             if (ext is QuickReplyProvider) {
-                qr += ext.quickReplies(container.extensionGateway.config(ext.info.id))
+                qr += ext.quickReplies(dependencies.extensionGateway.config(ext.info.id))
             }
         }
         input.setQuickReplies(qr)
@@ -799,7 +701,7 @@ internal class ChatViewModel(
     /** AI 消息重答：保留旧版本，新回复作为新版本（可左右切换）；其后的消息保留，由所有版本共享 */
     private fun regenerateAi(ts: Long): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
-        if (loadedPromptCharFile != session?.charFile.orEmpty()) return SendOutcome.SKIPPED
+        if (!promptContext.isLoadedFor(session?.charFile.orEmpty())) return SendOutcome.SKIPPED
         val s = session ?: return SendOutcome.SKIPPED
         val idx = s.messages.indexOfFirst { it.ts == ts }
         // 同步预判仅用于 SendOutcome（提示"先选模型"/是否滚动）；真正的目标计算在 runGeneration
@@ -814,7 +716,7 @@ internal class ChatViewModel(
     /** 用户消息重答：对其后的 AI 回复生成新版本 */
     private fun regenerateAfterUser(ts: Long): SendOutcome {
         if (generating) return SendOutcome.SKIPPED
-        if (loadedPromptCharFile != session?.charFile.orEmpty()) return SendOutcome.SKIPPED
+        if (!promptContext.isLoadedFor(session?.charFile.orEmpty())) return SendOutcome.SKIPPED
         val s = session ?: return SendOutcome.SKIPPED
         val idx = s.messages.indexOfFirst { it.ts == ts }
         if (idx < 0) return SendOutcome.SKIPPED
@@ -824,7 +726,7 @@ internal class ChatViewModel(
         // 走到这里说明其后没有 AI 回复（正常对话流总是有）：极罕见的用户消息连排场景，
         // 没有分支点可挂下文，直接截断到该用户消息后再生成（截断需先于生成完成，故同一协程内顺序执行）
         generationCoordinator.launch {
-            chatRepository.truncateAfter(s.id, ts)
+            sessionCoordinator.truncateAfter(s.id, ts)
             runGeneration(s.id, prov, modelId, ChatGenerationMode.SEND, null)
         }
         return SendOutcome.STARTED
@@ -862,29 +764,29 @@ internal class ChatViewModel(
                 targetTimestamp = targetTs,
                 card = currentCard,
                 userName = userName,
-                worldBooks = activeWorldBooks,
-                preset = activePreset,
+                worldBooks = promptContext.worldBooks,
+                preset = promptContext.preset,
                 promptRegex = displayRegexScripts,
                 reasoning = reasoning,
                 imageGeneration = imageGeneration,
                 searchEnabled = searchEnabled,
             ),
             onStarted = { base, message ->
-                session = base
+                conversation.setCurrent(base)
                 generationCoordinator.markTarget(message.ts)
-                overlays = overlays + (message.ts to message)
+                conversation.putOverlay(message)
             },
             onLocalVariablesCommitted = { variables ->
                 if (session?.id == sessionId) {
-                    session = session?.copy(localVariables = variables)
+                    conversation.updateCurrent(sessionId) { it.copy(localVariables = variables) }
                 }
             },
             onUpdate = { message ->
-                overlays = overlays + (message.ts to message)
+                conversation.putOverlay(message)
             },
         ) ?: return
         result.completedSession?.let { done ->
-            if (session?.id == sessionId) session = done
+            if (session?.id == sessionId) conversation.setCurrent(done)
             runExtensionLifecycle(done)
             maybeGenerateTitle(done)
         }
@@ -899,7 +801,7 @@ internal class ChatViewModel(
             characterName = currentCard?.name ?: done.charName,
             isCurrent = { session?.id == done.id },
             onSessionRefreshed = { fresh ->
-                if (session?.id == done.id) session = session?.copy(extState = fresh.extState)
+                conversation.updateCurrent(done.id) { it.copy(extState = fresh.extState) }
             },
         )
     }
@@ -924,7 +826,7 @@ internal class ChatViewModel(
             characterName = currentCard?.name ?: session.charName,
             onTitle = { title ->
                 if (session.id == this@ChatViewModel.session?.id) {
-                    this@ChatViewModel.session = this@ChatViewModel.session?.copy(title = title)
+                    conversation.updateCurrent(session.id) { it.copy(title = title) }
                 }
             },
         )
@@ -935,13 +837,10 @@ internal class ChatViewModel(
     //   DB 回来后把 overlay 校准到权威结果，最终由 UI 在分页补齐后 clearOverlay 撤下。
 
     /** 左右切换消息版本（DB 落盘 + 乐观 overlay 即时切换，供锚定同帧读到新内容） */
-    fun switchAlt(ts: Long, dir: Int) {
+    private fun switchAlt(ts: Long, dir: Int) {
         if (generating) return
         val s = session ?: return
-        // 以当前显示态（未收敛的 overlay 优先，否则内存会话）为基准算新版本：连续快速切换才不丢中间态
-        val cur = overlays[ts] ?: s.messages.firstOrNull { it.ts == ts } ?: return
-        val optimistic = ConversationOps.switchAltOne(cur, dir) ?: return  // 到边界无切换：直接返回
-        overlays = overlays + (ts to optimistic)
+        val optimistic = conversation.switchAlternative(ts, dir) ?: return
         viewModelScope.launch {
             messageCoordinator.switchAlt(s, ts, dir)?.let { fresh ->
                 reconcileMessageMutation(s.id, ts, fresh, expectedOverlay = optimistic)
@@ -950,11 +849,11 @@ internal class ChatViewModel(
     }
 
     /** 删除消息：多版本时只删当前显示的版本（下文不受影响），单版本删除整条 */
-    fun deleteMessage(ts: Long) {
+    private fun deleteMessage(ts: Long) {
         if (generating) return
         val s = session ?: return
         // 删除是"移除行"，overlay 无法表示；撤掉该 ts 可能存在的 overlay，直接走 DB + 分页刷新
-        overlays = overlays - ts
+        conversation.removeOverlay(ts)
         viewModelScope.launch {
             messageCoordinator.deleteMessage(s, ts)?.let { fresh ->
                 reconcileMessageMutation(s.id, ts, fresh)
@@ -963,10 +862,10 @@ internal class ChatViewModel(
     }
 
     /** 删除消息的全部版本（整条消息） */
-    fun deleteAllVersions(ts: Long) {
+    private fun deleteAllVersions(ts: Long) {
         if (generating) return
         val s = session ?: return
-        overlays = overlays - ts
+        conversation.removeOverlay(ts)
         viewModelScope.launch {
             messageCoordinator.deleteAllVersions(s, ts)?.let { fresh ->
                 reconcileMessageMutation(s.id, ts, fresh)
@@ -974,10 +873,10 @@ internal class ChatViewModel(
         }
     }
 
-    fun updateMessage(ts: Long, content: String) {
+    private fun updateMessage(ts: Long, content: String) {
         val s = session ?: return
         val cur = overlays[ts] ?: s.messages.firstOrNull { it.ts == ts }
-        if (cur != null) overlays = overlays + (ts to cur.copy(content = content))
+        if (cur != null) conversation.putOverlay(cur.copy(content = content))
         viewModelScope.launch {
             messageCoordinator.updateMessage(s, ts, content)?.let { fresh ->
                 reconcileMessageMutation(s.id, ts, fresh)
@@ -986,8 +885,8 @@ internal class ChatViewModel(
     }
 
     /** UI 检测到分页已把该 ts 的最终内容补齐后调用：撤下顶替显示的 overlay */
-    fun clearOverlay(ts: Long) {
-        overlays = overlays - ts
+    private fun clearOverlay(ts: Long) {
+        conversation.removeOverlay(ts)
     }
 
     /** 单条 DB 变更后把 overlay 校准到 DB 权威结果并同步内存会话（陈旧乐观值在此被纠正） */
@@ -997,42 +896,20 @@ internal class ChatViewModel(
         fresh: ChatSession,
         expectedOverlay: ChatMessage? = null,
     ) {
-        if (session?.id != sid) return
-        val currentOverlay = overlays[ts]
-        session = fresh
-        if (expectedOverlay != null && currentOverlay != expectedOverlay) return
-        val row = fresh.messages.firstOrNull { it.ts == ts }
-        overlays = if (row != null) overlays + (ts to row) else overlays - ts
+        conversation.reconcileMessage(sid, ts, fresh, expectedOverlay)
     }
 
-    fun updateUserProfile(name: String, description: String) {
+    private fun updateUserProfile(name: String, description: String) {
         profile.save(name, description)
         reloadUserProfile()
         viewModelScope.launch {
-            globalRegexScripts = loadGlobalRegex()
+            promptContext.setGlobalRegex(promptContextDataSource.loadGlobalRegex())
         }
     }
 
     // ── IO 辅助 ──
 
-    private suspend fun loadCard(file: String): CharacterCard? = withContext(Dispatchers.IO) {
-        try {
-            CharacterRepository.load(ctx, file)
-        } catch (error: Exception) {
-            SafeLog.warn(CHAT_VIEW_MODEL_TAG, "character_card_load_failed", error)
-            null
-        }
-    }
-
-    private suspend fun loadCharImage(file: String): Bitmap? = withContext(Dispatchers.IO) {
-        val f = CharacterRepository.imageFile(ctx, file)
-        if (!f.exists()) return@withContext null
-        try {
-            BitmapFactory.decodeFile(f.absolutePath)
-        } catch (error: Exception) {
-            SafeLog.warn(CHAT_VIEW_MODEL_TAG, "character_image_load_failed", error)
-            null
-        }
-    }
+    private suspend fun loadCard(file: String): CharacterCard? =
+        promptContextDataSource.loadCard(file)
 
 }

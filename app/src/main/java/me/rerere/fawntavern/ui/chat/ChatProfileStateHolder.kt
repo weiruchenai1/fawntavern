@@ -15,8 +15,9 @@ internal class ChatProfileStateHolder(
     var avatar by mutableStateOf<Bitmap?>(null)
         private set
 
-    suspend fun reload() {
-        val profile = controller.load()
+    fun load(): ChatUserProfile = controller.load()
+
+    fun apply(profile: ChatUserProfile) {
         name = profile.name
         avatar = profile.avatar
     }

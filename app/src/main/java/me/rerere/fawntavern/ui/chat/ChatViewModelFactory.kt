@@ -15,6 +15,9 @@ internal class ChatViewModelFactory(
             "Unsupported ViewModel: ${modelClass.name}"
         }
         @Suppress("UNCHECKED_CAST")
-        return ChatViewModel(application, container) as T
+        return ChatViewModel(
+            application,
+            ChatFeatureDependencies.create(application, container),
+        ) as T
     }
 }
