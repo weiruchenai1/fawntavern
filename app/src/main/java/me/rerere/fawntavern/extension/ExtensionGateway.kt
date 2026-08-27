@@ -3,12 +3,6 @@ package me.rerere.fawntavern.extension
 import android.content.Context
 import me.rerere.fawntavern.data.api.ApiConfig
 
-internal interface ExtensionGateway {
-    fun enabledExtensions(): List<Extension>
-    fun config(id: String): String
-    fun services(apiConfig: ApiConfig): ExtensionServices
-}
-
 internal class AndroidExtensionGateway(
     context: Context,
 ) : ExtensionGateway {

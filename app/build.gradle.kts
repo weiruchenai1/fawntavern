@@ -115,13 +115,18 @@ android {
 dependencies {
     implementation(project(":core:diagnostics"))
     implementation(project(":core:model"))
+    implementation(project(":core:extension"))
     implementation(project(":core:network"))
     implementation(project(":domain:generation"))
     implementation(project(":domain:chat"))
     implementation(project(":data:chat"))
     implementation(project(":data:resources"))
     implementation(project(":data:generation"))
+    implementation(project(":data:settings"))
     implementation(project(":feature:chat"))
+    implementation(project(":feature:character"))
+    implementation(project(":feature:preset"))
+    implementation(project(":feature:worldbook"))
     implementation(files("libs/crashreport-4.1.9.3.aar"))
 
     val firebaseBom = platform(libs.firebase.bom)

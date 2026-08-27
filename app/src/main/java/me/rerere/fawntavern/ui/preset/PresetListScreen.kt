@@ -38,7 +38,7 @@ import me.rerere.fawntavern.ui.components.appClickable
 @Composable
 fun PresetListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { PresetDataController(context) }
+    val controller = remember(context) { PresetDataController(AndroidPresetDataSource(context)) }
     var selectedPreset by remember { mutableStateOf<StPreset?>(null) }
     // SaveableStateHolder：进入编辑器时列表离开组合，其 LazyListState 被暂存；
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。

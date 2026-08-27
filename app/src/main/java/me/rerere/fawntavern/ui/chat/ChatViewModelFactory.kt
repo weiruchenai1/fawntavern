@@ -16,8 +16,7 @@ internal class ChatViewModelFactory(
         }
         @Suppress("UNCHECKED_CAST")
         return ChatViewModel(
-            application,
-            ChatFeatureDependencies.create(application, container),
+            createChatFeatureDependencies(application, container),
         ) as T
     }
 }

@@ -44,7 +44,7 @@ import me.rerere.fawntavern.ui.components.appClickable
 @Composable
 fun WorldBookListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { WorldBookDataController(context) }
+    val controller = remember(context) { WorldBookDataController(AndroidWorldBookDataSource(context)) }
     var selectedBook by remember { mutableStateOf<WorldBook?>(null) }
     var showWiSettings by remember { mutableStateOf(false) }
     // SaveableStateHolder：进入编辑器/设置时列表离开组合，其 LazyListState 被暂存；

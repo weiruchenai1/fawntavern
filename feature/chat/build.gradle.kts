@@ -18,7 +18,14 @@ android {
 
 dependencies {
     api(project(":core:model"))
+    api(project(":core:extension"))
     api(project(":domain:chat"))
+    implementation(project(":core:diagnostics"))
+    implementation(project(":core:network"))
+    implementation(project(":domain:generation"))
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.json)
 
     api(platform(libs.androidx.compose.bom))
     api(libs.androidx.compose.foundation)

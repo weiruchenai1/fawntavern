@@ -110,7 +110,7 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    val controller = remember(context) { WorldBookDataController(context) }
+    val controller = remember(context) { WorldBookDataController(AndroidWorldBookDataSource(context)) }
     val saveCoordinator = remember(book.name, controller) {
         WorldBookSaveCoordinator { entries -> controller.saveEntries(book.name, entries) }
     }

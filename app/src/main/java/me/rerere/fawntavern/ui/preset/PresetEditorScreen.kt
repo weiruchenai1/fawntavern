@@ -110,7 +110,7 @@ fun PresetEditorScreen(
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    val controller = remember(context) { PresetDataController(context) }
+    val controller = remember(context) { PresetDataController(AndroidPresetDataSource(context)) }
     // 编辑器打开期间固定使用本地草稿；父级打开另一预设时会创建新的编辑器实例。
     var state by remember { mutableStateOf(PresetEditorState(preset)) }
     var saving by remember { mutableStateOf(false) }

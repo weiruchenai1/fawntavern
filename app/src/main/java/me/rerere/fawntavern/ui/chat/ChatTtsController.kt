@@ -8,38 +8,38 @@ import me.rerere.fawntavern.data.settings.TtsStore
 import me.rerere.fawntavern.data.speech.TtsEngine
 import me.rerere.fawntavern.data.speech.TtsUiState
 
-/** Chat screen TTS interaction coordinator. */
-internal class ChatTtsController(context: Context) {
+/** TTS 引擎的 Android 适配器。 */
+internal class AndroidChatTtsController(context: Context) : ChatTtsController {
     private val engine = TtsEngine(context) { TtsStore.getSetting(context) }
-    val ui: StateFlow<TtsUiState> = engine.ui
+    override val ui: StateFlow<TtsUiState> = engine.ui
 
     private val _speakingTs = MutableStateFlow<Long?>(null)
-    val speakingTs: StateFlow<Long?> = _speakingTs.asStateFlow()
+    override val speakingTimestamp: StateFlow<Long?> = _speakingTs.asStateFlow()
 
-    fun speak(ts: Long, text: String) {
-        if (_speakingTs.value == ts) {
+    override fun speak(timestamp: Long, text: String) {
+        if (_speakingTs.value == timestamp) {
             stop()
             return
         }
         val content = text.trim()
         if (content.isBlank()) return
         stop()
-        _speakingTs.value = ts
+        _speakingTs.value = timestamp
         engine.speak(content) {
-            if (_speakingTs.value == ts) _speakingTs.value = null
+            if (_speakingTs.value == timestamp) _speakingTs.value = null
         }
     }
 
-    fun stop() {
+    override fun stop() {
         engine.stop()
         _speakingTs.value = null
     }
 
-    fun pause() = engine.pause()
-    fun resume() = engine.resume()
-    fun fastForward() = engine.fastForward()
+    override fun pause() = engine.pause()
+    override fun resume() = engine.resume()
+    override fun fastForward() = engine.fastForward()
 
-    fun cycleSpeed() {
+    override fun cycleSpeed() {
         val next = when (engine.ui.value.speed) {
             0.8f -> 1.0f
             1.0f -> 1.2f
@@ -50,5 +50,5 @@ internal class ChatTtsController(context: Context) {
         engine.setSpeed(next)
     }
 
-    fun release() = engine.release()
+    override fun release() = engine.release()
 }

@@ -57,14 +57,14 @@ jobs:
 
       - name: Run unit tests, lint, and builds
         run: |
-          TASKS=(testDebugUnitTest lintDebug assembleDebug)
+          TASKS=(checkArchitecture testDebugUnitTest lintDebug assembleDebug)
           if [[ -n "$GOOGLE_SERVICES_JSON" ]]; then
             TASKS+=(assembleRelease)
           fi
           ./gradlew --no-daemon "${TASKS[@]}"
 
       - name: Verify committed Room schemas
-        run: git diff --exit-code -- app/schemas
+        run: git diff --exit-code -- data/chat/schemas
 
       - name: Upload debug APK
         if: success()
@@ -81,9 +81,9 @@ jobs:
         with:
           name: verification-reports
           path: |
-            app/build/reports/tests/**
+            **/build/reports/tests/**
             app/build/reports/lint-results-*.html
-            app/build/test-results/**
+            **/build/test-results/**
           if-no-files-found: warn
           retention-days: 14
 
