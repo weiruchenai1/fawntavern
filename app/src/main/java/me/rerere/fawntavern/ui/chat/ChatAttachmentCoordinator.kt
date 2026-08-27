@@ -3,7 +3,7 @@ package me.rerere.fawntavern.ui.chat
 import android.content.Context
 import android.net.Uri
 import me.rerere.fawntavern.data.chat.AttachmentStore
-import me.rerere.fawntavern.data.chat.ChatDataRepository
+import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.MsgFile
 
 internal data class PersistedAttachments(

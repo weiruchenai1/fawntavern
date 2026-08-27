@@ -17,6 +17,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:diagnostics"))
     api(project(":core:model"))
     api(libs.json)
     api(libs.androidx.core.ktx)

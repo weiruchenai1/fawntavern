@@ -2,9 +2,11 @@ package me.rerere.fawntavern.ui.chat
 
 import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.GenParams
-import me.rerere.fawntavern.data.chat.ChatDataRepository
+import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
+import me.rerere.fawntavern.domain.ChatGenerationMode
+import me.rerere.fawntavern.domain.ChatGenerationPlanner
 
 internal data class PreparedChatGeneration(
     val baseSession: ChatSession,

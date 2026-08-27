@@ -2,7 +2,7 @@ package me.rerere.fawntavern.ui.chat
 
 import android.content.Context
 import me.rerere.fawntavern.data.api.ApiConfigRepository
-import me.rerere.fawntavern.data.chat.ChatDataRepository
+import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.settings.PromptLogStore
 import me.rerere.fawntavern.di.AppContainer
 import me.rerere.fawntavern.domain.GenerationGateway

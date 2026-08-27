@@ -117,6 +117,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:network"))
     implementation(project(":domain:generation"))
+    implementation(project(":domain:chat"))
     implementation(project(":data:chat"))
     implementation(project(":data:resources"))
     implementation(files("libs/crashreport-4.1.9.3.aar"))

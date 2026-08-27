@@ -1,19 +1,19 @@
-package me.rerere.fawntavern.ui.chat
+package me.rerere.fawntavern.domain
 
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.domain.ConversationOps
 
-internal enum class ChatGenerationMode { SEND, REGENERATE }
+enum class ChatGenerationMode { SEND, REGENERATE }
 
-internal data class ChatGenerationPlan(
+data class ChatGenerationPlan(
     val message: ChatMessage,
     val buildHistory: List<ChatMessage>,
     val promptHistory: List<ChatMessage>,
     val updateTimedWorldInfo: Boolean,
 )
 
-internal object ChatGenerationPlanner {
+object ChatGenerationPlanner {
     fun create(
         session: ChatSession,
         modelId: String,

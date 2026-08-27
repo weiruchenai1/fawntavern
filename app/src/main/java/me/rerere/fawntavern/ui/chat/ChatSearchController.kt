@@ -1,7 +1,7 @@
 package me.rerere.fawntavern.ui.chat
 
 import android.content.Context
-import me.rerere.fawntavern.data.chat.ChatDataRepository
+import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.settings.SearchHistoryStore
 
 internal data class ChatSearchHit(

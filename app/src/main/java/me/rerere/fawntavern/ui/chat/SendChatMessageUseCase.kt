@@ -2,7 +2,7 @@ package me.rerere.fawntavern.ui.chat
 
 import kotlinx.coroutines.CancellationException
 import me.rerere.fawntavern.core.diagnostics.SafeLog
-import me.rerere.fawntavern.data.chat.ChatDataRepository
+import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.domain.ConversationOps

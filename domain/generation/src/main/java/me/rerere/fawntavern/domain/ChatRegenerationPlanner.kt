@@ -1,14 +1,14 @@
-package me.rerere.fawntavern.ui.chat
+package me.rerere.fawntavern.domain
 
 import me.rerere.fawntavern.data.chat.ChatSession
 
-internal sealed interface ChatRegenerationPlan {
+sealed interface ChatRegenerationPlan {
     data class Regenerate(val targetTimestamp: Long) : ChatRegenerationPlan
     data class TruncateAndSend(val afterTimestamp: Long) : ChatRegenerationPlan
 }
 
 /** Resolves UI regeneration actions without performing persistence or generation. */
-internal object ChatRegenerationPlanner {
+object ChatRegenerationPlanner {
     fun forAssistant(session: ChatSession, timestamp: Long): ChatRegenerationPlan? {
         val index = session.messages.indexOfFirst { it.ts == timestamp }
         if (index < 0 || session.messages[index].role != "assistant") return null

@@ -23,6 +23,8 @@ import me.rerere.fawntavern.domain.GenerationEngine
 import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.domain.PromptLog
+import me.rerere.fawntavern.domain.ChatRegenerationPlan
+import me.rerere.fawntavern.domain.ChatRegenerationPlanner
 import me.rerere.fawntavern.extension.BuiltinExtensions
 import me.rerere.fawntavern.extension.QuickReply
 

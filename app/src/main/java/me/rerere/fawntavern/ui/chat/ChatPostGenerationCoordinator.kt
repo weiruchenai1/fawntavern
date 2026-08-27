@@ -5,7 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import me.rerere.fawntavern.data.api.ApiConfig
-import me.rerere.fawntavern.data.chat.ChatDataRepository
+import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.extension.ExtensionGateway
 import me.rerere.fawntavern.extension.GenerationContext

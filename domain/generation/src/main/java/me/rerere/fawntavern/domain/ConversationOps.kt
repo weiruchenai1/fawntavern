@@ -11,7 +11,7 @@ import me.rerere.fawntavern.data.chat.MsgFile
  * 会话/消息的纯变换：输入旧会话，返回新会话（或 null 表示无变化）。
  * 不做 IO、不持有状态 —— 落盘与状态更新由 ViewModel 负责。
  */
-internal object ConversationOps {
+object ConversationOps {
 
     /** 同一会话内消息 ts 必须严格递增：ts 用作消息列表的 LazyColumn key，同毫秒创建会撞 key 崩溃 */
     fun nextTs(s: ChatSession): Long =

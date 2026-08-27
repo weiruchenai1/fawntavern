@@ -2,6 +2,7 @@ package me.rerere.fawntavern.ui.chat
 
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import me.rerere.fawntavern.data.api.ApiProvider
+import me.rerere.fawntavern.domain.ChatGenerationMode
 
 internal enum class ChatSendOutcome { STARTED, NO_MODEL, SKIPPED, FILE_TOO_LARGE }
 

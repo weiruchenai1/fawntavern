@@ -5,8 +5,8 @@ import me.rerere.fawntavern.data.api.ChatApi
 import me.rerere.fawntavern.data.api.ApiRequestException
 import me.rerere.fawntavern.data.api.ApiConfigRepository
 import me.rerere.fawntavern.data.api.PreferencesApiConfigRepository
-import me.rerere.fawntavern.data.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.RoomChatDataRepository
+import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.domain.GenerationEvent
 import me.rerere.fawntavern.domain.GenerationCancelled
 import me.rerere.fawntavern.domain.GenerationGateway

@@ -19,6 +19,7 @@ android {
 }
 
 dependencies {
+    api(project(":domain:chat"))
     api(project(":core:model"))
     api(libs.androidx.paging.runtime)
 

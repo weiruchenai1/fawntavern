@@ -1,7 +1,7 @@
 package me.rerere.fawntavern.ui.chat
 
 import kotlinx.coroutines.flow.Flow
-import me.rerere.fawntavern.data.chat.ChatDataRepository
+import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.domain.ConversationOps

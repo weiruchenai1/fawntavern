@@ -3,7 +3,7 @@ package me.rerere.fawntavern.ui.chat
 import android.content.Context
 import me.rerere.fawntavern.data.api.ApiConfig
 import me.rerere.fawntavern.data.api.ApiMessage
-import me.rerere.fawntavern.data.chat.ChatDataRepository
+import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.extension.ExtensionGateway
