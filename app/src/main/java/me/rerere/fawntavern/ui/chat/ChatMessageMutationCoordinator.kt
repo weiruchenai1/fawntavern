@@ -2,6 +2,7 @@ package me.rerere.fawntavern.ui.chat
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import me.rerere.fawntavern.domain.chat.ChatMessageCoordinator
 
 /** Coordinates optimistic message updates with serialized persistence and reconciliation. */
 internal class ChatMessageMutationCoordinator(

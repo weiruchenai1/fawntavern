@@ -13,6 +13,7 @@ import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.domain.ChatGenerationMode
 import me.rerere.fawntavern.domain.ChatRegenerationPlan
+import me.rerere.fawntavern.domain.chat.ChatSessionCoordinator
 
 internal data class ChatGenerationSnapshot(
     val card: CharacterCard?,

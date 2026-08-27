@@ -25,6 +25,10 @@ import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.domain.PromptLog
 import me.rerere.fawntavern.domain.ChatRegenerationPlan
 import me.rerere.fawntavern.domain.ChatRegenerationPlanner
+import me.rerere.fawntavern.domain.chat.ChatMessageCoordinator
+import me.rerere.fawntavern.domain.chat.CommitChatGenerationUseCase
+import me.rerere.fawntavern.domain.chat.ChatSessionCoordinator
+import me.rerere.fawntavern.domain.chat.RepositoryChatSessionDataSource
 import me.rerere.fawntavern.extension.BuiltinExtensions
 import me.rerere.fawntavern.extension.QuickReply
 

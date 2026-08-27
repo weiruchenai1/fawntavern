@@ -1,4 +1,4 @@
-package me.rerere.fawntavern.ui.chat
+package me.rerere.fawntavern.domain.chat
 
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
@@ -6,7 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-class ChatTitleGeneratorTest {
+class ChatTitleHistoryTest {
     @Test
     fun titleHistoryUsesAtMostTwoPairs() {
         val session = ChatSession(messages = listOf(

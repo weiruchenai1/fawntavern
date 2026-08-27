@@ -68,17 +68,3 @@ internal class PrepareChatGenerationUseCase(
         )
     }
 }
-
-/** 最终消息与世界书计时状态必须由同一 Room 事务提交。 */
-internal class CommitChatGenerationUseCase(
-    private val repository: ChatDataRepository,
-) {
-    suspend operator fun invoke(
-        sessionId: String,
-        message: ChatMessage,
-        timedWorldInfo: Map<String, Int>,
-    ): ChatSession? {
-        repository.commitGeneration(sessionId, message, timedWorldInfo)
-        return repository.get(sessionId)
-    }
-}

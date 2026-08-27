@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.ui.chat
 
+import me.rerere.fawntavern.domain.chat.ChatSessionCoordinator
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 

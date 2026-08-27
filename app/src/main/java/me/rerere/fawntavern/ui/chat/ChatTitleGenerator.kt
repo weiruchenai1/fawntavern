@@ -7,6 +7,7 @@ import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.extension.ExtensionGateway
+import me.rerere.fawntavern.domain.chat.buildTitleHistory
 
 /** 负责标题模型选择、上下文构造、调用和落盘。 */
 internal class ChatTitleGenerator(
@@ -44,21 +45,4 @@ internal class ChatTitleGenerator(
         chatRepository.updateTitle(session.id, title)
         return title
     }
-}
-
-internal fun buildTitleHistory(
-    session: ChatSession,
-    userName: String,
-    charName: String,
-): String? {
-    val userMessages = session.messages.filter { it.role == "user" }
-    val assistantMessages = session.messages.filter { it.role == "assistant" }
-    if (userMessages.isEmpty() || assistantMessages.isEmpty()) return null
-    val pairCount = minOf(userMessages.size, assistantMessages.size, 2)
-    return buildList {
-        repeat(pairCount) { index ->
-            add("$userName: ${userMessages[index].content.take(200)}")
-            add("$charName: ${assistantMessages[index].content.take(200)}")
-        }
-    }.joinToString("\n")
 }

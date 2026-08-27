@@ -120,6 +120,7 @@ dependencies {
     implementation(project(":domain:chat"))
     implementation(project(":data:chat"))
     implementation(project(":data:resources"))
+    implementation(project(":data:generation"))
     implementation(files("libs/crashreport-4.1.9.3.aar"))
 
     val firebaseBom = platform(libs.firebase.bom)

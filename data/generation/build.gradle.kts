@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "me.rerere.fawntavern.domain.chat"
+    namespace = "me.rerere.fawntavern.data.generation"
     compileSdk = 37
 
     defaultConfig {
@@ -17,10 +17,6 @@ android {
 }
 
 dependencies {
-    api(project(":core:model"))
-    implementation(project(":domain:generation"))
-    api(libs.androidx.paging.runtime)
-    api(libs.kotlinx.coroutines.core)
-
-    testImplementation(libs.junit)
+    api(project(":domain:generation"))
+    api(project(":core:network"))
 }

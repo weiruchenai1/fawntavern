@@ -3,6 +3,7 @@ package me.rerere.fawntavern.ui.chat
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import me.rerere.fawntavern.domain.chat.buildSearchSnippet
 
 class ChatSearchControllerTest {
     @Test

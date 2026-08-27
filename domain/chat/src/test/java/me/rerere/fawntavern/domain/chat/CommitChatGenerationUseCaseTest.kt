@@ -1,10 +1,9 @@
-package me.rerere.fawntavern.ui.chat
+package me.rerere.fawntavern.domain.chat
 
 import androidx.paging.PagingData
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
-import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
 import org.junit.Assert.assertEquals

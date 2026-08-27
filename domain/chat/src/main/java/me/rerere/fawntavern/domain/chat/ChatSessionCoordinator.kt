@@ -1,12 +1,11 @@
-package me.rerere.fawntavern.ui.chat
+package me.rerere.fawntavern.domain.chat
 
 import kotlinx.coroutines.flow.Flow
-import me.rerere.fawntavern.domain.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.domain.ConversationOps
 
-internal interface ChatSessionDataSource {
+interface ChatSessionDataSource {
     fun observeSessions(): Flow<List<ChatSession>>
     suspend fun listSummaries(): List<ChatSession>
     suspend fun count(): Int
@@ -18,7 +17,7 @@ internal interface ChatSessionDataSource {
     suspend fun truncateAfter(id: String, timestamp: Long)
 }
 
-internal class RepositoryChatSessionDataSource(
+class RepositoryChatSessionDataSource(
     private val repository: ChatDataRepository,
 ) : ChatSessionDataSource {
     override fun observeSessions(): Flow<List<ChatSession>> = repository.observeSessions()
@@ -35,12 +34,12 @@ internal class RepositoryChatSessionDataSource(
         repository.truncateAfter(id, timestamp)
 }
 
-internal data class DeletedSessionChoice(
+data class DeletedSessionChoice(
     val nextSessionId: String?,
     val shouldCreateNew: Boolean,
 )
 
-internal fun chooseSessionAfterDelete(
+fun chooseSessionAfterDelete(
     deletedId: String,
     currentSession: ChatSession?,
     summaries: List<ChatSession>,
@@ -54,7 +53,7 @@ internal fun chooseSessionAfterDelete(
     )
 }
 
-internal class ChatSessionCoordinator(
+class ChatSessionCoordinator(
     private val dataSource: ChatSessionDataSource,
 ) {
     fun observeSessions(): Flow<List<ChatSession>> = dataSource.observeSessions()

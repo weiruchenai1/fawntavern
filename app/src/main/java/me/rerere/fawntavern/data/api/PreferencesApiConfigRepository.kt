@@ -2,11 +2,6 @@ package me.rerere.fawntavern.data.api
 
 import android.content.Context
 
-internal interface ApiConfigRepository {
-    fun load(): ApiConfig
-    fun save(config: ApiConfig)
-}
-
 internal class PreferencesApiConfigRepository(
     context: Context,
 ) : ApiConfigRepository {

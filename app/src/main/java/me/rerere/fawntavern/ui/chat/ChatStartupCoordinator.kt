@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.ui.chat
 
+import me.rerere.fawntavern.domain.chat.ChatSessionCoordinator
+
 import me.rerere.fawntavern.data.chat.ChatSession
 
 /** Initializes the default character and resolves the first active conversation. */
