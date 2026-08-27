@@ -1,4 +1,4 @@
-package me.rerere.fawntavern.ui.chat
+package me.rerere.fawntavern.domain.chat
 
 import me.rerere.fawntavern.data.chat.ChatMessage
 import org.junit.Assert.assertEquals

@@ -1,8 +1,8 @@
-package me.rerere.fawntavern.ui.chat
+package me.rerere.fawntavern.domain.chat
 
 import me.rerere.fawntavern.data.chat.ChatMessage
 
-internal fun mergeMessageWindow(
+fun mergeMessageWindow(
     base: List<ChatMessage>,
     overlays: Map<Long, ChatMessage>,
     allowAppend: Boolean,
@@ -14,7 +14,7 @@ internal fun mergeMessageWindow(
     return merged + overlays.values.filter { it.ts !in baseTimestamps }.sortedBy { it.ts }
 }
 
-internal fun settledOverlayTimestamps(
+fun settledOverlayTimestamps(
     base: List<ChatMessage>,
     overlays: Map<Long, ChatMessage>,
     generating: Boolean,

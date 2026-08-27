@@ -66,6 +66,8 @@ import org.json.JSONObject
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiRequestSnapshot
 import me.rerere.fawntavern.data.chat.ChatMessage
+import me.rerere.fawntavern.domain.chat.mergeMessageWindow
+import me.rerere.fawntavern.domain.chat.settledOverlayTimestamps
 import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.domain.GenerationActionGuard
