@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 internal class ChatGenerationCoordinator(
     private val scope: CoroutineScope,
     private val stopCurrent: () -> Unit,
+    private val onRunningChanged: (Boolean) -> Unit = {},
     private val onFailure: (Throwable) -> Unit = {},
 ) {
     var isRunning by mutableStateOf(false)
@@ -27,7 +28,7 @@ internal class ChatGenerationCoordinator(
 
     fun launch(block: suspend () -> Unit): Boolean {
         if (isRunning) return false
-        setRunning(true)
+        updateRunningState(true)
         scope.launch {
             try {
                 block()
@@ -36,7 +37,8 @@ internal class ChatGenerationCoordinator(
             } catch (error: Throwable) {
                 onFailure(error)
             } finally {
-                setRunning(false)
+                targetTimestamp = null
+                updateRunningState(false)
             }
         }
         return true
@@ -48,7 +50,8 @@ internal class ChatGenerationCoordinator(
         targetTimestamp = timestamp
     }
 
-    private fun setRunning(value: Boolean) {
+    private fun updateRunningState(value: Boolean) {
         isRunning = value
+        onRunningChanged(value)
     }
 }

@@ -11,11 +11,11 @@ import me.rerere.fawntavern.data.chat.ChatDataRepository
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.data.worldbook.WorldBook
-import me.rerere.fawntavern.domain.GenerationController
+import me.rerere.fawntavern.domain.GenerationEngine
 
 internal class ChatGenerationRunner(
     private val chatRepository: ChatDataRepository,
-    private val generation: GenerationController,
+    private val generation: GenerationEngine,
     private val resources: ChatGenerationResources,
     private val prepare: PrepareChatGenerationUseCase,
     private val commit: CommitChatGenerationUseCase,
@@ -76,7 +76,8 @@ internal class ChatGenerationRunner(
             val finalMessage = generation.run(
                 apiMessages = assembled.apiMessages,
                 genMessage = generationMessage,
-                provider = request.provider,
+                providerId = request.provider.id,
+                providerName = request.provider.name,
                 modelId = request.modelId,
                 built = built,
                 streaming = request.card?.streaming ?: true,

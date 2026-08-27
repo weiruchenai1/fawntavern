@@ -1,8 +1,6 @@
-package me.rerere.fawntavern.data.character
+package me.rerere.fawntavern.domain
 
-import me.rerere.fawntavern.domain.MacroContext
-import me.rerere.fawntavern.domain.MacroEngine
-import me.rerere.fawntavern.domain.MacroRenderPolicy
+import me.rerere.fawntavern.data.character.CharRegex
 
 /**
  * SillyTavern 显示用正则引擎。
@@ -72,8 +70,10 @@ object RegexEngine {
             }
             // 深度过滤：depth 从最后一条消息 0 向上递增
             if (depth != null) {
-                if (s.minDepth != null && depth < s.minDepth) continue
-                if (s.maxDepth != null && depth > s.maxDepth) continue
+                val minDepth = s.minDepth
+                val maxDepth = s.maxDepth
+                if (minDepth != null && depth < minDepth) continue
+                if (maxDepth != null && depth > maxDepth) continue
             }
             // substituteRegex：对 findRegex 做宏替换后再编译
             val findRaw = when (s.substituteRegex) {

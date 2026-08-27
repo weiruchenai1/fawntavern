@@ -2,7 +2,6 @@ package me.rerere.fawntavern.domain
 
 import kotlinx.coroutines.runBlocking
 import me.rerere.fawntavern.data.api.ApiMessage
-import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.GenParams
 import me.rerere.fawntavern.data.api.ApiRequestSnapshot
 import me.rerere.fawntavern.data.api.ApiToolCall
@@ -18,7 +17,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class GenerationControllerTest {
+class GenerationEngineTest {
     @Test
     fun gatewayEventsAreMergedInEmissionOrder() = runBlocking {
         val gateway = GenerationGateway { _, onEvent ->
@@ -27,10 +26,11 @@ class GenerationControllerTest {
             StreamEnd()
         }
 
-        val result = GenerationController(gateway).run(
+        val result = GenerationEngine(gateway).run(
             apiMessages = listOf(ApiMessage("user", "question")),
             genMessage = ChatMessage(role = "assistant"),
-            provider = ApiProvider(id = "provider"),
+            providerId = "provider",
+            providerName = "Provider",
             modelId = "model",
             built = PromptBuilder.Built(),
             streaming = false,
@@ -49,10 +49,11 @@ class GenerationControllerTest {
             throw GenerationRequestException(snapshot, IllegalStateException("provider failed"))
         }
 
-        val result = GenerationController(client).run(
+        val result = GenerationEngine(client).run(
             apiMessages = listOf(ApiMessage("user", "question")),
             genMessage = ChatMessage(role = "assistant", alts = listOf(MsgAlt())),
-            provider = ApiProvider(id = "provider"),
+            providerId = "provider",
+            providerName = "Provider",
             modelId = "model",
             built = PromptBuilder.Built(),
             streaming = false,
@@ -67,18 +68,19 @@ class GenerationControllerTest {
 
     @Test
     fun stopCancelsTheCurrentRound() = runBlocking {
-        lateinit var controller: GenerationController
+        lateinit var controller: GenerationEngine
         val client = testGateway { _, _, _, _, _, isCancelled, _ ->
             controller.stop()
             if (isCancelled()) throw GenerationCancelled()
             StreamEnd()
         }
-        controller = GenerationController(client)
+        controller = GenerationEngine(client)
 
         val result = controller.run(
             apiMessages = listOf(ApiMessage("user", "question")),
             genMessage = ChatMessage(role = "assistant"),
-            provider = ApiProvider(id = "provider"),
+            providerId = "provider",
+            providerName = "Provider",
             modelId = "model",
             built = PromptBuilder.Built(),
             streaming = false,
@@ -108,17 +110,18 @@ class GenerationControllerTest {
                 )
             }
         }
-        val executor = object : GenerationController.ToolExecutor {
+        val executor = object : GenerationToolExecutor {
             override fun describe(call: ApiToolCall): MsgSearch? = null
 
             override suspend fun execute(call: ApiToolCall): Pair<String, MsgSearch?> =
                 "{\"items\":[\"result\"]}" to null
         }
 
-        val result = GenerationController(client).run(
+        val result = GenerationEngine(client).run(
             apiMessages = listOf(ApiMessage("user", "question")),
             genMessage = ChatMessage(role = "assistant"),
-            provider = ApiProvider(id = "provider"),
+            providerId = "provider",
+            providerName = "Provider",
             modelId = "model",
             built = PromptBuilder.Built(),
             streaming = false,
@@ -148,7 +151,7 @@ class GenerationControllerTest {
                 StreamEnd()
             }
         }
-        val executor = object : GenerationController.ToolExecutor {
+        val executor = object : GenerationToolExecutor {
             override fun describe(call: ApiToolCall): MsgSearch? = null
 
             override suspend fun execute(call: ApiToolCall): Pair<String, MsgSearch?> {
@@ -156,10 +159,11 @@ class GenerationControllerTest {
             }
         }
 
-        GenerationController(client).run(
+        GenerationEngine(client).run(
             apiMessages = listOf(ApiMessage("user", "question")),
             genMessage = ChatMessage(role = "assistant"),
-            provider = ApiProvider(id = "provider"),
+            providerId = "provider",
+            providerName = "Provider",
             modelId = "model",
             built = PromptBuilder.Built(),
             streaming = false,
@@ -180,14 +184,15 @@ class GenerationControllerTest {
             StreamEnd(generatedImages = listOf(image))
         }
 
-        val result = GenerationController(client).run(
+        val result = GenerationEngine(client).run(
             apiMessages = listOf(ApiMessage("user", "draw")),
             genMessage = ChatMessage(
                 role = "assistant",
                 imageAspectRatio = "16:9",
                 alts = listOf(MsgAlt()),
             ),
-            provider = ApiProvider(id = "provider"),
+            providerId = "provider",
+            providerName = "Provider",
             modelId = "image-model",
             built = PromptBuilder.Built(),
             streaming = false,
@@ -208,14 +213,15 @@ class GenerationControllerTest {
             StreamEnd(generatedImages = listOf(image))
         }
 
-        val result = GenerationController(client).run(
+        val result = GenerationEngine(client).run(
             apiMessages = listOf(ApiMessage("user", "draw")),
             genMessage = ChatMessage(
                 role = "assistant",
                 imageAspectRatio = "auto",
                 alts = listOf(MsgAlt()),
             ),
-            provider = ApiProvider(id = "provider"),
+            providerId = "provider",
+            providerName = "Provider",
             modelId = "image-model",
             built = PromptBuilder.Built(),
             streaming = false,
@@ -231,7 +237,7 @@ class GenerationControllerTest {
 
 private fun interface TestStreamClient {
     suspend fun stream(
-        provider: ApiProvider,
+        providerId: String,
         modelId: String,
         messages: List<ApiMessage>,
         params: GenParams?,
@@ -244,7 +250,7 @@ private fun interface TestStreamClient {
 private fun testGateway(client: TestStreamClient): GenerationGateway =
     GenerationGateway { request, onEvent ->
         client.stream(
-            provider = request.provider,
+            providerId = request.providerId,
             modelId = request.modelId,
             messages = request.messages,
             params = request.params,

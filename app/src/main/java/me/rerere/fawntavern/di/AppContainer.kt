@@ -19,17 +19,22 @@ import me.rerere.fawntavern.extension.ExtensionGateway
 internal class AppContainer(context: Context) {
     val chatRepository: ChatDataRepository = RoomChatDataRepository(context)
     val apiConfigRepository: ApiConfigRepository = PreferencesApiConfigRepository(context)
-    val generationGateway: GenerationGateway = AndroidGenerationGateway
+    val generationGateway: GenerationGateway = AndroidGenerationGateway(apiConfigRepository)
     val extensionGateway: ExtensionGateway = AndroidExtensionGateway(context)
 }
 
-private object AndroidGenerationGateway : GenerationGateway {
+private class AndroidGenerationGateway(
+    private val apiConfigRepository: ApiConfigRepository,
+) : GenerationGateway {
     override suspend fun stream(
         request: GenerationStreamRequest,
         onEvent: (GenerationEvent) -> Unit,
     ) = try {
+        val provider = apiConfigRepository.load().providers
+            .find { it.id == request.providerId }
+            ?: throw IllegalStateException("Generation provider not found: ${request.providerId}")
         ChatApi.streamChat(
-            provider = request.provider,
+            provider = provider,
             modelId = request.modelId,
             messages = request.messages,
             params = request.params,

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "me.rerere.fawntavern.core.network"
+    namespace = "me.rerere.fawntavern.core.model"
     compileSdk = 37
 
     defaultConfig {
@@ -18,13 +18,5 @@ android {
 }
 
 dependencies {
-    api(project(":core:model"))
-    api(libs.okhttp)
     api(libs.kotlinx.serialization.json)
-    implementation(libs.kotlinx.coroutines.core)
-
-    testImplementation(libs.junit)
-    testImplementation(libs.json)
-    testImplementation(libs.okhttp.mockwebserver)
-    testImplementation(libs.kotlinx.coroutines.core)
 }

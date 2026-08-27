@@ -6,8 +6,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import me.rerere.fawntavern.data.api.ApiConfig
 import me.rerere.fawntavern.data.api.ApiConfigRepository
+import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
+import me.rerere.fawntavern.data.api.Modality
 import me.rerere.fawntavern.data.api.ReasoningLevel
+import me.rerere.fawntavern.data.api.supportsBuiltInTool
+
+internal data class ChatModelCapabilities(
+    val builtInSearchAvailable: Boolean,
+    val builtInSearchEnabled: Boolean,
+    val imageGenerationAvailable: Boolean,
+)
 
 /** Owns the selected model and model-specific generation settings for chat. */
 internal class ChatModelStateHolder(
@@ -31,6 +40,40 @@ internal class ChatModelStateHolder(
 
     fun resolveProvider(characterName: String?) =
         controller.resolveProvider(characterName, apiConfig)
+
+    fun capabilities(characterName: String?): ChatModelCapabilities {
+        revision
+        val (provider, modelId) = resolveProvider(characterName)
+            ?: return ChatModelCapabilities(false, false, false)
+        val selected = provider.model(modelId)
+            ?: return ChatModelCapabilities(false, false, false)
+        return ChatModelCapabilities(
+            builtInSearchAvailable = selected.supportsBuiltInTool(BuiltInTool.SEARCH, provider),
+            builtInSearchEnabled = BuiltInTool.SEARCH in selected.tools,
+            imageGenerationAvailable = Modality.IMAGE in selected.outputModalities,
+        )
+    }
+
+    fun toggleBuiltInSearch(characterName: String?) {
+        val (provider, modelId) = resolveProvider(characterName) ?: return
+        val modelIndex = provider.models.indexOfFirst { it.id == modelId }
+        if (modelIndex < 0) return
+        val selected = provider.models[modelIndex]
+        if (!selected.supportsBuiltInTool(BuiltInTool.SEARCH, provider)) return
+        val updated = selected.copy(tools = if (BuiltInTool.SEARCH in selected.tools) {
+            selected.tools - BuiltInTool.SEARCH
+        } else {
+            selected.tools + BuiltInTool.SEARCH
+        })
+        val updatedProvider = provider.copy(
+            models = provider.models.toMutableList().also { it[modelIndex] = updated },
+        )
+        updateApiConfig(
+            apiConfig.copy(providers = apiConfig.providers.map {
+                if (it.id == provider.id) updatedProvider else it
+            }),
+        )
+    }
 
     fun reload(characterName: String?) {
         apiConfig = repository.load()

@@ -115,6 +115,7 @@ android {
 
 dependencies {
     implementation(project(":core:diagnostics"))
+    implementation(project(":core:model"))
     implementation(project(":core:network"))
     implementation(files("libs/crashreport-4.1.9.3.aar"))
 

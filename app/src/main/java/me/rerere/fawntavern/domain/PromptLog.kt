@@ -3,7 +3,6 @@ package me.rerere.fawntavern.domain
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import me.rerere.fawntavern.data.api.ApiMessage
-import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.GenParams
 
 /** 最终发送的一条消息（不含 base64 图片，只记录张数，避免日志占用大量内存） */
@@ -28,7 +27,7 @@ internal data class PromptLogEntry(
  *
  * [enabled] 由设置项控制（[me.rerere.fawntavern.data.settings.PromptLogStore]，默认关闭），
  * 关闭时 [record] 直接返回、零开销；ViewModel 启动时把持久化开关同步到此。
- * 记录点在 [GenerationController]：拿到 [PromptBuilder.assemble] 的结果后调用 [record]。
+ * 记录点在 [GenerationEngine]：拿到 [PromptMessageAssembler.assemble] 的结果后调用 [record]。
  */
 object PromptLog {
     /** 最多保留的日志条数（新的在前，超出丢弃最旧） */
@@ -43,7 +42,7 @@ object PromptLog {
     /** 由生成执行器调用；[enabled] 为 false 时不记录 */
     internal fun record(
         built: PromptBuilder.Built,
-        provider: ApiProvider,
+        providerName: String,
         modelId: String,
         messages: List<ApiMessage>,
     ) {
@@ -52,14 +51,14 @@ object PromptLog {
             built.depthInjections.count { it.source == PromptBuilder.PromptSource.WORLD_INFO }
         val entry = PromptLogEntry(
             time = System.currentTimeMillis(),
-            providerName = provider.name,
+            providerName = providerName,
             modelId = modelId,
             charName = built.charName,
             presetName = built.presetName.takeIf { it.isNotBlank() },
             worldInfoCount = wiCount,
             messages = messages.map { LoggedMessage(it.role, it.content, it.images.size) },
             params = built.genParams,
-            approxTokens = messages.sumOf { PromptBuilder.estTokens(it.content) },
+            approxTokens = messages.sumOf { TokenEstimator.estimate(it.content) },
         )
         _entries.value = (listOf(entry) + _entries.value).take(CAP)
     }

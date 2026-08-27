@@ -16,6 +16,7 @@ import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.data.worldbook.WorldInfoSettings
 import me.rerere.fawntavern.domain.MacroVariableState
 import me.rerere.fawntavern.domain.PromptBuilder
+import me.rerere.fawntavern.domain.PromptMessageAssembler
 import me.rerere.fawntavern.extension.ExtensionGateway
 import me.rerere.fawntavern.extension.PromptContext
 import me.rerere.fawntavern.extension.PromptContributor
@@ -134,7 +135,7 @@ internal class ChatPromptAssembler(
         )
         return Result(
             built = built,
-            apiMessages = PromptBuilder.assemble(
+            apiMessages = PromptMessageAssembler.assemble(
                 built = built,
                 history = promptHistory,
                 baseDir = environment.filesDir(),

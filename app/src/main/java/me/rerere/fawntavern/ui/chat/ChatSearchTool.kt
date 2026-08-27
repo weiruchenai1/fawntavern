@@ -8,7 +8,7 @@ import me.rerere.fawntavern.data.chat.SearchCitation
 import me.rerere.fawntavern.data.search.SearchCommonOptions
 import me.rerere.fawntavern.data.search.createSearchService
 import me.rerere.fawntavern.data.settings.SearchStore
-import me.rerere.fawntavern.domain.GenerationController
+import me.rerere.fawntavern.domain.GenerationToolExecutor
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -64,7 +64,7 @@ internal class ChatSearchTool(private val dataSource: ChatSearchToolDataSource) 
         )
     }
 
-    fun executor(): GenerationController.ToolExecutor = object : GenerationController.ToolExecutor {
+    fun executor(): GenerationToolExecutor = object : GenerationToolExecutor {
         override fun describe(call: ApiToolCall): MsgSearch? {
             if (call.name != "search_web") return null
             val query = queryOf(call)

@@ -18,11 +18,11 @@ internal class ChatConversationStateHolder {
     var overlays by mutableStateOf<Map<Long, ChatMessage>>(emptyMap())
         private set
 
-    fun setSessions(values: List<ChatSession>) {
+    fun replaceSessions(values: List<ChatSession>) {
         sessions = values
     }
 
-    fun setCurrent(value: ChatSession?) {
+    fun replaceCurrent(value: ChatSession?) {
         if (current?.id != value?.id) overlays = emptyMap()
         current = value
     }

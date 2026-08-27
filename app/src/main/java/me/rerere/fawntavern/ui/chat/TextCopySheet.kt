@@ -45,7 +45,7 @@ import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.character.CharRegex
-import me.rerere.fawntavern.data.character.RegexEngine
+import me.rerere.fawntavern.domain.RegexEngine
 import me.rerere.fawntavern.ui.components.noRippleClickable
 
 internal data class TextCopyPreview(

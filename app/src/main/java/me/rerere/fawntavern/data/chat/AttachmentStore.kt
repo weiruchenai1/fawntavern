@@ -12,11 +12,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.data.api.GeneratedImage
 
-data class PersistedGeneratedImage(
-    val path: String,
-    val aspectRatio: String?,
-)
-
 /**
  * 附件落盘：发送时把 content URI 指向的内容拷入 filesDir/attachments/，
  * 返回 filesDir 相对路径存进 [ChatMessage] —— URI 的读权限是临时的，重启后失效，

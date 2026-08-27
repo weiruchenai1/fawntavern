@@ -40,11 +40,11 @@ internal class ChatPromptContextStateHolder {
 
     fun isLoadedFor(charFile: String): Boolean = loadedCharFile == charFile
 
-    fun setCard(value: CharacterCard?) {
+    fun replaceCard(value: CharacterCard?) {
         card = value
     }
 
-    fun setGlobalRegex(values: List<CharRegex>) {
+    fun replaceGlobalRegex(values: List<CharRegex>) {
         globalRegex = values
     }
 

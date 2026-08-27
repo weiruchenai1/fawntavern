@@ -5,64 +5,23 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.data.api.ApiMessage
-import me.rerere.fawntavern.data.api.ApiProvider
-import me.rerere.fawntavern.data.api.ApiRequestSnapshot
-import me.rerere.fawntavern.data.api.ApiToolCall
-import me.rerere.fawntavern.data.api.GenParams
 import me.rerere.fawntavern.data.api.GeneratedImage
-import me.rerere.fawntavern.data.api.StreamEnd
 import me.rerere.fawntavern.data.api.ToolSpec
 import me.rerere.fawntavern.data.chat.ChatMessage
-import me.rerere.fawntavern.data.chat.PersistedGeneratedImage
 import me.rerere.fawntavern.data.chat.MsgSearch
+import me.rerere.fawntavern.data.chat.PersistedGeneratedImage
 
 /**
  * 一次流式生成的执行器：把 AI 回复流式填充进 [run] 传入的目标消息 [genMessage]（可为追加的新
  * 空消息，或已开好新版本的重答消息），流式期间以约 60ms 一帧的节流频率通过 onUpdate 发布中间消息，
  * 返回最终消息。不做 IO 落盘、不持有 UI 状态 —— 调用方负责保存与 generating 标志。
  *
- * 支持函数工具多轮循环（联网搜索等）：模型发起工具调用 → [ToolExecutor] 执行 →
+ * 支持函数工具多轮循环（联网搜索等）：模型发起工具调用 → [GenerationToolExecutor] 执行 →
  * 结果以工具消息回传 → 续下一轮流式，直到模型不再调用工具。
  */
-internal data class GenerationStreamRequest(
-    val provider: ApiProvider,
-    val modelId: String,
-    val messages: List<ApiMessage>,
-    val params: GenParams?,
-    val tools: List<ToolSpec>,
-    val isCancelled: () -> Boolean,
-)
-
-internal sealed interface GenerationEvent {
-    data class ContentDelta(val content: String) : GenerationEvent
-    data class ReasoningDelta(val reasoning: String) : GenerationEvent
-}
-
-internal class GenerationCancelled : Exception()
-
-internal class GenerationRequestException(
-    val snapshot: ApiRequestSnapshot,
-    cause: Exception,
-) : Exception(cause.message, cause)
-
-internal fun interface GenerationGateway {
-    suspend fun stream(
-        request: GenerationStreamRequest,
-        onEvent: (GenerationEvent) -> Unit,
-    ): StreamEnd
-}
-
-internal class GenerationController(
+internal class GenerationEngine(
     private val gateway: GenerationGateway,
 ) {
-    /** 工具执行器（由调用方提供）。搜索类工具同时产出时间线步骤状态（MsgSearch）。 */
-    interface ToolExecutor {
-        /** 执行前的时间线预览（如"搜索中"步骤）；null = 该调用不上时间线 */
-        fun describe(call: ApiToolCall): MsgSearch?
-        /** 执行工具，返回 (回传给模型的结果文本, 时间线终态；null = 不上时间线) */
-        suspend fun execute(call: ApiToolCall): Pair<String, MsgSearch?>
-    }
-
     private companion object {
         /** 正常执行的工具轮数上限；超过后拒绝执行并让模型直接作答 */
         const val MAX_TOOL_ROUNDS = 3
@@ -80,12 +39,13 @@ internal class GenerationController(
     suspend fun run(
         apiMessages: List<ApiMessage>,
         genMessage: ChatMessage,
-        provider: ApiProvider,
+        providerId: String,
+        providerName: String,
         modelId: String,
         built: PromptBuilder.Built,
         streaming: Boolean,
         tools: List<ToolSpec> = emptyList(),
-        toolExecutor: ToolExecutor? = null,
+        toolExecutor: GenerationToolExecutor? = null,
         persistGeneratedImage: suspend (GeneratedImage) -> PersistedGeneratedImage? = { null },
         errorText: (Exception) -> String,
         onUpdate: (ChatMessage) -> Unit,
@@ -133,10 +93,10 @@ internal class GenerationController(
         try {
             val apiMessages = apiMessages.toMutableList()
             fun estimatePromptTokens(): Int = apiMessages.sumOf { message ->
-                PromptBuilder.estTokens(message.role) + PromptBuilder.estTokens(message.content) +
+                TokenEstimator.estimate(message.role) + TokenEstimator.estimate(message.content) +
                     message.toolCalls.sumOf { call ->
-                        PromptBuilder.estTokens(call.name) + PromptBuilder.estTokens(call.arguments) +
-                            PromptBuilder.estTokens(call.result)
+                        TokenEstimator.estimate(call.name) + TokenEstimator.estimate(call.arguments) +
+                            TokenEstimator.estimate(call.result)
                     } + message.images.size * 256
             }
             var promptTokens = 0
@@ -145,7 +105,7 @@ internal class GenerationController(
             var countedContentChars = 0
             var countedReasoningChars = 0
             // 记录本次组装出的完整 prompt（日志开关关闭时为空操作）
-            PromptLog.record(built, provider, modelId, apiMessages)
+            PromptLog.record(built, providerName, modelId, apiMessages)
             var rounds = 0
             while (true) {
                 val roundStart = synchronized(lock) { buf.length }
@@ -154,7 +114,7 @@ internal class GenerationController(
                 promptTokens += estimatedInput
                 val end = gateway.stream(
                     request = GenerationStreamRequest(
-                    provider = provider,
+                    providerId = providerId,
                     modelId = modelId,
                     messages = apiMessages,
                     params = built.genParams,
@@ -190,8 +150,8 @@ internal class GenerationController(
                 val (roundContent, roundReasoning) = synchronized(lock) {
                     buf.substring(roundStart) to reasoningBuf.substring(reasoningRoundStart)
                 }
-                val estimatedOutput = PromptBuilder.estTokens(roundContent) +
-                    PromptBuilder.estTokens(roundReasoning)
+                val estimatedOutput = TokenEstimator.estimate(roundContent) +
+                    TokenEstimator.estimate(roundReasoning)
                 completionTokens += end.completionTokens.takeIf { it > 0 } ?: estimatedOutput
                 cachedTokens += end.cachedTokens
                 end.generatedImages.forEach { image ->
@@ -265,8 +225,8 @@ internal class GenerationController(
             val (remainingContent, remainingReasoning) = synchronized(lock) {
                 buf.substring(countedContentChars) to reasoningBuf.substring(countedReasoningChars)
             }
-            completionTokens += PromptBuilder.estTokens(remainingContent) +
-                PromptBuilder.estTokens(remainingReasoning)
+            completionTokens += TokenEstimator.estimate(remainingContent) +
+                TokenEstimator.estimate(remainingReasoning)
             cur = cur.copy(
                 promptTokens = promptTokens,
                 completionTokens = completionTokens,
@@ -296,7 +256,7 @@ internal class GenerationController(
         flushToUi()  // 把缓冲的最终内容全部写入
         if (cur.generationMs == 0L) {
             cur = cur.copy(
-                completionTokens = PromptBuilder.estTokens(cur.content) + PromptBuilder.estTokens(cur.reasoning),
+                completionTokens = TokenEstimator.estimate(cur.content) + TokenEstimator.estimate(cur.reasoning),
                 generationMs = (System.currentTimeMillis() - generationStartedAt).coerceAtLeast(1L),
             )
         }

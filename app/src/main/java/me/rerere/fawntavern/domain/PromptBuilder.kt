@@ -1,14 +1,9 @@
 package me.rerere.fawntavern.domain
 
-import java.io.File
-import java.util.Base64
-import me.rerere.fawntavern.data.api.ApiImage
-import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.GenParams
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
-import me.rerere.fawntavern.data.character.RegexEngine
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.preset.PromptItem
 import me.rerere.fawntavern.data.preset.StPreset
@@ -22,14 +17,11 @@ import me.rerere.fawntavern.data.worldbook.WorldInfoSettings
  * 1. [build] —— 由角色卡 + 已加载的世界书/预设产出 [Built]（历史前后的提示块、
  *    深度注入块、发送侧正则、采样参数）。世界书条目按 constant/关键词扫描激活；
  *    预设存在时按 promptOrder 编排（marker 映射角色卡字段），否则用默认顺序。
- * 2. [assemble] —— 生成请求前把 [Built] 与聊天历史合成完整消息数组：
+ * 2. [PromptMessageAssembler.assemble] —— 生成请求前把 [Built] 与聊天历史合成完整消息数组：
  *    历史逐条套发送侧正则、文件附件内联为文本块、图片编码 base64、深度注入按位插入。
  * UI 与 ViewModel 不感知拼装细节。
  */
 internal object PromptBuilder {
-
-    /** 单个文件附件内联进 prompt 的最大字符数 */
-    private const val FILE_TEXT_MAX_CHARS = 100_000
 
     /** 提示块来源标签（仅供 Prompt 日志展示，不影响拼装结果） */
     enum class PromptSource {
@@ -202,82 +194,6 @@ internal object PromptBuilder {
 
     /** 作者注释缺省深度（本 App 无独立作者注释，an_top/an_bottom 映射到此深度） */
     private const val AN_DEPTH = 4
-
-    /** 请求前合成完整消息数组。baseDir 为 filesDir（附件相对路径的根），null 时跳过附件 */
-    fun assemble(
-        built: Built,
-        history: List<ChatMessage>,
-        baseDir: File?,
-        mutateLastUserMessage: Boolean = false,
-    ): List<ApiMessage> {
-        val hist = history.filter { it.content.isNotBlank() || it.images.isNotEmpty() || it.files.isNotEmpty() }
-        val n0 = hist.size
-        val mutableMessageIndex = if (mutateLastUserMessage) hist.indexOfLast { it.role == "user" } else -1
-        val histMsgsAll = hist.mapIndexed { i, m ->
-            var content = RegexEngine.applyForPrompt(
-                m.content, built.promptRegex, depth = n0 - 1 - i, role = m.role,
-                userName = built.userName, charName = built.charName,
-            )
-            content = MacroEngine.render(
-                content,
-                built.macroContext.copy(history = hist, pickSalt = built.macroContext.pickSalt * 31 + i),
-                if (i == mutableMessageIndex) MacroRenderPolicy.COMMIT_VARIABLES else MacroRenderPolicy.ALL,
-            )
-            if (m.files.isNotEmpty() && baseDir != null) {
-                val blocks = m.files.mapNotNull { f ->
-                    readFileText(File(baseDir, f.path))?.let { "<file name=\"${f.name}\">\n$it\n</file>" }
-                }
-                if (blocks.isNotEmpty()) {
-                    content = (blocks.joinToString("\n\n") + "\n\n" + content).trim()
-                }
-            }
-            ApiMessage(
-                role = m.role,
-                content = content,
-                images = if (baseDir == null) emptyList() else m.images.mapNotNull { loadImage(baseDir, it) },
-            )
-        }
-        // token 预算：为回复预留 maxTokens 后，从新到旧保留历史、丢弃最旧（至少保留最新一条）
-        val histMsgs = trimToBudget(built, histMsgsAll)
-        // 深度注入：同一插入点的多条保持原顺序；从深到浅插入保证索引不漂移
-        val n = histMsgs.size
-        val spliced = histMsgs.toMutableList()
-        built.depthInjections
-            .groupBy { (n - it.depth).coerceIn(0, n) }
-            .entries.sortedByDescending { it.key }
-            .forEach { (idx, pieces) -> spliced.addAll(idx, pieces.map { ApiMessage(it.role, it.content) }) }
-        return built.preHistory.map { ApiMessage(it.role, it.content) } +
-            spliced +
-            built.postHistory.map { ApiMessage(it.role, it.content) }
-    }
-
-    /** 按 maxContext − maxTokens 预算，从新到旧保留能装下的历史（至少保留最新一条）；maxContext=0 不裁剪 */
-    private fun trimToBudget(built: Built, msgs: List<ApiMessage>): List<ApiMessage> {
-        if (built.maxContext <= 0 || msgs.isEmpty()) return msgs
-        val budget = (built.maxContext - built.maxTokens).coerceAtLeast(512)
-        val fixed = (built.preHistory + built.postHistory).sumOf { estTokens(it.content) + 4 } +
-            built.depthInjections.sumOf { estTokens(it.content) + 4 }
-        var used = fixed
-        val kept = ArrayDeque<ApiMessage>()
-        for (m in msgs.asReversed()) {
-            val cost = estTokens(m.content) + m.images.size * 400 + 4
-            if (kept.isNotEmpty() && used + cost > budget) break
-            used += cost
-            kept.addFirst(m)
-        }
-        return kept
-    }
-
-    /** 粗略 token 估算：CJK 字符按 1 token，其余按约 4 字符/token（宁可高估避免超限）。 */
-    internal fun estTokens(s: String): Int {
-        var cjk = 0
-        var other = 0
-        for (c in s) {
-            val code = c.code
-            if (code in 0x2E80..0x9FFF || code in 0xAC00..0xD7AF || code in 0xF900..0xFAFF) cjk++ else other++
-        }
-        return cjk + (other + 3) / 4
-    }
 
     // ── 拼装主体 ────────────────────────────────────────────
 
@@ -497,7 +413,7 @@ internal object PromptBuilder {
             var used = 0
             val kept = ArrayList<WorldBookEntry>()
             for (e in sorted) {
-                val cost = estTokens(e.content) + 4
+                val cost = TokenEstimator.estimate(e.content) + 4
                 if (kept.isNotEmpty() && used + cost > budget) break
                 used += cost
                 kept.add(e)
@@ -666,36 +582,4 @@ internal object PromptBuilder {
         return try { Regex(pattern, opts) } catch (_: Exception) { null }
     }
 
-    // ── 附件 ────────────────────────────────────────────────
-
-    private fun loadImage(baseDir: File, relPath: String): ApiImage? = try {
-        val f = File(baseDir, relPath)
-        if (!f.exists()) null else ApiImage(
-            mimeType = when (f.extension.lowercase()) {
-                "png" -> "image/png"
-                "webp" -> "image/webp"
-                "gif" -> "image/gif"
-                else -> "image/jpeg"
-            },
-            base64 = Base64.getEncoder().encodeToString(f.readBytes()),
-        )
-    } catch (_: Exception) {
-        null
-    }
-
-    /** 读取文件附件为文本；疑似二进制（开头含 NUL）返回 null，超长截断 */
-    private fun readFileText(f: File): String? = try {
-        if (!f.exists()) null else {
-            val bytes = f.readBytes()
-            val probe = bytes.take(8000)
-            if (probe.contains(0.toByte())) null
-            else {
-                val text = String(bytes, Charsets.UTF_8)
-                if (text.length > FILE_TEXT_MAX_CHARS) text.take(FILE_TEXT_MAX_CHARS) + "\n…(truncated)"
-                else text
-            }
-        }
-    } catch (_: Exception) {
-        null
-    }
 }

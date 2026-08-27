@@ -1,36 +1,13 @@
 package me.rerere.fawntavern.data.api
 
-import kotlinx.serialization.Serializable
 import org.json.JSONArray
 import org.json.JSONObject
 
 /** 实际下发给供应商的请求信息；不包含请求头，body 中的大段图片数据会被脱敏。 */
-@Serializable
-data class ApiRequestSnapshot(
-    val endpoint: String = "",
-    val body: String = "",
-)
-
 class ApiRequestException(
     val snapshot: ApiRequestSnapshot,
     cause: Exception,
 ) : Exception(cause.message, cause)
-
-/** 一轮流式补全的收尾信息：模型若发起了工具调用，由上层执行后回传再开下一轮 */
-data class StreamEnd(
-    /** 模型本轮发起的工具调用（已解析完整参数）；为空 = 正常结束 */
-    val toolCalls: List<ApiToolCall> = emptyList(),
-    /** 协议私有的 assistant 原始内容块 JSON（见 [ApiMessage.rawBlocks]），无需回显的协议为空串 */
-    val rawBlocks: String = "",
-    /** 本轮请求的 token 用量；供应商未返回时保持 0，由生成层估算。 */
-    val promptTokens: Int = 0,
-    val completionTokens: Int = 0,
-    val cachedTokens: Int = 0,
-    /** 图片生成模型在本轮返回的图片；上层需将其持久化为聊天附件。 */
-    val generatedImages: List<GeneratedImage> = emptyList(),
-    /** 本轮实际发送的请求快照；不记录鉴权请求头。 */
-    val requestSnapshot: ApiRequestSnapshot? = null,
-)
 
 internal fun requestSnapshot(endpoint: String, body: JSONObject): ApiRequestSnapshot =
     ApiRequestSnapshot(

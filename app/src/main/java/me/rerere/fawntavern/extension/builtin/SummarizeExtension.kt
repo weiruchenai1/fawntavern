@@ -4,6 +4,7 @@ import me.rerere.fawntavern.data.api.ApiConfigStore
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.domain.PromptBuilder
+import me.rerere.fawntavern.domain.TokenEstimator
 import me.rerere.fawntavern.extension.ExtPiece
 import me.rerere.fawntavern.extension.Extension
 import me.rerere.fawntavern.extension.ExtensionInfo
@@ -105,7 +106,7 @@ object SummarizeExtension : Extension, PromptContributor, GenerationLifecycle {
         if (end <= state.coveredUpTo) return                     // 没有新的可折叠历史
         val chunk = msgs.subList(state.coveredUpTo, end).filter { it.content.isNotBlank() }
         if (chunk.isEmpty()) return
-        if (chunk.sumOf { PromptBuilder.estTokens(it.content) } < cfg.triggerTokens.coerceAtLeast(1)) return
+        if (chunk.sumOf { TokenEstimator.estimate(it.content) } < cfg.triggerTokens.coerceAtLeast(1)) return
 
         val convo = chunk.joinToString("\n") { m ->
             val who = if (m.role == "assistant") ctx.charName.ifBlank { "Character" }

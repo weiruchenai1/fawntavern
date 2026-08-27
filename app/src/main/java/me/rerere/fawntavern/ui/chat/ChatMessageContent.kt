@@ -58,7 +58,7 @@ import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.parser.MarkdownParser
 import me.rerere.fawntavern.data.character.CharRegex
-import me.rerere.fawntavern.data.character.RegexEngine
+import me.rerere.fawntavern.domain.RegexEngine
 
 /** 共享的 Markdown 解析器（无状态，只在组合期的主线程上使用） */
 private val markdownFlavour = GFMFlavourDescriptor()

@@ -64,7 +64,7 @@ internal class ChatInputStateHolder {
 
     fun cancelEditing() = finishEditing()
 
-    fun setQuickReplies(values: List<QuickReply>) {
+    fun replaceQuickReplies(values: List<QuickReply>) {
         quickReplies = values
     }
 }
