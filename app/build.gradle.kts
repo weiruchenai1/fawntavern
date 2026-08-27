@@ -2,7 +2,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.crashlytics)
 }
@@ -118,6 +117,8 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:network"))
     implementation(project(":domain:generation"))
+    implementation(project(":data:chat"))
+    implementation(project(":data:resources"))
     implementation(files("libs/crashreport-4.1.9.3.aar"))
 
     val firebaseBom = platform(libs.firebase.bom)
@@ -175,18 +176,13 @@ dependencies {
     implementation(libs.quickjs.kt)
 
     // 聊天记录存储：Room + Paging；alts 列用 kotlinx.serialization 编码
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.room.paging)
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)
     implementation(libs.kotlinx.serialization.json)
-    ksp(libs.androidx.room.compiler)
 
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.androidx.test.core)
-    testImplementation(libs.androidx.room.testing)
     testImplementation(libs.robolectric)
     testImplementation(libs.okhttp.mockwebserver)
 
@@ -205,8 +201,4 @@ configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configu
 googleServices {
     missingGoogleServicesStrategy =
         com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy.IGNORE
-}
-
-ksp {
-    arg("room.schemaLocation", file("schemas").absolutePath)
 }

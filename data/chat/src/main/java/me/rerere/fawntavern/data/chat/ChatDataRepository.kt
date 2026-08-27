@@ -5,7 +5,7 @@ import androidx.paging.PagingData
 import kotlinx.coroutines.flow.Flow
 
 /** 聊天功能依赖的持久化端口；调用方不感知 Room 与 Android Context。 */
-internal interface ChatDataRepository {
+interface ChatDataRepository {
     data class SearchResult(val sessionId: String, val title: String, val content: String)
 
     fun observeSessions(): Flow<List<ChatSession>>
@@ -39,7 +39,7 @@ internal interface ChatDataRepository {
 }
 
 /** 现有 Room 仓库的实例适配器；数据结构与迁移策略保持不变。 */
-internal class RoomChatDataRepository(
+class RoomChatDataRepository(
     context: Context,
 ) : ChatDataRepository {
     private val appContext = context.applicationContext
