@@ -55,6 +55,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +80,7 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.CancellationException
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.data.api.roundedSamplingValue
 import me.rerere.fawntavern.data.preset.PromptItem
 import me.rerere.fawntavern.data.preset.RegexScript
 import me.rerere.fawntavern.data.preset.StPreset
@@ -118,7 +120,7 @@ fun PresetEditorScreen(
         state = reducePresetEditor(state, action)
     }
 
-    // 退出即落盘：保存当前编辑结果后再执行返回导航
+    // 退出即落盘：保存当前编辑结果后再执行返回导航。
     fun saveAndBack() {
         if (saving) return
         saving = true
@@ -193,9 +195,10 @@ fun PresetEditorScreen(
             key = { it },
         ) { page ->
             when (page) {
-                0 -> BasicParamsTab(state.draft) {
-                    dispatch(PresetEditorAction.UpdateDraft(it))
-                }
+                0 -> BasicParamsTab(
+                    p = state.draft,
+                    onUpdate = { dispatch(PresetEditorAction.UpdateDraft(it)) },
+                )
                 1 -> PromptsTab(
                     prompts = state.draft.prompts,
                     onEdit = { dispatch(PresetEditorAction.EditPrompt(it)) },
@@ -276,7 +279,12 @@ fun PresetEditorScreen(
 }
 
 @Composable
-private fun BasicParamsTab(p: StPreset, onUpdate: (StPreset) -> Unit) {
+private fun BasicParamsTab(
+    p: StPreset,
+    onUpdate: (StPreset) -> Unit,
+) {
+    var sendControlsExpanded by rememberSaveable { mutableStateOf(false) }
+    var contextSendControlsExpanded by rememberSaveable { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState())
             .padding(Space16),
@@ -295,12 +303,77 @@ private fun BasicParamsTab(p: StPreset, onUpdate: (StPreset) -> Unit) {
             stringResource(R.string.help_presence_penalty)) { onUpdate(p.copy(presencePenalty = it)) }
         NumberField("Seed", p.seed.toFloat(),
             stringResource(R.string.help_seed)) { onUpdate(p.copy(seed = it.toInt())) }
+        Row(
+            Modifier.fillMaxWidth()
+                .clickable { sendControlsExpanded = !sendControlsExpanded }
+                .padding(vertical = Space4),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                stringResource(R.string.sampling_param_send_controls),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Icon(
+                Lucide.ChevronDown,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+                    .scale(1f, if (sendControlsExpanded) -1f else 1f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (sendControlsExpanded) {
+            SwitchField(stringResource(R.string.send_temperature), p.sendTemperature) {
+                onUpdate(p.copy(sendTemperature = it))
+            }
+            SwitchField(stringResource(R.string.send_top_p), p.sendTopP) {
+                onUpdate(p.copy(sendTopP = it))
+            }
+            SwitchField(stringResource(R.string.send_top_k), p.sendTopK) {
+                onUpdate(p.copy(sendTopK = it))
+            }
+            SwitchField(stringResource(R.string.send_frequency_penalty), p.sendFrequencyPenalty) {
+                onUpdate(p.copy(sendFrequencyPenalty = it))
+            }
+            SwitchField(stringResource(R.string.send_presence_penalty), p.sendPresencePenalty) {
+                onUpdate(p.copy(sendPresencePenalty = it))
+            }
+            SwitchField(stringResource(R.string.send_seed), p.sendSeed) {
+                onUpdate(p.copy(sendSeed = it))
+            }
+        }
 
         SectionHeader(stringResource(R.string.context_params))
         NumberField("Max Context", p.maxContext.toFloat(),
             stringResource(R.string.help_max_context)) { onUpdate(p.copy(maxContext = it.toInt())) }
         NumberField("Max Tokens", p.maxTokens.toFloat(),
             stringResource(R.string.help_max_tokens)) { onUpdate(p.copy(maxTokens = it.toInt())) }
+        Row(
+            Modifier.fillMaxWidth()
+                .clickable { contextSendControlsExpanded = !contextSendControlsExpanded }
+                .padding(vertical = Space4),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                stringResource(R.string.sampling_param_send_controls),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Icon(
+                Lucide.ChevronDown,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+                    .scale(1f, if (contextSendControlsExpanded) -1f else 1f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (contextSendControlsExpanded) {
+            SwitchField(stringResource(R.string.send_max_tokens), p.sendMaxTokens) {
+                onUpdate(p.copy(sendMaxTokens = it))
+            }
+        }
     }
 }
 
@@ -796,14 +869,19 @@ private fun SliderField(
     help: String = "",
     onChange: (Float) -> Unit,
 ) {
+    val normalizedValue = value.roundedSamplingValue()
     Column {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("%.2f".format(value), style = MaterialTheme.typography.bodySmall,
+            Text("%.2f".format(normalizedValue), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Slider(value = value, onValueChange = onChange, valueRange = min..max)
+        Slider(
+            value = normalizedValue,
+            onValueChange = { onChange(it.roundedSamplingValue()) },
+            valueRange = min..max,
+        )
         if (help.isNotBlank()) {
             Text(help, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))

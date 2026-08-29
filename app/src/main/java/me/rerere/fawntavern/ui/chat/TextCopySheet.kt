@@ -28,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -39,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.FileText
@@ -66,6 +68,7 @@ internal fun TextCopySheet(
     onDismiss: (String) -> Unit,
     editable: Boolean = false,
     preview: TextCopyPreview? = null,
+    lineBatchSize: Int? = null,
 ) {
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
@@ -87,6 +90,14 @@ internal fun TextCopySheet(
                 text
             }
         }
+    }
+    val displayedText = if (actualView && actualText != null) actualText else text
+    val effectiveBatchSize = lineBatchSize?.takeIf { it > 0 }
+    var visibleLineCount by remember(displayedText, actualView, effectiveBatchSize) {
+        mutableIntStateOf(effectiveBatchSize ?: Int.MAX_VALUE)
+    }
+    var hasMoreVisualLines by remember(displayedText, actualView, effectiveBatchSize) {
+        mutableStateOf(false)
     }
     val currentText = {
         when {
@@ -154,6 +165,38 @@ internal fun TextCopySheet(
                     lineLimits = TextFieldLineLimits.MultiLine(),
                     modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = 24.dp),
                 )
+            } else if (effectiveBatchSize != null) {
+                SelectionContainer(Modifier.fillMaxWidth().weight(1f)) {
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(bottom = 24.dp),
+                    ) {
+                        Text(
+                            text = displayedText,
+                            style = if (actualView && actualText != null && preview != null) {
+                                MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+                            } else {
+                                MaterialTheme.typography.bodyMedium
+                            },
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = visibleLineCount,
+                            overflow = TextOverflow.Clip,
+                            onTextLayout = { hasMoreVisualLines = it.hasVisualOverflow },
+                        )
+                        if (hasMoreVisualLines) {
+                            TextButton(
+                                onClick = {
+                                    visibleLineCount += effectiveBatchSize
+                                },
+                                modifier = Modifier.align(Alignment.CenterHorizontally),
+                            ) {
+                                Text(stringResource(R.string.show_more_lines))
+                            }
+                        }
+                    }
+                }
             } else if (actualView && actualText != null && preview != null) {
                 SelectionContainer(Modifier.fillMaxWidth().weight(1f)) {
                     Text(

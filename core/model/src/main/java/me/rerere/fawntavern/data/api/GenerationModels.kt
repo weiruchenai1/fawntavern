@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.data.api
 
 import kotlinx.serialization.Serializable
+import kotlin.math.round
 
 /** 协议无关的模型消息；ProviderAdapter 负责将其转换为具体供应商协议。 */
 data class ApiMessage(
@@ -59,6 +60,11 @@ data class GenParams(
     val reasoning: ReasoningLevel = ReasoningLevel.AUTO,
     val imageGeneration: ImageGenerationSettings? = null,
 )
+
+/** 采样滑块和请求体统一使用两位小数，避免界面显示值与实际下发值不一致。 */
+fun Float.roundedSamplingDouble(): Double = round(toDouble() * 100.0) / 100.0
+
+fun Float.roundedSamplingValue(): Float = roundedSamplingDouble().toFloat()
 
 /** AUTO 不下发思考字段，OFF 则显式关闭思考。 */
 enum class ReasoningLevel(val budgetTokens: Int, val effort: String) {

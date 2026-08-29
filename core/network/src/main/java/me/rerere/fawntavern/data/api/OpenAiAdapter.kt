@@ -27,11 +27,11 @@ internal object OpenAiAdapter : ProviderAdapter {
             put("model", model.id)
             put("stream", true)
             put("stream_options", JSONObject().put("include_usage", true))
-            params?.temperature?.let { put("temperature", it.toDouble()) }
-            params?.topP?.let { put("top_p", it.toDouble()) }
+            params?.temperature?.let { put("temperature", it.roundedSamplingDouble()) }
+            params?.topP?.let { put("top_p", it.roundedSamplingDouble()) }
             params?.maxTokens?.let { put("max_tokens", it) }
-            params?.frequencyPenalty?.let { put("frequency_penalty", it.toDouble()) }
-            params?.presencePenalty?.let { put("presence_penalty", it.toDouble()) }
+            params?.frequencyPenalty?.let { put("frequency_penalty", it.roundedSamplingDouble()) }
+            params?.presencePenalty?.let { put("presence_penalty", it.roundedSamplingDouble()) }
             params?.seed?.let { put("seed", it) }
             putReasoning(provider.baseUrl, model.id, params?.reasoning ?: ReasoningLevel.AUTO)
             putSearch(provider.baseUrl, BuiltInTool.SEARCH in model.tools)

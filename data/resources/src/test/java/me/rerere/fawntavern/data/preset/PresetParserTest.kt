@@ -2,6 +2,8 @@ package me.rerere.fawntavern.data.preset
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PresetParserTest {
@@ -66,5 +68,33 @@ class PresetParserTest {
         )
 
         assertEquals(listOf("standard"), preset.regexScripts.map { it.id })
+    }
+
+    @Test
+    fun generationParameterSwitchesDefaultOnAndParseExplicitOff() {
+        val defaults = PresetParser.parse(JSONObject())
+        assertTrue(defaults.sendTemperature)
+        assertTrue(defaults.sendTopP)
+        assertTrue(defaults.sendTopK)
+        assertTrue(defaults.sendFrequencyPenalty)
+        assertTrue(defaults.sendPresencePenalty)
+        assertTrue(defaults.sendSeed)
+        assertTrue(defaults.sendMaxTokens)
+
+        val disabled = PresetParser.parse(
+            JSONObject()
+                .put("fawntavern_send_temperature", false)
+                .put("fawntavern_send_top_p", false)
+                .put("fawntavern_send_top_k", false)
+                .put("fawntavern_send_frequency_penalty", false)
+                .put("fawntavern_send_presence_penalty", false)
+                .put("fawntavern_send_seed", false)
+                .put("fawntavern_send_max_tokens", false)
+        )
+        assertFalse(
+            disabled.sendTemperature || disabled.sendTopP || disabled.sendTopK ||
+                disabled.sendFrequencyPenalty || disabled.sendPresencePenalty || disabled.sendSeed ||
+                disabled.sendMaxTokens
+        )
     }
 }

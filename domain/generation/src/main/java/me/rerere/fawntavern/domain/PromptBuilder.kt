@@ -2,6 +2,7 @@ package me.rerere.fawntavern.domain
 
 import me.rerere.fawntavern.data.api.GenParams
 import me.rerere.fawntavern.data.api.ReasoningLevel
+import me.rerere.fawntavern.data.api.roundedSamplingValue
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.character.CharacterCard
 import me.rerere.fawntavern.data.chat.ChatMessage
@@ -139,16 +140,18 @@ object PromptBuilder {
             buildDefault(card, wiBefore, wiAfter, wiEmTop, wiEmBottom)
         }
 
-        // 采样参数来自预设；无预设时只有思考预算被显式调过才需要构造（否则保持不下发任何参数）
+        // 各采样参数与 maxTokens 由各自的发送开关控制；思考预算独立下发。
         val genParams = when {
             preset != null -> GenParams(
-                temperature = preset.temperature,
-                topP = preset.topP,
-                topK = preset.topK.takeIf { k -> k > 0 },
-                maxTokens = preset.maxTokens.takeIf { t -> t > 0 },
-                frequencyPenalty = preset.frequencyPenalty.takeIf { v -> v != 0f },
-                presencePenalty = preset.presencePenalty.takeIf { v -> v != 0f },
-                seed = preset.seed.takeIf { s -> s >= 0 },
+                temperature = preset.temperature.roundedSamplingValue().takeIf { preset.sendTemperature },
+                topP = preset.topP.roundedSamplingValue().takeIf { preset.sendTopP },
+                topK = preset.topK.takeIf { preset.sendTopK && it > 0 },
+                maxTokens = preset.maxTokens.takeIf { preset.sendMaxTokens && it > 0 },
+                frequencyPenalty = preset.frequencyPenalty.roundedSamplingValue()
+                    .takeIf { preset.sendFrequencyPenalty && it != 0f },
+                presencePenalty = preset.presencePenalty.roundedSamplingValue()
+                    .takeIf { preset.sendPresencePenalty && it != 0f },
+                seed = preset.seed.takeIf { preset.sendSeed && it >= 0 },
                 reasoning = reasoning,
             )
             reasoning != ReasoningLevel.AUTO -> GenParams(reasoning = reasoning)

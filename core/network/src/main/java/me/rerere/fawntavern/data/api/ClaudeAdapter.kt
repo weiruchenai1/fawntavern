@@ -30,8 +30,8 @@ internal object ClaudeAdapter : ProviderAdapter {
             put("stream", true)
             // 开启思考时 Claude 不接受自定义采样参数（temperature 必须为 1、top_k 直接被拒），全部略过
             if (!level.isEnabled) {
-                params?.temperature?.let { put("temperature", it.toDouble().coerceIn(0.0, 1.0)) }
-                params?.topP?.let { put("top_p", it.toDouble()) }
+                params?.temperature?.let { put("temperature", it.roundedSamplingDouble().coerceIn(0.0, 1.0)) }
+                params?.topP?.let { put("top_p", it.roundedSamplingDouble()) }
                 params?.topK?.takeIf { it > 0 }?.let { put("top_k", it) }
             }
             when {

@@ -695,6 +695,7 @@ internal fun ChatContent(
                         userName = profile.userName,
                         charName = conversation.card?.name ?: conversation.current?.charName.orEmpty(),
                     ),
+                    lineBatchSize = TEXT_PANEL_LINE_BATCH_SIZE,
                 )
                 menuTargetIdx = null
             },
@@ -702,6 +703,7 @@ internal fun ChatContent(
                 copyPanel = CopyPanel(
                     title = resources.getString(R.string.request_body),
                     text = formatRequestSnapshots(menuMsg.requestSnapshots),
+                    lineBatchSize = TEXT_PANEL_LINE_BATCH_SIZE,
                 )
                 menuTargetIdx = null
             },
@@ -753,6 +755,7 @@ internal fun ChatContent(
             },
             editable = panel.editable,
             preview = panel.preview,
+            lineBatchSize = panel.lineBatchSize,
         )
     }
 
@@ -871,7 +874,10 @@ private data class CopyPanel(
     val text: String,
     val editable: Boolean = false,
     val preview: TextCopyPreview? = null,
+    val lineBatchSize: Int? = null,
 )
+
+private const val TEXT_PANEL_LINE_BATCH_SIZE = 100
 
 internal fun formatRequestSnapshots(snapshots: List<ApiRequestSnapshot>): String {
     fun parsedBody(body: String): Any = runCatching {

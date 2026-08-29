@@ -62,4 +62,26 @@ class PresetRepositoryTest {
         assertTrue(PresetRepository.rename(context, first.name, "Renamed"))
         assertEquals(first.id, PresetRepository.load(context, "Renamed").id)
     }
+
+    @Test
+    fun savePersistsGenerationParameterSwitches() = runBlocking {
+        val preset = PresetRepository.create(context, "Sampling").copy(
+            sendTemperature = false,
+            sendTopP = false,
+            sendTopK = false,
+            sendFrequencyPenalty = false,
+            sendPresencePenalty = false,
+            sendSeed = false,
+            sendMaxTokens = false,
+        )
+
+        PresetRepository.save(context, preset)
+
+        val saved = PresetRepository.load(context, preset.name)
+        assertFalse(
+            saved.sendTemperature || saved.sendTopP || saved.sendTopK ||
+                saved.sendFrequencyPenalty || saved.sendPresencePenalty || saved.sendSeed ||
+                saved.sendMaxTokens
+        )
+    }
 }

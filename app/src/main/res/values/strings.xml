@@ -138,6 +138,7 @@
     <string name="share">分享</string>
     <string name="select_copy">选择复制</string>
     <string name="request_body">请求体</string>
+    <string name="show_more_lines">显示更多</string>
     <string name="regenerate">重新生成</string>
     <string name="more">更多</string>
     <string name="take_photo">拍照</string>
@@ -332,6 +333,14 @@
     <string name="regex_min_depth">最小深度</string>
     <string name="regex_max_depth">最大深度</string>
     <string name="sampling_params">采样参数</string>
+    <string name="sampling_param_send_controls">参数发送控制</string>
+    <string name="send_temperature">发送 Temperature</string>
+    <string name="send_top_p">发送 Top P</string>
+    <string name="send_top_k">发送 Top K</string>
+    <string name="send_frequency_penalty">发送 Frequency Penalty</string>
+    <string name="send_presence_penalty">发送 Presence Penalty</string>
+    <string name="send_seed">发送 Seed</string>
+    <string name="send_max_tokens">发送 Max Tokens</string>
     <string name="context_params">上下文</string>
     <string name="add_prompt">添加提示词</string>
     <string name="new_prompt">新提示词</string>

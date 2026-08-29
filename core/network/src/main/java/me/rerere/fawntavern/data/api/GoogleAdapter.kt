@@ -24,12 +24,12 @@ internal object GoogleAdapter : ProviderAdapter {
             }
             val cfg = JSONObject()
             params?.let { p ->
-                p.temperature?.let { cfg.put("temperature", it.toDouble()) }
-                p.topP?.let { cfg.put("topP", it.toDouble()) }
+                p.temperature?.let { cfg.put("temperature", it.roundedSamplingDouble()) }
+                p.topP?.let { cfg.put("topP", it.roundedSamplingDouble()) }
                 p.topK?.takeIf { it > 0 }?.let { cfg.put("topK", it) }
                 p.maxTokens?.let { cfg.put("maxOutputTokens", it) }
-                p.frequencyPenalty?.let { cfg.put("frequencyPenalty", it.toDouble()) }
-                p.presencePenalty?.let { cfg.put("presencePenalty", it.toDouble()) }
+                p.frequencyPenalty?.let { cfg.put("frequencyPenalty", it.roundedSamplingDouble()) }
+                p.presencePenalty?.let { cfg.put("presencePenalty", it.roundedSamplingDouble()) }
                 p.seed?.let { cfg.put("seed", it) }
             }
             val level = params?.reasoning ?: ReasoningLevel.AUTO

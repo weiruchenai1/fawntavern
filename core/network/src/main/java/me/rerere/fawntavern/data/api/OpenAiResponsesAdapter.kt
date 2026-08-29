@@ -163,8 +163,8 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
         put("model", model.id)
         put("stream", stream)
         put("store", false)
-        params?.temperature?.let { put("temperature", it.toDouble()) }
-        params?.topP?.let { put("top_p", it.toDouble()) }
+        params?.temperature?.let { put("temperature", it.roundedSamplingDouble()) }
+        params?.topP?.let { put("top_p", it.roundedSamplingDouble()) }
         params?.maxTokens?.let { put("max_output_tokens", it) }
 
         messages.filter { it.role == "system" }

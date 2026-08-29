@@ -11,6 +11,7 @@ import me.rerere.fawntavern.data.RESOURCE_ID_FIELD
 import me.rerere.fawntavern.data.ensureResourceId
 import me.rerere.fawntavern.data.newResourceId
 import me.rerere.fawntavern.data.resourceId
+import me.rerere.fawntavern.data.api.roundedSamplingDouble
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -123,13 +124,20 @@ object PresetRepository {
         root.put("google_model", preset.googleModel)
         root.put("custom_model", preset.customModel)
         root.put("openrouter_model", preset.openrouterModel)
-        root.put("temperature", preset.temperature.toDouble())
-        root.put("top_p", preset.topP.toDouble())
+        root.put("fawntavern_send_temperature", preset.sendTemperature)
+        root.put("fawntavern_send_top_p", preset.sendTopP)
+        root.put("fawntavern_send_top_k", preset.sendTopK)
+        root.put("fawntavern_send_frequency_penalty", preset.sendFrequencyPenalty)
+        root.put("fawntavern_send_presence_penalty", preset.sendPresencePenalty)
+        root.put("fawntavern_send_seed", preset.sendSeed)
+        root.put("fawntavern_send_max_tokens", preset.sendMaxTokens)
+        root.put("temperature", preset.temperature.roundedSamplingDouble())
+        root.put("top_p", preset.topP.roundedSamplingDouble())
         root.put("top_k", preset.topK)
         root.put("top_a", preset.topA.toDouble())
         root.put("min_p", preset.minP.toDouble())
-        root.put("frequency_penalty", preset.frequencyPenalty.toDouble())
-        root.put("presence_penalty", preset.presencePenalty.toDouble())
+        root.put("frequency_penalty", preset.frequencyPenalty.roundedSamplingDouble())
+        root.put("presence_penalty", preset.presencePenalty.roundedSamplingDouble())
         root.put("repetition_penalty", preset.repetitionPenalty.toDouble())
         root.put("seed", preset.seed)
         root.put("openai_max_context", preset.maxContext)
