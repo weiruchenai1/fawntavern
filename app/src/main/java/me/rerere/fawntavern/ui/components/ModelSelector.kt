@@ -347,6 +347,11 @@ internal fun modelTypeForSelection(
         ?.find { it.id == modelId }
         ?.type
         ?.takeIf { it == ModelType.CHAT || it == ModelType.IMAGE }
+        ?: when {
+            providers.any { provider -> provider.models.any { it.type == ModelType.CHAT } } -> ModelType.CHAT
+            providers.any { provider -> provider.models.any { it.type == ModelType.IMAGE } } -> ModelType.IMAGE
+            else -> null
+        }
         ?: ModelType.CHAT
 }
 

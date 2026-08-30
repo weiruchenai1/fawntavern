@@ -14,7 +14,7 @@ object ApiConfigStore {
     private const val KEY_CURRENT = "current_model"
     private const val KEY_CORRUPTED = "providers_corrupted"
     private const val KEY_SCHEMA_VERSION = "schema_version"
-    private const val SCHEMA_VERSION = 5
+    private const val SCHEMA_VERSION = 6
     private const val BUILTIN_HF_Z_IMAGE_ID = "builtin-hf-z-image-community"
     private const val BUILTIN_HF_Z_IMAGE_OFFICIAL_ID = "builtin-hf-z-image-official"
     private const val HF_Z_IMAGE_URL = "https://mrfakename-z-image-turbo.hf.space"
@@ -97,6 +97,7 @@ object ApiConfigStore {
             id = BUILTIN_HF_Z_IMAGE_ID,
             name = "mrfakename Space", type = "gradio",
             baseUrl = HF_Z_IMAGE_URL, apiPath = "/generate_image",
+            enabled = true,
             models = listOf(ModelInfo(
                 id = HF_Z_IMAGE_MODEL_ID, displayName = "Z-Image Turbo",
                 inputModalities = listOf(Modality.TEXT), outputModalities = listOf(Modality.IMAGE),
@@ -107,6 +108,7 @@ object ApiConfigStore {
             id = BUILTIN_HF_Z_IMAGE_OFFICIAL_ID,
             name = "Tongyi-MAI Space", type = "gradio",
             baseUrl = HF_Z_IMAGE_OFFICIAL_URL, apiPath = "/generate",
+            enabled = true,
             gradioImageProfile = GradioImageProfile.Z_IMAGE_OFFICIAL,
             models = listOf(ModelInfo(
                 id = HF_Z_IMAGE_OFFICIAL_MODEL_ID, displayName = "Z-Image Turbo",
@@ -183,11 +185,23 @@ object ApiConfigStore {
             currentModel = p.getString(KEY_CURRENT, "") ?: "",
         ).withValidCurrentModel()
         if (p.getInt(KEY_SCHEMA_VERSION, 1) < SCHEMA_VERSION) {
-            config = config.copy(providers = addMissingBuiltInImageProviders(config.providers))
+            config = config.copy(providers = migrateBuiltInImageProviders(config.providers))
             saveConfig(context, config)
         }
         return config
     }
+
+    /**
+     * 第 6 版配置把内置图片提供商改为默认启用。迁移时同时补齐缺失项，并把旧版本中
+     * 已存在的同一内置提供商启用，确保升级后的行为与全新安装一致。
+     */
+    internal fun migrateBuiltInImageProviders(providers: List<ApiProvider>): List<ApiProvider> =
+        addMissingBuiltInImageProviders(providers).map { provider ->
+            if (provider.isBuiltInImageProvider()) provider.copy(enabled = true) else provider
+        }
+
+    private fun ApiProvider.isBuiltInImageProvider(): Boolean =
+        id == BUILTIN_HF_Z_IMAGE_ID || id == BUILTIN_HF_Z_IMAGE_OFFICIAL_ID
 
     private fun addMissingBuiltInImageProviders(providers: List<ApiProvider>): List<ApiProvider> {
         val out = providers.toMutableList()

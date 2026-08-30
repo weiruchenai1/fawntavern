@@ -33,7 +33,9 @@ internal fun ProviderDetailScreen(
     onDelete: () -> Unit,
     onChange: (ApiProvider) -> Unit = {},
 ) {
-    var prov by remember { mutableStateOf(provider) }
+    // 详情页组合位置可能被不同提供商复用，因此用提供商 ID 标识草稿，
+    // 避免上一个提供商的编辑内容进入当前详情页。
+    var prov by remember(provider.id) { mutableStateOf(provider) }
     val pagerState = key(provider.id) { rememberPagerState(pageCount = { 2 }) }
     val scope = rememberCoroutineScope()
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -59,8 +61,8 @@ internal fun ProviderDetailScreen(
                 Spacer(Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Space8)) {
-                    // A named new provider is a preset, so keep its identity in the detail
-                    // header. Only the empty draft opened by the add button is generic.
+                    // 有名称的新提供商属于预设，详情页标题应保留其名称；只有点击新增按钮
+                    // 创建的空白草稿才显示通用的“新建提供商”标题。
                     if (prov.name.isNotBlank()) { ProviderIcon(prov.name, size = 24.dp) }
                     Text(if (prov.name.isBlank()) stringResource(R.string.new_provider) else prov.name,
                         style = MaterialTheme.typography.titleMedium,

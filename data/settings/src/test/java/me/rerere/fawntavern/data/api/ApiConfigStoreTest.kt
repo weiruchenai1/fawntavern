@@ -103,4 +103,40 @@ class ApiConfigStoreTest {
             config.providers.single().gradioImageProfile,
         )
     }
+
+    @Test
+    fun builtInImageProviderMigrationEnablesExistingProvidersAndAddsMissingProvider() {
+        val migrated = ApiConfigStore.migrateBuiltInImageProviders(
+            listOf(
+                ApiProvider(
+                    id = "builtin-hf-z-image-community",
+                    name = "mrfakename Space",
+                    type = "gradio",
+                    baseUrl = "https://mrfakename-z-image-turbo.hf.space",
+                    enabled = false,
+                    models = listOf(ModelInfo(id = "z-image-turbo", type = ModelType.IMAGE)),
+                ),
+            ),
+        )
+
+        assertEquals(2, migrated.size)
+        assertTrue(migrated.all { it.enabled })
+        assertTrue(migrated.any { it.id == "builtin-hf-z-image-official" })
+    }
+
+    @Test
+    fun builtInImageProviderMigrationKeepsCustomProviderDisabled() {
+        val custom = ApiProvider(
+            id = "custom",
+            name = "Custom",
+            type = "gradio",
+            baseUrl = "https://mrfakename-z-image-turbo.hf.space",
+            enabled = false,
+            models = listOf(ModelInfo(id = "z-image-turbo", type = ModelType.IMAGE)),
+        )
+
+        val migrated = ApiConfigStore.migrateBuiltInImageProviders(listOf(custom))
+
+        assertFalse(migrated.first { it.id == custom.id }.enabled)
+    }
 }

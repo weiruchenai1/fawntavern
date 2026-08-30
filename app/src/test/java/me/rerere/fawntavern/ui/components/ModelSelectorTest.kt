@@ -62,6 +62,34 @@ class ModelSelectorTest {
     }
 
     @Test
+    fun selectorOpensImageCategoryWhenOnlyImageModelsAreAvailable() {
+        val providers = listOf(
+            ApiProvider(
+                id = "image-provider",
+                models = listOf(ModelInfo(id = "image", type = ModelType.IMAGE)),
+            ),
+        )
+
+        assertEquals(ModelType.IMAGE, modelTypeForSelection(providers, ""))
+    }
+
+    @Test
+    fun selectorStillPrefersChatCategoryWhenBothCategoriesAreAvailable() {
+        val providers = listOf(
+            ApiProvider(
+                id = "image-provider",
+                models = listOf(ModelInfo(id = "image", type = ModelType.IMAGE)),
+            ),
+            ApiProvider(
+                id = "chat-provider",
+                models = listOf(ModelInfo(id = "chat", type = ModelType.CHAT)),
+            ),
+        )
+
+        assertEquals(ModelType.CHAT, modelTypeForSelection(providers, ""))
+    }
+
+    @Test
     fun selectorCategoryKeepsOnlyProvidersWithMatchingModels() {
         val providers = listOf(
             ApiProvider(id = "chat", models = listOf(ModelInfo(id = "text"))),

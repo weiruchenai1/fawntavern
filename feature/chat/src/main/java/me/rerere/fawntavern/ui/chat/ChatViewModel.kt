@@ -479,8 +479,14 @@ class ChatViewModel(
         generationOrchestrator.generateTitle(id)
     }
 
-    /** 数据管理页可能清空了聊天记录/角色卡，返回时重新加载并校验当前会话 */
+    /**
+     * 数据管理页可能恢复了任意备份分区。返回时同步刷新配置快照，并重新加载、校验
+     * 聊天记录与提示上下文；TTS 和全局变量由使用方按次读取持久化存储，无需额外快照刷新。
+     */
     private fun refreshAfterDataManagement() {
+        model.reload(currentCard?.name)
+        search.reload()
+        profileCoordinator.reload()
         dataRefresh.refresh(
             defaultPresetName = dependencies.texts.defaultPresetName,
             defaultCharacterName = dependencies.texts.defaultCharacterName,

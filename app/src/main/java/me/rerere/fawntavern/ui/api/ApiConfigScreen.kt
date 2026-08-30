@@ -57,8 +57,8 @@ fun ApiConfigScreen(onBack: () -> Unit) {
     val stateHolder = rememberSaveableStateHolder()
 
     if (editingId != null) {
-        stateHolder.SaveableStateProvider("detail") {
-            val prov = config.providers.find { it.id == editingId } ?: return@SaveableStateProvider
+        key("edit:$editingId") {
+            val prov = config.providers.find { it.id == editingId } ?: return@key
             BackHandler { editingId = null }
             ProviderDetailScreen(
                 provider = prov,
@@ -84,7 +84,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
     }
 
     addingProvider?.let { draftProvider ->
-        stateHolder.SaveableStateProvider("detail") {
+        key("add:${draftProvider.id}") {
             ProviderDetailScreen(
                 provider = draftProvider,
                 isNew = true,
