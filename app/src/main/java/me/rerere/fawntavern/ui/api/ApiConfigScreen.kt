@@ -57,33 +57,38 @@ fun ApiConfigScreen(onBack: () -> Unit) {
     val stateHolder = rememberSaveableStateHolder()
 
     if (editingId != null) {
-        key("edit:$editingId") {
-            val prov = config.providers.find { it.id == editingId } ?: return@key
-            BackHandler { editingId = null }
-            ProviderDetailScreen(
-                provider = prov,
-                isNew = false,
-                onBack = { editingId = null },
-                onSave = { updated ->
-                    config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
-                    save()
-                    Toast.makeText(context, resources.getString(R.string.saved), Toast.LENGTH_SHORT).show()
-                },
-                onDelete = {
-                    config = config.copy(providers = config.providers.filter { it.id != prov.id })
-                    save()
-                    editingId = null
-                },
-                onChange = { updated ->
-                    config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
-                    save()
-                },
-            )
+        val selectedProvider = config.providers.find { it.id == editingId }
+        if (selectedProvider == null) {
+            LaunchedEffect(editingId) { editingId = null }
+        } else {
+            key("edit:${selectedProvider.id}") {
+                BackHandler { editingId = null }
+                ProviderDetailScreen(
+                    provider = selectedProvider,
+                    isNew = false,
+                    onBack = { editingId = null },
+                    onSave = { updated ->
+                        config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
+                        save()
+                        Toast.makeText(context, resources.getString(R.string.saved), Toast.LENGTH_SHORT).show()
+                    },
+                    onDelete = {
+                        config = config.copy(providers = config.providers.filter { it.id != selectedProvider.id })
+                        save()
+                        editingId = null
+                    },
+                    onChange = { updated ->
+                        config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
+                        save()
+                    },
+                )
+            }
         }
         return
     }
 
-    addingProvider?.let { draftProvider ->
+    val draftProvider = addingProvider
+    if (draftProvider != null) {
         key("add:${draftProvider.id}") {
             ProviderDetailScreen(
                 provider = draftProvider,
