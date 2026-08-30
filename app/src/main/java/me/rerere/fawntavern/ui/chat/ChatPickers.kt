@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Smile
@@ -213,7 +214,7 @@ internal fun ImageGenerationSettingsSheet(
                 ) {
                     Slider(
                         value = current.steps.toFloat(),
-                        onValueChange = { onChange(current.copy(steps = it.toInt())) },
+                        onValueChange = { onChange(current.copy(steps = it.roundToInt())) },
                         valueRange = ImageGenerationStore.MIN_STEPS.toFloat()..ImageGenerationStore.MAX_STEPS.toFloat(),
                         steps = ImageGenerationStore.MAX_STEPS - ImageGenerationStore.MIN_STEPS - 1,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),

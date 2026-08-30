@@ -43,7 +43,7 @@ data class GeneratedImage(
 /** 跨供应商共用的图片生成设置。 */
 data class ImageGenerationSettings(
     val count: Int = 1,
-    val aspectRatio: String = "2:3",
+    val aspectRatio: String = "auto",
     val resolution: String = "1k",
     val quality: String = "auto",
     val steps: Int = 9,

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -20,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
@@ -169,47 +173,25 @@ private fun ColumnScope.ModelSelectorList(
 ) {
     val coroutineScope = rememberCoroutineScope()
     var searchKeywords by remember { mutableStateOf("") }
-    var selectedType by remember {
-        mutableStateOf(modelTypeForSelection(providers, currentModel))
-    }
+    val modelTypes = listOf(ModelType.CHAT, ModelType.IMAGE)
+    val pagerState = rememberPagerState(
+        initialPage = modelTypes.indexOf(modelTypeForSelection(providers, currentModel)),
+        pageCount = { modelTypes.size },
+    )
 
-    LaunchedEffect(currentModel) {
-        selectedType = modelTypeForSelection(providers, currentModel)
-    }
-
-    val categoryProviders = remember(providers, selectedType) {
-        providersForModelType(providers, selectedType)
-    }
-
-    val filteredModels = remember(categoryProviders, searchKeywords) {
-        categoryProviders.associate { prov ->
-            prov.id to prov.models.filter {
-                val kw = searchKeywords.trim()
-                kw.isBlank() || it.name.contains(kw, true) || it.id.contains(kw, true)
-            }
-        }
-    }
-
-    // 每个提供商分组在列表中的起始下标（stickyHeader 1 + 空态提示 1 + 模型数）
-    val providerPositions = remember(categoryProviders, filteredModels) {
-        var pos = 0
-        categoryProviders.map { prov ->
-            val start = pos
-            pos += 1 // stickyHeader
-            if (prov.models.isEmpty()) pos += 1 // 空态提示
-            pos += filteredModels[prov.id].orEmpty().size
-            prov.id to start
-        }.toMap()
+    LaunchedEffect(currentModel, providers) {
+        val targetPage = modelTypes.indexOf(modelTypeForSelection(providers, currentModel))
+        if (targetPage != pagerState.currentPage) pagerState.scrollToPage(targetPage)
     }
 
     PrimaryTabRow(
-        selectedTabIndex = if (selectedType == ModelType.CHAT) 0 else 1,
-        containerColor = MaterialTheme.colorScheme.surface,
+        selectedTabIndex = pagerState.currentPage,
+        containerColor = Color.Transparent,
     ) {
-        listOf(ModelType.CHAT, ModelType.IMAGE).forEach { type ->
+        modelTypes.forEachIndexed { index, type ->
             Tab(
-                selected = selectedType == type,
-                onClick = { selectedType = type },
+                selected = pagerState.currentPage == index,
+                onClick = { coroutineScope.launch { pagerState.animateScrollToPage(index) } },
                 text = {
                     Text(stringResource(
                         if (type == ModelType.CHAT) R.string.chat_models_tab
@@ -228,95 +210,127 @@ private fun ColumnScope.ModelSelectorList(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    val selectedModelPosition = remember(categoryProviders, currentModel) {
-        selectedModelListPosition(categoryProviders, currentModel)
-    }
-    val lazyListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = selectedModelPosition ?: 0,
-    )
-    val badgeListState = rememberLazyListState()
-
-    LaunchedEffect(selectedType, currentModel, selectedModelPosition) {
-        lazyListState.requestScrollToItem(selectedModelPosition ?: 0)
-    }
-
-    // 主列表滚动时，底部快捷条跟随滚到当前提供商对应的徽章
-    LaunchedEffect(lazyListState, providerPositions) {
-        snapshotFlow { lazyListState.firstVisibleItemIndex }
-            .distinctUntilChanged()
-            .debounce(BADGE_DEBOUNCE_MS)
-            .collect { index ->
-                val current = providerPositions.entries.findLast { index > it.value }
-                val target = categoryProviders.indexOfFirst { it.id == current?.key }
-                if (target >= 0) badgeListState.animateScrollToItem(target)
-                else badgeListState.requestScrollToItem(0)
-            }
-    }
-
-    LazyColumn(
-        state = lazyListState,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(8.dp),
+    HorizontalPager(
+        state = pagerState,
         modifier = Modifier.weight(1f).fillMaxWidth(),
-    ) {
-        if (categoryProviders.isEmpty()) {
-            item {
-                Text(stringResource(R.string.no_models_in_category),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(8.dp))
+        key = { modelTypes[it] },
+        overscrollEffect = null,
+    ) { page ->
+        val type = modelTypes[page]
+        val categoryProviders = remember(providers, type) {
+            providersForModelType(providers, type)
+        }
+        val filteredModels = remember(categoryProviders, searchKeywords) {
+            categoryProviders.associate { prov ->
+                prov.id to prov.models.filter {
+                    val keyword = searchKeywords.trim()
+                    keyword.isBlank() || it.name.contains(keyword, true) || it.id.contains(keyword, true)
+                }
             }
         }
+        // 每个提供商分组在列表中的起始下标（stickyHeader 1 + 空态提示 1 + 模型数）
+        val providerPositions = remember(categoryProviders, filteredModels) {
+            var position = 0
+            categoryProviders.map { provider ->
+                val start = position
+                position += 1 // stickyHeader
+                if (provider.models.isEmpty()) position += 1 // 空态提示
+                position += filteredModels[provider.id].orEmpty().size
+                provider.id to start
+            }.toMap()
+        }
+        val selectedModelPosition = remember(categoryProviders, currentModel) {
+            selectedModelListPosition(categoryProviders, currentModel)
+        }
+        val lazyListState = rememberLazyListState(
+            initialFirstVisibleItemIndex = selectedModelPosition ?: 0,
+        )
+        val badgeListState = rememberLazyListState()
 
-        categoryProviders.forEach { prov ->
-            stickyHeader(key = "header:${prov.id}") {
-                Row(
-                    Modifier.padding(horizontal = 8.dp).padding(bottom = 4.dp, top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+        LaunchedEffect(currentModel, selectedModelPosition) {
+            lazyListState.requestScrollToItem(selectedModelPosition ?: 0)
+        }
+
+        // 主列表滚动时，底部快捷条跟随滚到当前提供商对应的徽章
+        LaunchedEffect(lazyListState, providerPositions) {
+            snapshotFlow { lazyListState.firstVisibleItemIndex }
+                .distinctUntilChanged()
+                .debounce(BADGE_DEBOUNCE_MS)
+                .collect { index ->
+                    val current = providerPositions.entries.findLast { index > it.value }
+                    val target = categoryProviders.indexOfFirst { it.id == current?.key }
+                    if (target >= 0) badgeListState.animateScrollToItem(target)
+                    else badgeListState.requestScrollToItem(0)
+                }
+        }
+
+        Column(Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = lazyListState,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(8.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            ) {
+                if (categoryProviders.isEmpty()) {
+                    item {
+                        Text(stringResource(R.string.no_models_in_category),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(8.dp))
+                    }
+                }
+
+                categoryProviders.forEach { prov ->
+                    stickyHeader(key = "header:${prov.id}") {
+                        Row(
+                            Modifier.padding(horizontal = 8.dp).padding(bottom = 4.dp, top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(prov.name, style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f))
+                            ProviderBalanceText(prov)
+                        }
+                    }
+
+                    if (prov.models.isEmpty()) {
+                        item(key = "empty:${prov.id}") {
+                            Text(stringResource(R.string.provider_no_models_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp))
+                        }
+                    }
+
+                    items(filteredModels[prov.id].orEmpty(), key = { "${prov.id}:${it.id}" }) { model ->
+                        ModelSelectorRow(
+                            model = model,
+                            selected = "${prov.id}::${model.id}" == currentModel,
+                            onClick = { onSelect(prov.id, model.id) },
+                        )
+                    }
+                }
+            }
+
+            // 底部提供商快捷跳转条
+            if (categoryProviders.size > 1) {
+                LazyRow(
+                    state = badgeListState,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(prov.name, style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.weight(1f))
-                    ProviderBalanceText(prov)
+                    items(categoryProviders, key = { it.id }) { provider ->
+                        AssistChip(
+                            onClick = {
+                                val position = providerPositions[provider.id] ?: 0
+                                coroutineScope.launch { lazyListState.animateScrollToItem(position) }
+                            },
+                            label = { Text(provider.name) },
+                            leadingIcon = { ProviderIcon(provider.name, size = 16.dp) },
+                        )
+                    }
                 }
-            }
-
-            if (prov.models.isEmpty()) {
-                item(key = "empty:${prov.id}") {
-                    Text(stringResource(R.string.provider_no_models_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 8.dp))
-                }
-            }
-
-            items(filteredModels[prov.id].orEmpty(), key = { "${prov.id}:${it.id}" }) { model ->
-                ModelSelectorRow(
-                    model = model,
-                    selected = "${prov.id}::${model.id}" == currentModel,
-                    onClick = { onSelect(prov.id, model.id) },
-                )
-            }
-        }
-    }
-
-    // 底部提供商快捷跳转条
-    if (categoryProviders.size > 1) {
-        LazyRow(
-            state = badgeListState,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            items(categoryProviders, key = { it.id }) { provider ->
-                AssistChip(
-                    onClick = {
-                        val position = providerPositions[provider.id] ?: 0
-                        coroutineScope.launch { lazyListState.animateScrollToItem(position) }
-                    },
-                    label = { Text(provider.name) },
-                    leadingIcon = { ProviderIcon(provider.name, size = 16.dp) },
-                )
             }
         }
     }
@@ -379,7 +393,7 @@ private fun ModelSelectorRow(
             .clip(RoundedCornerShape(12.dp))
             .background(if (selected) MaterialTheme.colorScheme.primaryContainer
                         else MaterialTheme.colorScheme.surface)
-            .clickable { onClick() }
+            .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -34,6 +34,11 @@ class ImageGenerationStoreTest {
     }
 
     @Test
+    fun newModelDefaultsToAutomaticSize() {
+        assertEquals("auto", ImageGenerationStore.get(context, "provider::model").aspectRatio)
+    }
+
+    @Test
     fun qualityIsRememberedPerModel() {
         ImageGenerationStore.set(
             context,

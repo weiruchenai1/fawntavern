@@ -25,7 +25,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -105,7 +105,7 @@ internal fun ModelDetailSheet(
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
     ) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).imePadding()) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f)) {
             Text(
                 stringResource(if (isNew) R.string.add_model else R.string.edit_model),
                 Modifier.fillMaxWidth().padding(horizontal = Space16, vertical = Space4),
@@ -113,21 +113,22 @@ internal fun ModelDetailSheet(
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
             )
-            PrimaryTabRow(
+            PrimaryScrollableTabRow(
                 selectedTabIndex = pagerState.currentPage,
                 containerColor = Color.Transparent,
                 contentColor = MaterialTheme.colorScheme.primary,
+                edgePadding = 16.dp,
             ) {
                 tabs.forEachIndexed { i, title ->
                     Tab(i == pagerState.currentPage, { scope.launch { pagerState.animateScrollToPage(i) } }) {
-                        Text(title, Modifier.padding(vertical = Space12),
+                        Text(title, Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
                             style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth().imePadding(),
                 key = { it },
                 overscrollEffect = null,
             ) { page ->
@@ -225,8 +226,8 @@ private fun BasicTab(
                     },
                     shape = SegmentedButtonDefaults.itemShape(index, types.size),
                     label = { Text(stringResource(
-                        if (type == ModelType.CHAT) R.string.chat_models_tab
-                        else R.string.image_models_tab,
+                        if (type == ModelType.CHAT) R.string.chat_model_purpose
+                        else R.string.image_model_purpose,
                     )) },
                 )
             }
@@ -235,26 +236,23 @@ private fun BasicTab(
 
     if (provider.type == "openai" && model.type == ModelType.CHAT) {
         Field(stringResource(R.string.chat_generation_route)) {
-            val routes = ChatGenerationRoute.entries
+            val routes = listOf(ChatGenerationRoute.CHAT_COMPLETIONS, ChatGenerationRoute.RESPONSES)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 routes.forEachIndexed { index, route ->
                     SegmentedButton(
-                        selected = model.chatGenerationRoute == route,
+                        selected = if (model.chatGenerationRoute == ChatGenerationRoute.PROVIDER_DEFAULT) {
+                            route == if (provider.useResponseApi) ChatGenerationRoute.RESPONSES
+                            else ChatGenerationRoute.CHAT_COMPLETIONS
+                        } else model.chatGenerationRoute == route,
                         onClick = { update(model.copy(chatGenerationRoute = route)) },
                         shape = SegmentedButtonDefaults.itemShape(index, routes.size),
-                        label = { Text(stringResource(when (route) {
-                            ChatGenerationRoute.PROVIDER_DEFAULT -> R.string.chat_route_default
-                            ChatGenerationRoute.CHAT_COMPLETIONS -> R.string.chat_route_completions
-                            ChatGenerationRoute.RESPONSES -> R.string.chat_route_responses
-                        })) },
+                        label = { Text(stringResource(
+                            if (route == ChatGenerationRoute.CHAT_COMPLETIONS) R.string.chat_route_completions
+                            else R.string.chat_route_responses,
+                        )) },
                     )
                 }
             }
-            Text(
-                stringResource(R.string.chat_generation_route_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 

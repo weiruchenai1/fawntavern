@@ -115,6 +115,7 @@ object ApiConfigStore {
                 val type = obj.optString("type", "openai")
                 val useResponseApi = obj.optBoolean("useResponseApi", false)
                 val legacyApiPath = obj.optString("apiPath", "")
+                val migratedModels = migrateChatRoutes(models, type = type, useResponseApi = useResponseApi)
                 providers.add(ApiProvider(
                     id = obj.optString("id", java.util.UUID.randomUUID().toString()),
                     name = obj.optString("name", ""),
@@ -134,7 +135,7 @@ object ApiConfigStore {
                     apiKey = obj.optString("apiKey", ""),
                     enabled = obj.optBoolean("enabled", true),
                     useResponseApi = useResponseApi,
-                    models = models,
+                    models = migratedModels,
                     balanceEnabled = obj.optBoolean("balanceEnabled", false),
                     balancePath = obj.optString("balancePath", ""),
                     balanceJsonKey = obj.optString("balanceJsonKey", ""),
@@ -147,10 +148,14 @@ object ApiConfigStore {
             return recovered
         }
 
-        return ApiConfig(
+        val config = ApiConfig(
             providers = providers,
             currentModel = p.getString(KEY_CURRENT, "") ?: "",
         ).withValidCurrentModel()
+        if (p.getInt(KEY_SCHEMA_VERSION, 1) < SCHEMA_VERSION) {
+            saveConfig(context, config)
+        }
+        return config
     }
 
     /** 重置为预设提供商（清除所有用户配置，重新补种默认预设） */
@@ -241,6 +246,7 @@ object ApiConfigStore {
             val type = obj.optString("type", "openai")
             val useResponseApi = obj.optBoolean("useResponseApi", false)
             val legacyApiPath = obj.optString("apiPath", "")
+            val migratedModels = migrateChatRoutes(models, type = type, useResponseApi = useResponseApi)
             ApiProvider(
                 id = obj.optString("id", java.util.UUID.randomUUID().toString()),
                 name = obj.optString("name", ""),
@@ -260,7 +266,7 @@ object ApiConfigStore {
                 apiKey = obj.optString("apiKey", ""),
                 enabled = obj.optBoolean("enabled", true),
                 useResponseApi = useResponseApi,
-                models = models,
+                models = migratedModels,
                 balanceEnabled = obj.optBoolean("balanceEnabled", false),
                 balancePath = obj.optString("balancePath", ""),
                 balanceJsonKey = obj.optString("balanceJsonKey", ""),
@@ -311,6 +317,21 @@ object ApiConfigStore {
                 it.name == obj.optString("chatGenerationRoute")
             } ?: ChatGenerationRoute.PROVIDER_DEFAULT,
         )
+    }
+
+    private fun migrateChatRoutes(
+        models: List<ModelInfo>,
+        type: String,
+        useResponseApi: Boolean,
+    ): List<ModelInfo> {
+        if (type != "openai") return models
+        val route = if (useResponseApi) ChatGenerationRoute.RESPONSES
+        else ChatGenerationRoute.CHAT_COMPLETIONS
+        return models.map {
+            if (it.type == ModelType.CHAT && it.chatGenerationRoute == ChatGenerationRoute.PROVIDER_DEFAULT) {
+                it.copy(chatGenerationRoute = route)
+            } else it
+        }
     }
 
     private fun kvToJson(list: List<KeyValue>) = JSONArray().apply {

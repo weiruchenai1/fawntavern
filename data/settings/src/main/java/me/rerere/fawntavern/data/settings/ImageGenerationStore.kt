@@ -15,7 +15,7 @@ object ImageGenerationStore {
         val item = read(context).optJSONObject(modelKey) ?: return ImageGenerationSettings()
         return ImageGenerationSettings(
             count = item.optInt("count", 1).coerceIn(1, 5),
-            aspectRatio = item.optString("aspectRatio", "2:3").takeIf { it in ASPECT_RATIOS } ?: "2:3",
+            aspectRatio = item.optString("aspectRatio", "auto").takeIf { it in ASPECT_RATIOS } ?: "auto",
             resolution = item.optString("resolution", "1k").takeIf { it in RESOLUTIONS } ?: "1k",
             quality = item.optString("quality", "auto").takeIf { it in QUALITIES } ?: "auto",
             steps = item.optInt("steps", DEFAULT_STEPS).coerceIn(MIN_STEPS, MAX_STEPS),
@@ -28,7 +28,7 @@ object ImageGenerationStore {
         if (modelKey.isBlank()) return
         val clean = settings.copy(
             count = settings.count.coerceIn(1, 5),
-            aspectRatio = settings.aspectRatio.takeIf { it in ASPECT_RATIOS } ?: "2:3",
+            aspectRatio = settings.aspectRatio.takeIf { it in ASPECT_RATIOS } ?: "auto",
             resolution = settings.resolution.takeIf { it in RESOLUTIONS } ?: "1k",
             quality = settings.quality.takeIf { it in QUALITIES } ?: "auto",
             steps = settings.steps.coerceIn(MIN_STEPS, MAX_STEPS),
