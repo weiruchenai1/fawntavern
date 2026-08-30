@@ -829,6 +829,7 @@ internal fun ChatContent(
             current = model.imageGeneration,
             useOpenAiSizes = displayProv?.type.equals("openai", ignoreCase = true) &&
                 displayModelId.startsWith("gpt-image", ignoreCase = true),
+            useGradioControls = displayProv?.type.equals("gradio", ignoreCase = true),
             onChange = { onAction(ChatAction.UpdateImageGeneration(it)) },
             onDismiss = { showImageGenerationSettings = false },
         )
