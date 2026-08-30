@@ -59,8 +59,10 @@ internal fun ProviderDetailScreen(
                 Spacer(Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Space8)) {
-                    if (!isNew) { ProviderIcon(prov.name, size = 24.dp) }
-                    Text(if (isNew) stringResource(R.string.new_provider) else prov.name,
+                    // A named new provider is a preset, so keep its identity in the detail
+                    // header. Only the empty draft opened by the add button is generic.
+                    if (prov.name.isNotBlank()) { ProviderIcon(prov.name, size = 24.dp) }
+                    Text(if (prov.name.isBlank()) stringResource(R.string.new_provider) else prov.name,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)

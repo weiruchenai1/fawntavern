@@ -16,52 +16,12 @@ import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiProvider
-import me.rerere.fawntavern.data.api.GradioImageProfile
-import me.rerere.fawntavern.data.api.ModelInfo
-import me.rerere.fawntavern.data.api.ModelType
-import me.rerere.fawntavern.data.api.Modality
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.draggableLiftScale
 
 internal const val HF_Z_IMAGE_URL = "https://mrfakename-z-image-turbo.hf.space"
-internal const val HF_Z_IMAGE_MODEL_ID = "z-image-turbo"
-internal const val HF_Z_IMAGE_OFFICIAL_URL = "https://tongyi-mai-z-image-turbo.hf.space"
-internal const val HF_Z_IMAGE_OFFICIAL_MODEL_ID = "tongyi-mai/z-image-turbo"
-
-internal fun huggingFaceImageTemplate() = ApiProvider(
-    name = "mrfakename Space",
-    type = "gradio",
-    baseUrl = HF_Z_IMAGE_URL,
-    apiPath = "/generate_image",
-    models = listOf(
-        ModelInfo(
-            id = HF_Z_IMAGE_MODEL_ID,
-            displayName = "Z-Image Turbo",
-            inputModalities = listOf(Modality.TEXT),
-            outputModalities = listOf(Modality.IMAGE),
-            type = ModelType.IMAGE,
-        ),
-    ),
-)
-
-internal fun officialHuggingFaceImageTemplate() = ApiProvider(
-    name = "Tongyi-MAI Space",
-    type = "gradio",
-    baseUrl = HF_Z_IMAGE_OFFICIAL_URL,
-    apiPath = "/generate",
-    gradioImageProfile = GradioImageProfile.Z_IMAGE_OFFICIAL,
-    models = listOf(
-        ModelInfo(
-            id = HF_Z_IMAGE_OFFICIAL_MODEL_ID,
-            displayName = "Z-Image Turbo",
-            inputModalities = listOf(Modality.TEXT),
-            outputModalities = listOf(Modality.IMAGE),
-            type = ModelType.IMAGE,
-        ),
-    ),
-)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -111,14 +71,6 @@ internal fun ProviderCard(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-}
-
-@Composable
-internal fun HuggingFaceTemplateCard(prov: ApiProvider, onClick: () -> Unit) {
-    ProviderCard(
-        prov = prov,
-        onClick = onClick,
-    )
 }
 
 internal fun replaceVisibleProviderOrder(

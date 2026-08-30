@@ -14,8 +14,14 @@ object ApiConfigStore {
     private const val KEY_CURRENT = "current_model"
     private const val KEY_CORRUPTED = "providers_corrupted"
     private const val KEY_SCHEMA_VERSION = "schema_version"
-    private const val SCHEMA_VERSION = 4
-    /** 预置的常见模型提供商（默认全部禁用、不带模型） */
+    private const val SCHEMA_VERSION = 5
+    private const val BUILTIN_HF_Z_IMAGE_ID = "builtin-hf-z-image-community"
+    private const val BUILTIN_HF_Z_IMAGE_OFFICIAL_ID = "builtin-hf-z-image-official"
+    private const val HF_Z_IMAGE_URL = "https://mrfakename-z-image-turbo.hf.space"
+    private const val HF_Z_IMAGE_OFFICIAL_URL = "https://tongyi-mai-z-image-turbo.hf.space"
+    private const val HF_Z_IMAGE_MODEL_ID = "z-image-turbo"
+    private const val HF_Z_IMAGE_OFFICIAL_MODEL_ID = "tongyi-mai/z-image-turbo"
+    /** 预置的常见模型提供商；图片 Space 作为内置提供商随默认配置启用。 */
     private fun defaultProviders(): List<ApiProvider> = listOf(
         ApiProvider(
             name = "OpenAI", type = "openai",
@@ -87,6 +93,27 @@ object ApiConfigStore {
             name = "智谱AI开放平台", type = "openai",
             baseUrl = "https://open.bigmodel.cn/api/paas/v4", enabled = false,
         ),
+        ApiProvider(
+            id = BUILTIN_HF_Z_IMAGE_ID,
+            name = "mrfakename Space", type = "gradio",
+            baseUrl = HF_Z_IMAGE_URL, apiPath = "/generate_image",
+            models = listOf(ModelInfo(
+                id = HF_Z_IMAGE_MODEL_ID, displayName = "Z-Image Turbo",
+                inputModalities = listOf(Modality.TEXT), outputModalities = listOf(Modality.IMAGE),
+                type = ModelType.IMAGE,
+            )),
+        ),
+        ApiProvider(
+            id = BUILTIN_HF_Z_IMAGE_OFFICIAL_ID,
+            name = "Tongyi-MAI Space", type = "gradio",
+            baseUrl = HF_Z_IMAGE_OFFICIAL_URL, apiPath = "/generate",
+            gradioImageProfile = GradioImageProfile.Z_IMAGE_OFFICIAL,
+            models = listOf(ModelInfo(
+                id = HF_Z_IMAGE_OFFICIAL_MODEL_ID, displayName = "Z-Image Turbo",
+                inputModalities = listOf(Modality.TEXT), outputModalities = listOf(Modality.IMAGE),
+                type = ModelType.IMAGE,
+            )),
+        ),
     )
 
     fun loadConfig(context: Context): ApiConfig {
@@ -151,14 +178,27 @@ object ApiConfigStore {
             return recovered
         }
 
-        val config = ApiConfig(
+        var config = ApiConfig(
             providers = providers,
             currentModel = p.getString(KEY_CURRENT, "") ?: "",
         ).withValidCurrentModel()
         if (p.getInt(KEY_SCHEMA_VERSION, 1) < SCHEMA_VERSION) {
+            config = config.copy(providers = addMissingBuiltInImageProviders(config.providers))
             saveConfig(context, config)
         }
         return config
+    }
+
+    private fun addMissingBuiltInImageProviders(providers: List<ApiProvider>): List<ApiProvider> {
+        val out = providers.toMutableList()
+        val defaults = defaultProviders()
+        if (out.none { it.type == "gradio" && (it.baseUrl == HF_Z_IMAGE_URL || it.models.any { m -> m.id == HF_Z_IMAGE_MODEL_ID }) }) {
+            out += defaults.first { it.id == BUILTIN_HF_Z_IMAGE_ID }
+        }
+        if (out.none { it.type == "gradio" && (it.baseUrl == HF_Z_IMAGE_OFFICIAL_URL || it.models.any { m -> m.id == HF_Z_IMAGE_OFFICIAL_MODEL_ID }) }) {
+            out += defaults.first { it.id == BUILTIN_HF_Z_IMAGE_OFFICIAL_ID }
+        }
+        return out
     }
 
     /** 重置为预设提供商（清除所有用户配置，重新补种默认预设） */
