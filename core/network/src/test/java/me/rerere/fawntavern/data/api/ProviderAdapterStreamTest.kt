@@ -355,9 +355,35 @@ class ProviderAdapterStreamTest {
         val imageTool = body.getJSONArray("tools").getJSONObject(0)
         assertEquals("image_generation", imageTool.getString("type"))
         assertEquals("generate", imageTool.getString("action"))
+        assertFalse(imageTool.has("size"))
+        assertFalse(imageTool.has("quality"))
+        assertTrue(end.generatedImages.single().bytes.contentEquals(png))
+    }
+
+    @Test
+    fun openAiResponsesImageToolUsesOfficialOutputOptions() {
+        val model = ModelInfo(
+            id = "gpt-5.6",
+            outputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+            type = ModelType.IMAGE,
+            imageGenerationRoute = ImageGenerationRoute.RESPONSES_TOOL,
+        )
+
+        val body = OpenAiResponsesAdapter.buildRequestBody(
+            provider = ApiProvider(type = "openai", baseUrl = "https://api.openai.com/v1"),
+            model = model,
+            messages = listOf(ApiMessage("user", "Draw a square image")),
+            params = GenParams(imageGeneration = ImageGenerationSettings(
+                aspectRatio = "1:1",
+                quality = "high",
+            )),
+            tools = emptyList(),
+            stream = true,
+        )
+
+        val imageTool = body.getJSONArray("tools").getJSONObject(0)
         assertEquals("1024x1024", imageTool.getString("size"))
         assertEquals("high", imageTool.getString("quality"))
-        assertTrue(end.generatedImages.single().bytes.contentEquals(png))
     }
 
     @Test
