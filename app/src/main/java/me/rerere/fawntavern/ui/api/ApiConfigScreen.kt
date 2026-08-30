@@ -105,8 +105,11 @@ fun ApiConfigScreen(onBack: () -> Unit) {
     stateHolder.SaveableStateProvider("list") {
         BackHandler(onBack = onBack)
 
-        val configuredHuggingFace = config.providers.any { provider ->
+        val configuredCommunitySpace = config.providers.any { provider ->
             provider.type == "gradio" && provider.models.any { it.id == HF_Z_IMAGE_MODEL_ID }
+        }
+        val configuredOfficialSpace = config.providers.any { provider ->
+            provider.type == "gradio" && provider.models.any { it.id == HF_Z_IMAGE_OFFICIAL_MODEL_ID }
         }
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
@@ -172,9 +175,18 @@ fun ApiConfigScreen(onBack: () -> Unit) {
                     contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(Space12),
                 ) {
-                    if (selectedModelType == ModelType.IMAGE && !configuredHuggingFace) {
-                        item(key = "hf-z-image-template") {
+                    if (selectedModelType == ModelType.IMAGE && !configuredOfficialSpace) {
+                        item(key = "hf-z-image-official-template") {
                             HuggingFaceTemplateCard(
+                                prov = officialHuggingFaceImageTemplate(),
+                                onClick = { addingProvider = officialHuggingFaceImageTemplate() },
+                            )
+                        }
+                    }
+                    if (selectedModelType == ModelType.IMAGE && !configuredCommunitySpace) {
+                        item(key = "hf-z-image-community-template") {
+                            HuggingFaceTemplateCard(
+                                prov = huggingFaceImageTemplate(),
                                 onClick = { addingProvider = huggingFaceImageTemplate() },
                             )
                         }

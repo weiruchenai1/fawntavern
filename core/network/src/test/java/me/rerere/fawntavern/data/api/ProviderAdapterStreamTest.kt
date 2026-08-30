@@ -728,6 +728,120 @@ class ProviderAdapterStreamTest {
     }
 
     @Test
+    fun gradioOfficialProfileUsesQueueApiAndParsesGalleryImage() {
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
+        server.enqueue(MockResponse.Builder()
+            .addHeader("Content-Type", "application/json")
+            .body("""{"dependencies":[{"id":2,"api_name":"generate","targets":[[17,"click"]]}]}""")
+            .build())
+        server.enqueue(MockResponse.Builder()
+            .addHeader("Content-Type", "application/json")
+            .body("""{"event_id":"official-event"}""")
+            .build())
+        server.enqueue(MockResponse.Builder()
+            .addHeader("Content-Type", "text/event-stream")
+            .body("data: {\"msg\":\"process_completed\",\"output\":{\"data\":[[{\"image\":{\"url\":\"/official.png\"},\"caption\":null}],\"42\",42]},\"success\":true}\n\n")
+            .build())
+        server.enqueue(MockResponse.Builder()
+            .addHeader("Content-Type", "image/png")
+            .body(okio.Buffer().write(png))
+            .build())
+
+        val provider = ApiProvider(
+            type = "gradio",
+            baseUrl = server.url("/").toString().trimEnd('/'),
+            apiKey = "hf-test",
+            gradioImageProfile = GradioImageProfile.Z_IMAGE_OFFICIAL,
+        )
+        val model = ModelInfo(
+            id = "tongyi-mai/z-image-turbo",
+            outputModalities = listOf(Modality.IMAGE),
+            type = ModelType.IMAGE,
+        )
+        val end = GradioImageAdapter.stream(
+            provider = provider,
+            model = model,
+            messages = listOf(ApiMessage("user", "draw an official fawn")),
+            params = GenParams(
+                imageGeneration = ImageGenerationSettings(
+                    aspectRatio = "16:9",
+                    resolution = "4k",
+                    steps = 9,
+                    seed = 42,
+                ),
+            ),
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val config = server.takeRequest()
+        val submit = server.takeRequest()
+        val events = server.takeRequest()
+        val download = server.takeRequest()
+        assertTrue(config.requestLine.startsWith("GET /config "))
+        assertEquals("Bearer hf-test", config.headers["Authorization"])
+        assertTrue(submit.requestLine.startsWith("POST /gradio_api/queue/join "))
+        assertEquals("Bearer hf-test", submit.headers["Authorization"])
+        val joinBody = JSONObject(requireNotNull(submit.body).utf8())
+        val data = joinBody.getJSONArray("data")
+        assertEquals("draw an official fawn", data.getString(0))
+        assertEquals("2048x1152 ( 16:9 )", data.getString(1))
+        assertEquals(42, data.getInt(2))
+        assertEquals(8, data.getInt(3))
+        assertEquals(3.0, data.getDouble(4), 0.0)
+        assertFalse(data.getBoolean(5))
+        assertEquals(0, data.getJSONArray(6).length())
+        assertEquals(2, joinBody.getInt("fn_index"))
+        assertEquals(17, joinBody.getInt("trigger_id"))
+        assertTrue(joinBody.getString("session_hash").isNotBlank())
+        assertTrue(events.requestLine.startsWith("GET /gradio_api/queue/data?session_hash="))
+        assertEquals("Bearer hf-test", events.headers["Authorization"])
+        assertTrue(download.requestLine.startsWith("GET /official.png "))
+        assertTrue(end.generatedImages.single().bytes.contentEquals(png))
+    }
+
+    @Test
+    fun gradioOfficialProfileSurfacesQueueError() {
+        server.enqueue(MockResponse.Builder()
+            .addHeader("Content-Type", "application/json")
+            .body("""{"dependencies":[{"id":2,"api_name":"generate","targets":[[17,"click"]]}]}""")
+            .build())
+        server.enqueue(MockResponse.Builder()
+            .addHeader("Content-Type", "application/json")
+            .body("""{"event_id":"quota-event"}""")
+            .build())
+        server.enqueue(MockResponse.Builder()
+            .addHeader("Content-Type", "text/event-stream")
+            .body("data: {\"msg\":\"process_completed\",\"output\":{\"error\":\"60s requested vs. 0s left\",\"title\":\"ZeroGPU quota exceeded\"},\"success\":false,\"title\":\"ZeroGPU quota exceeded\"}\n\n")
+            .build())
+        val provider = ApiProvider(
+            type = "gradio",
+            baseUrl = server.url("/").toString().trimEnd('/'),
+            gradioImageProfile = GradioImageProfile.Z_IMAGE_OFFICIAL,
+        )
+        val model = ModelInfo(
+            id = "tongyi-mai/z-image-turbo",
+            outputModalities = listOf(Modality.IMAGE),
+            type = ModelType.IMAGE,
+        )
+
+        val error = runCatching {
+            GradioImageAdapter.stream(
+                provider, model,
+                listOf(ApiMessage("user", "draw")),
+                GenParams(imageGeneration = ImageGenerationSettings(seed = 42)),
+                emptyList(), { _, _ -> }, {}, {},
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is ApiRequestException)
+        assertTrue(error?.message.orEmpty().contains("ZeroGPU quota exceeded"))
+        assertTrue(error?.message.orEmpty().contains("60s requested vs. 0s left"))
+    }
+
+    @Test
     fun gradioImageAdapterSubmitsRequestedCountSequentially() {
         repeat(2) { index ->
             server.enqueue(MockResponse.Builder()

@@ -17,8 +17,15 @@ data class ApiProvider(
     val balanceEnabled: Boolean = false,     // 余额查询
     val balancePath: String = "",            // 余额 API 路径，如 /user/balance
     val balanceJsonKey: String = "",         // 余额结果 JSON 键，如 balance_infos[0].total_balance
+    val gradioImageProfile: GradioImageProfile = GradioImageProfile.Z_IMAGE_COMMUNITY,
 ) {
     fun model(modelId: String): ModelInfo? = models.find { it.id == modelId }
+}
+
+/** 同为 Gradio 命名接口，不同 Space 的图片参数和返回结构仍可能不同。 */
+enum class GradioImageProfile {
+    Z_IMAGE_COMMUNITY,
+    Z_IMAGE_OFFICIAL,
 }
 
 data class ApiConfig(

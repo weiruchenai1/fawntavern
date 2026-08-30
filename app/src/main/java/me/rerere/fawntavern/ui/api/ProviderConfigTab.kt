@@ -25,6 +25,7 @@ import com.composables.icons.lucide.PlugZap
 import com.composables.icons.lucide.Trash2
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiProvider
+import me.rerere.fawntavern.data.api.GradioImageProfile
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space16
@@ -96,7 +97,13 @@ internal fun ProviderConfigTab(
             "/models/{model}:streamGenerateContent?alt=sse"
         }
         "claude" -> customApiPath.ifBlank { "/messages" }
-        "gradio" -> customApiPath.ifBlank { "/generate_image" }
+        "gradio" -> customApiPath.ifBlank {
+            if (prov.gradioImageProfile == GradioImageProfile.Z_IMAGE_OFFICIAL) {
+                "/generate"
+            } else {
+                "/generate_image"
+            }
+        }
         else -> customApiPath
     }
 

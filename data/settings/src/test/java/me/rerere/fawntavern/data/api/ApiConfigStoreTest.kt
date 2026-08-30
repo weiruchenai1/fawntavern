@@ -79,4 +79,28 @@ class ApiConfigStoreTest {
             provider.models.single().chatGenerationRoute,
         )
     }
+
+    @Test
+    fun portableConfigReadsOfficialGradioImageProfile() {
+        val config = ApiConfigStore.parsePortable(
+            """{"formatVersion":4,"providers":[{"id":"official","name":"Tongyi-MAI Space","type":"gradio","baseUrl":"https://tongyi-mai-z-image-turbo.hf.space","apiPath":"/generate","gradioImageProfile":"Z_IMAGE_OFFICIAL","models":[]}],"currentModel":""}""",
+        )
+
+        assertEquals(
+            GradioImageProfile.Z_IMAGE_OFFICIAL,
+            config.providers.single().gradioImageProfile,
+        )
+    }
+
+    @Test
+    fun legacyGradioConfigDefaultsToCommunityProfile() {
+        val config = ApiConfigStore.parsePortable(
+            """{"formatVersion":3,"providers":[{"id":"community","name":"Hugging Face Space","type":"gradio","baseUrl":"https://mrfakename-z-image-turbo.hf.space","apiPath":"/generate_image","models":[]}],"currentModel":""}""",
+        )
+
+        assertEquals(
+            GradioImageProfile.Z_IMAGE_COMMUNITY,
+            config.providers.single().gradioImageProfile,
+        )
+    }
 }

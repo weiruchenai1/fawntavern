@@ -14,7 +14,7 @@ object ApiConfigStore {
     private const val KEY_CURRENT = "current_model"
     private const val KEY_CORRUPTED = "providers_corrupted"
     private const val KEY_SCHEMA_VERSION = "schema_version"
-    private const val SCHEMA_VERSION = 3
+    private const val SCHEMA_VERSION = 4
     /** 预置的常见模型提供商（默认全部禁用、不带模型） */
     private fun defaultProviders(): List<ApiProvider> = listOf(
         ApiProvider(
@@ -139,6 +139,9 @@ object ApiConfigStore {
                     balanceEnabled = obj.optBoolean("balanceEnabled", false),
                     balancePath = obj.optString("balancePath", ""),
                     balanceJsonKey = obj.optString("balanceJsonKey", ""),
+                    gradioImageProfile = GradioImageProfile.entries.find {
+                        it.name == obj.optString("gradioImageProfile")
+                    } ?: GradioImageProfile.Z_IMAGE_COMMUNITY,
                 ))
             }
         } catch (_: Exception) {
@@ -230,6 +233,7 @@ object ApiConfigStore {
             obj.put("balanceEnabled", p.balanceEnabled)
             obj.put("balancePath", p.balancePath)
             obj.put("balanceJsonKey", p.balanceJsonKey)
+            obj.put("gradioImageProfile", p.gradioImageProfile.name)
             put(obj)
         }
     }
@@ -270,6 +274,9 @@ object ApiConfigStore {
                 balanceEnabled = obj.optBoolean("balanceEnabled", false),
                 balancePath = obj.optString("balancePath", ""),
                 balanceJsonKey = obj.optString("balanceJsonKey", ""),
+                gradioImageProfile = GradioImageProfile.entries.find {
+                    it.name == obj.optString("gradioImageProfile")
+                } ?: GradioImageProfile.Z_IMAGE_COMMUNITY,
             )
         }
 

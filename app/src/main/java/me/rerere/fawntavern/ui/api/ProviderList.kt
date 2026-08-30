@@ -16,6 +16,7 @@ import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiProvider
+import me.rerere.fawntavern.data.api.GradioImageProfile
 import me.rerere.fawntavern.data.api.ModelInfo
 import me.rerere.fawntavern.data.api.ModelType
 import me.rerere.fawntavern.data.api.Modality
@@ -26,15 +27,34 @@ import me.rerere.fawntavern.ui.components.draggableLiftScale
 
 internal const val HF_Z_IMAGE_URL = "https://mrfakename-z-image-turbo.hf.space"
 internal const val HF_Z_IMAGE_MODEL_ID = "z-image-turbo"
+internal const val HF_Z_IMAGE_OFFICIAL_URL = "https://tongyi-mai-z-image-turbo.hf.space"
+internal const val HF_Z_IMAGE_OFFICIAL_MODEL_ID = "tongyi-mai/z-image-turbo"
 
 internal fun huggingFaceImageTemplate() = ApiProvider(
-    name = "Hugging Face Space",
+    name = "mrfakename Space",
     type = "gradio",
     baseUrl = HF_Z_IMAGE_URL,
     apiPath = "/generate_image",
     models = listOf(
         ModelInfo(
             id = HF_Z_IMAGE_MODEL_ID,
+            displayName = "Z-Image Turbo",
+            inputModalities = listOf(Modality.TEXT),
+            outputModalities = listOf(Modality.IMAGE),
+            type = ModelType.IMAGE,
+        ),
+    ),
+)
+
+internal fun officialHuggingFaceImageTemplate() = ApiProvider(
+    name = "Tongyi-MAI Space",
+    type = "gradio",
+    baseUrl = HF_Z_IMAGE_OFFICIAL_URL,
+    apiPath = "/generate",
+    gradioImageProfile = GradioImageProfile.Z_IMAGE_OFFICIAL,
+    models = listOf(
+        ModelInfo(
+            id = HF_Z_IMAGE_OFFICIAL_MODEL_ID,
             displayName = "Z-Image Turbo",
             inputModalities = listOf(Modality.TEXT),
             outputModalities = listOf(Modality.IMAGE),
@@ -94,9 +114,9 @@ internal fun ProviderCard(
 }
 
 @Composable
-internal fun HuggingFaceTemplateCard(onClick: () -> Unit) {
+internal fun HuggingFaceTemplateCard(prov: ApiProvider, onClick: () -> Unit) {
     ProviderCard(
-        prov = huggingFaceImageTemplate(),
+        prov = prov,
         onClick = onClick,
     )
 }
