@@ -77,6 +77,8 @@ private fun Color.toCssHex(): String {
 private fun iconSlug(name: String): String {
     val n = name.lowercase()
     return when {
+        n.contains("z-image") || n.contains("tongyi-mai") -> "qwen_color"
+        n.contains("hugging face") || n.contains("huggingface") -> "huggingface_color"
         n.contains("openai") || n.contains("gpt") || n.startsWith("o1") || n.startsWith("o3") || n.startsWith("o4") -> "openai_color"
         n.contains("google") && !n.contains("gemini") -> "google_color"
         n.contains("gemini") -> "gemini_color"

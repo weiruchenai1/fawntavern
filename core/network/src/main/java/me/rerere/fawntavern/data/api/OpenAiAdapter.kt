@@ -15,10 +15,17 @@ internal object OpenAiAdapter : ProviderAdapter {
         onDelta: (String, String) -> Unit,
         stopped: () -> Unit, onCall: (okhttp3.Call) -> Unit,
     ): StreamEnd {
+        if (isImageGenerationModel(model) &&
+            model.imageGenerationRoute == ImageGenerationRoute.RESPONSES_TOOL
+        ) {
+            return OpenAiResponsesAdapter.stream(
+                provider, model, messages, params, tools, onDelta, stopped, onCall,
+            )
+        }
         if (isImageGenerationModel(model)) {
             return generateImages(provider, model, messages, params, stopped, onCall)
         }
-        if (provider.useResponseApi) {
+        if (model.usesResponsesApi(provider)) {
             return OpenAiResponsesAdapter.stream(
                 provider, model, messages, params, tools, onDelta, stopped, onCall,
             )
@@ -55,7 +62,7 @@ internal object OpenAiAdapter : ProviderAdapter {
         var promptTokens = 0
         var completionTokens = 0
         var cachedTokens = 0
-        val endpoint = provider.apiEndpoint("/chat/completions")
+        val endpoint = provider.openAiChatEndpoint()
         val snapshot = requestSnapshot(endpoint, body)
         captureRequestFailure(snapshot, stopped) {
             SseClient.post(
@@ -116,7 +123,10 @@ internal object OpenAiAdapter : ProviderAdapter {
         stopped: () -> Unit,
         onCall: (okhttp3.Call) -> Unit,
     ): StreamEnd {
-        val prompt = imageGenerationPrompt(messages)
+        val prompt = imageGenerationPrompt(
+            messages,
+            includeContext = params?.imageGeneration?.includeContext != false,
+        )
         require(prompt.isNotBlank()) { "Image generation requires a text prompt" }
         val xaiImageModel = isXaiImageModel(provider, model)
         val sourceImages = imageEditSources(messages)
@@ -154,9 +164,8 @@ internal object OpenAiAdapter : ProviderAdapter {
             // xAI 的临时图片 URL 可能被资源服务器拒绝；直接返回 base64，避免二次下载。
             if (xaiImageModel) put("response_format", "b64_json")
         }
-        val endpoint = provider.apiEndpoint(
-            if (xaiImageModel && sourceImages.isNotEmpty()) "/images/edits"
-            else "/images/generations",
+        val endpoint = provider.imageGenerationEndpoint(
+            edit = xaiImageModel && sourceImages.isNotEmpty(),
         )
         val snapshot = requestSnapshot(endpoint, body)
         val images = captureRequestFailure(snapshot, stopped) {
@@ -205,12 +214,7 @@ internal object OpenAiAdapter : ProviderAdapter {
     }
 
     internal fun isImageGenerationModel(model: ModelInfo): Boolean =
-        Modality.IMAGE in model.outputModalities
-
-    /** 图片提示词保持用户原文；结构化图片设置通过 API 字段单独下发。 */
-    internal fun imageGenerationPrompt(messages: List<ApiMessage>): String =
-        messages.lastOrNull { it.role == "user" && it.content.isNotBlank() }?.content
-            ?: messages.lastOrNull { it.content.isNotBlank() }?.content.orEmpty()
+        model.type == ModelType.IMAGE || Modality.IMAGE in model.outputModalities
 
     internal fun imageEditSources(messages: List<ApiMessage>): List<ApiImage> =
         messages.lastOrNull { it.role == "user" }?.images.orEmpty()

@@ -55,4 +55,32 @@ class ImageGenerationStoreTest {
 
         assertEquals("auto", ImageGenerationStore.get(context, "openai::gpt-image-2").quality)
     }
+
+    @Test
+    fun gradioSamplingSettingsAreRememberedPerModel() {
+        ImageGenerationStore.set(
+            context,
+            "gradio::z-image-turbo",
+            ImageGenerationSettings(steps = 12, seed = 42, includeContext = false),
+        )
+
+        val restored = ImageGenerationStore.get(context, "gradio::z-image-turbo")
+        assertEquals(12, restored.steps)
+        assertEquals(42, restored.seed)
+        assertEquals(false, restored.includeContext)
+        assertEquals(null, ImageGenerationStore.get(context, "gradio::other").seed)
+    }
+
+    @Test
+    fun samplingStepsAreClampedAndNegativeSeedBecomesRandom() {
+        ImageGenerationStore.set(
+            context,
+            "gradio::z-image-turbo",
+            ImageGenerationSettings(steps = 999, seed = -1),
+        )
+
+        val restored = ImageGenerationStore.get(context, "gradio::z-image-turbo")
+        assertEquals(ImageGenerationStore.MAX_STEPS, restored.steps)
+        assertEquals(null, restored.seed)
+    }
 }

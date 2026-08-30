@@ -28,6 +28,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
@@ -59,6 +60,10 @@ import me.rerere.fawntavern.data.api.Modality
 import me.rerere.fawntavern.data.api.ModelAbility
 import me.rerere.fawntavern.data.api.ModelInfo
 import me.rerere.fawntavern.data.api.ModelRegistry
+import me.rerere.fawntavern.data.api.ModelType
+import me.rerere.fawntavern.data.api.ImageGenerationRoute
+import me.rerere.fawntavern.data.api.ChatGenerationRoute
+import me.rerere.fawntavern.data.api.modelTypeOf
 import me.rerere.fawntavern.data.api.supportsBuiltInTool
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.Space4
@@ -131,7 +136,7 @@ internal fun ModelDetailSheet(
                     verticalArrangement = Arrangement.spacedBy(Space16),
                 ) {
                     when (page) {
-                        0 -> BasicTab(draft, isNew) { draft = it }
+                        0 -> BasicTab(draft, provider, isNew) { draft = it }
                         1 -> AdvancedTab(draft) { draft = it }
                         else -> BuiltInToolsTab(draft, provider) { draft = it }
                     }
@@ -155,7 +160,12 @@ internal fun ModelDetailSheet(
 }
 
 @Composable
-private fun BasicTab(model: ModelInfo, isNew: Boolean, update: (ModelInfo) -> Unit) {
+private fun BasicTab(
+    model: ModelInfo,
+    provider: ApiProvider,
+    isNew: Boolean,
+    update: (ModelInfo) -> Unit,
+) {
     OutlinedTextField(
         value = model.id,
         onValueChange = { v ->
@@ -166,6 +176,7 @@ private fun BasicTab(model: ModelInfo, isNew: Boolean, update: (ModelInfo) -> Un
                 id = id, displayName = id,
                 inputModalities = caps.input, outputModalities = caps.output,
                 abilities = caps.abilities,
+                type = modelTypeOf(caps.output),
             ))
         },
         label = { Text(stringResource(R.string.model_id_label)) },
@@ -184,11 +195,109 @@ private fun BasicTab(model: ModelInfo, isNew: Boolean, update: (ModelInfo) -> Un
         modifier = Modifier.fillMaxWidth(),
     )
 
+    Field(stringResource(R.string.model_task_type)) {
+        val types = listOf(ModelType.CHAT, ModelType.IMAGE)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            types.forEachIndexed { index, type ->
+                SegmentedButton(
+                    selected = model.type == type,
+                    onClick = {
+                        val output = when (type) {
+                            ModelType.IMAGE -> (model.outputModalities + Modality.IMAGE).distinct()
+                            ModelType.CHAT -> (model.outputModalities - Modality.IMAGE)
+                                .ifEmpty { listOf(Modality.TEXT) }
+                            ModelType.VIDEO -> model.outputModalities
+                        }
+                        update(model.copy(
+                            type = type,
+                            outputModalities = output,
+                            imageGenerationRoute = if (type == ModelType.IMAGE) {
+                                model.imageGenerationRoute
+                            } else {
+                                ImageGenerationRoute.DIRECT
+                            },
+                            chatGenerationRoute = if (type == ModelType.CHAT) {
+                                model.chatGenerationRoute
+                            } else {
+                                ChatGenerationRoute.PROVIDER_DEFAULT
+                            },
+                        ))
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(index, types.size),
+                    label = { Text(stringResource(
+                        if (type == ModelType.CHAT) R.string.chat_models_tab
+                        else R.string.image_models_tab,
+                    )) },
+                )
+            }
+        }
+    }
+
+    if (provider.type == "openai" && model.type == ModelType.CHAT) {
+        Field(stringResource(R.string.chat_generation_route)) {
+            val routes = ChatGenerationRoute.entries
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                routes.forEachIndexed { index, route ->
+                    SegmentedButton(
+                        selected = model.chatGenerationRoute == route,
+                        onClick = { update(model.copy(chatGenerationRoute = route)) },
+                        shape = SegmentedButtonDefaults.itemShape(index, routes.size),
+                        label = { Text(stringResource(when (route) {
+                            ChatGenerationRoute.PROVIDER_DEFAULT -> R.string.chat_route_default
+                            ChatGenerationRoute.CHAT_COMPLETIONS -> R.string.chat_route_completions
+                            ChatGenerationRoute.RESPONSES -> R.string.chat_route_responses
+                        })) },
+                    )
+                }
+            }
+            Text(
+                stringResource(R.string.chat_generation_route_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    if (provider.type == "openai" && model.type == ModelType.IMAGE) {
+        Field(stringResource(R.string.image_generation_route)) {
+            val routes = ImageGenerationRoute.entries
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                routes.forEachIndexed { index, route ->
+                    SegmentedButton(
+                        selected = model.imageGenerationRoute == route,
+                        onClick = { update(model.copy(imageGenerationRoute = route)) },
+                        shape = SegmentedButtonDefaults.itemShape(index, routes.size),
+                        label = { Text(stringResource(
+                            if (route == ImageGenerationRoute.DIRECT) {
+                                R.string.image_generation_route_direct
+                            } else {
+                                R.string.image_generation_route_responses
+                            },
+                        )) },
+                    )
+                }
+            }
+            Text(
+                stringResource(
+                    if (model.imageGenerationRoute == ImageGenerationRoute.DIRECT) {
+                        R.string.image_generation_route_direct_hint
+                    } else {
+                        R.string.image_generation_route_responses_hint
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
     Field(stringResource(R.string.model_input_modality)) {
         ModalityRow(model.inputModalities) { update(model.copy(inputModalities = it)) }
     }
     Field(stringResource(R.string.model_output_modality)) {
-        ModalityRow(model.outputModalities) { update(model.copy(outputModalities = it)) }
+        ModalityRow(model.outputModalities) {
+            update(model.copy(outputModalities = it))
+        }
     }
     Field(stringResource(R.string.model_abilities)) {
         MultiChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {

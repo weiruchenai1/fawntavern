@@ -44,6 +44,16 @@
     <string name="presets">预设</string>
     <string name="world_books">世界书</string>
     <string name="api_config">API 配置</string>
+    <string name="chat_models_tab">聊天模型</string>
+    <string name="image_models_tab">图片生成模型</string>
+    <string name="hf_space_template_hint">Gradio 图片生成模板 · Token 可选</string>
+    <string name="hf_space_name">Hugging Face Space</string>
+    <string name="z_image_turbo_name">Z-Image Turbo</string>
+    <string name="template_label">模板</string>
+    <string name="hf_token_label">Hugging Face Token（可选）</string>
+    <string name="hf_token_optional_hint">公开 Space 可以留空；填写 Token 后将使用对应账号的访问权限与配额。</string>
+    <string name="gradio_endpoint_check_hint">读取 Space 的 OpenAPI 并检查命名接口，不会提交图片生成任务。</string>
+    <string name="gradio_endpoint_label">接口</string>
     <string name="data_management">数据管理</string>
     <string name="about">关于</string>
     <string name="check_update">检查更新</string>
@@ -453,6 +463,10 @@
     <string name="api_key_label">API Key</string>
     <string name="api_base_url">API Base URL</string>
     <string name="api_path_label">API 路径</string>
+    <string name="chat_api_path_label">Chat Completions 路径</string>
+    <string name="responses_api_path_label">Responses 路径</string>
+    <string name="image_generation_api_path_label">图片生成路径</string>
+    <string name="image_edit_api_path_label">图片编辑路径</string>
     <string name="enabled_label">启用</string>
     <string name="disabled_label">禁用</string>
     <string name="is_enabled_label">是否启用</string>
@@ -460,6 +474,7 @@
     <string name="no_models">暂无模型</string>
     <string name="add_models_hint">点击下方按钮添加模型</string>
     <string name="provider_no_models_hint">暂无模型，请在 API 设置中添加</string>
+    <string name="no_models_in_category">当前分类暂无可用模型</string>
     <string name="no_enabled_providers">暂无已启用的提供商，请在 API 设置中启用</string>
 
     <!-- Chat -->
@@ -503,6 +518,12 @@
     <string name="image_generation_quality_medium">中</string>
     <string name="image_generation_quality_high">高</string>
     <string name="image_generation_auto">自动</string>
+    <string name="image_generation_steps_value">采样步数：%1$d</string>
+    <string name="image_generation_random_seed">随机种子</string>
+    <string name="image_generation_random_seed_hint">关闭后可使用固定 Seed 复现图片</string>
+    <string name="image_generation_seed">Seed</string>
+    <string name="image_generation_include_context">包含聊天上下文</string>
+    <string name="image_generation_include_context_hint">开启后会同时提供角色设定和已裁剪的聊天历史</string>
     <string name="thinking_budget_hint">按模型分别记忆。仅推理模型支持，对普通模型调档可能导致请求失败。</string>
     <string name="reasoning_off">关闭</string>
     <string name="reasoning_off_desc">显式要求模型不思考</string>
@@ -538,6 +559,18 @@
     <string name="model_builtin_tools_tab">内置工具</string>
     <string name="model_name_label">模型名称</string>
     <string name="model_input_modality">输入模态</string>
+    <string name="model_task_type">模型用途</string>
+    <string name="chat_generation_route">聊天调用方式</string>
+    <string name="chat_route_default">默认</string>
+    <string name="chat_route_completions">Chat</string>
+    <string name="chat_route_responses">Responses</string>
+    <string name="chat_generation_route_hint">“默认”沿用提供商旧开关；另外两项只覆盖当前模型。</string>
+    <string name="image_generation_route">图片调用方式</string>
+    <string name="image_generation_route_direct">直接图片 API</string>
+    <string name="image_generation_route_responses">Responses 工具</string>
+    <string name="image_generation_route_direct_hint">直接指定图片模型；单 prompt 接口会把聊天上下文整理后合并。</string>
+    <string name="image_generation_route_responses_hint">使用支持图片生成工具的主模型，原生发送完整消息上下文；可能额外产生主模型 Token 费用。</string>
+    <string name="image_generation_output_auto">输出尺寸和质量由主模型及图片工具自动决定</string>
     <string name="model_output_modality">输出模态</string>
     <string name="model_abilities">模型能力</string>
     <string name="model_abilities_hint">添加模型时按 ID 自动识别，仅用于列表展示，可手动修正。</string>
@@ -568,8 +601,8 @@
     <string name="unknown_format">未知格式</string>
     <string name="config_tab">配置</string>
     <string name="models_tab">模型</string>
-    <string name="response_api_label">Response API</string>
-    <string name="response_api_warning">OpenAI /responses 接口</string>
+    <string name="response_api_label">默认使用 Responses</string>
+    <string name="response_api_warning">仅用于“调用方式为默认”的聊天模型；模型自己的选择优先。</string>
     <string name="balance_label">获取账户余额</string>
     <string name="balance_api_path">余额 API 路径</string>
     <string name="balance_json_key">结果 JSON 键</string>

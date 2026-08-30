@@ -28,14 +28,24 @@ object ConnectionTester {
 
     /** 非流式补全，返回模型回复文本 */
     suspend fun testNonStreaming(provider: ApiProvider, modelId: String): String =
-        withContext(Dispatchers.IO) { generate(provider, modelId, withTool = false).text }
+        withContext(Dispatchers.IO) {
+            if (provider.type == "gradio") GradioImageAdapter.inspect(provider)
+            else generate(provider, modelId, withTool = false).text
+        }
 
     /** 工具调用测试：带一个无参工具发起非流式请求，检查模型是否调用 */
     suspend fun testToolCall(provider: ApiProvider, modelId: String): ToolCallResult =
-        withContext(Dispatchers.IO) { generate(provider, modelId, withTool = true) }
+        withContext(Dispatchers.IO) {
+            if (provider.type == "gradio") ToolCallResult("", "", GradioImageAdapter.inspect(provider))
+            else generate(provider, modelId, withTool = true)
+        }
 
     /** 流式补全（复用 ChatApi 的 SSE 通道），onDelta 回调增量文本 */
     suspend fun testStreaming(provider: ApiProvider, modelId: String, onDelta: (String) -> Unit) {
+        if (provider.type == "gradio") {
+            onDelta(withContext(Dispatchers.IO) { GradioImageAdapter.inspect(provider) })
+            return
+        }
         val job = coroutineContext[Job]
         ChatApi.streamChat(
             provider, modelId,
@@ -58,7 +68,9 @@ object ConnectionTester {
     // ── OpenAI 兼容: POST {base}/chat/completions（stream=false） ──
 
     private fun openAi(provider: ApiProvider, model: ModelInfo, withTool: Boolean): ToolCallResult {
-        if (provider.useResponseApi) return openAiResponses(provider, model, withTool)
+        if (model.usesResponsesApi(provider) ||
+            model.imageGenerationRoute == ImageGenerationRoute.RESPONSES_TOOL
+        ) return openAiResponses(provider, model, withTool)
         val body = JSONObject().apply {
             put("model", model.id)
             put("stream", false)
@@ -75,7 +87,7 @@ object ConnectionTester {
             }
             applyCustomBodies(model)
         }
-        val resp = post(provider.apiEndpoint("/chat/completions"),
+        val resp = post(provider.openAiChatEndpoint(),
             model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")), body)
         val msg = resp.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")
         val fn = msg?.optJSONArray("tool_calls")?.optJSONObject(0)?.optJSONObject("function")
@@ -111,7 +123,7 @@ object ConnectionTester {
             stream = false,
         )
         val response = post(
-            OpenAiResponsesAdapter.endpoint(provider),
+            OpenAiResponsesAdapter.endpoint(provider, allowCustomPath = provider.useResponseApi),
             model.applyHeaders(mapOf("Authorization" to "Bearer ${provider.apiKey}")),
             body,
         )

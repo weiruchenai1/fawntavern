@@ -44,6 +44,16 @@
     <string name="presets">Presets</string>
     <string name="world_books">World Books</string>
     <string name="api_config">API Config</string>
+    <string name="chat_models_tab">Chat models</string>
+    <string name="image_models_tab">Image models</string>
+    <string name="hf_space_template_hint">Gradio image template · token optional</string>
+    <string name="hf_space_name">Hugging Face Space</string>
+    <string name="z_image_turbo_name">Z-Image Turbo</string>
+    <string name="template_label">Template</string>
+    <string name="hf_token_label">Hugging Face Token (optional)</string>
+    <string name="hf_token_optional_hint">Public Spaces work without a token. Add one to use that account’s access and quota.</string>
+    <string name="gradio_endpoint_check_hint">Reads the Space OpenAPI and checks the named endpoint without submitting an image job.</string>
+    <string name="gradio_endpoint_label">Endpoint</string>
     <string name="data_management">Data Management</string>
     <string name="about">About</string>
     <string name="check_update">Check Update</string>
@@ -455,6 +465,10 @@
     <string name="api_key_label">API Key</string>
     <string name="api_base_url">API Base URL</string>
     <string name="api_path_label">API Path</string>
+    <string name="chat_api_path_label">Chat Completions path</string>
+    <string name="responses_api_path_label">Responses path</string>
+    <string name="image_generation_api_path_label">Image generation path</string>
+    <string name="image_edit_api_path_label">Image edit path</string>
     <string name="enabled_label">Enabled</string>
     <string name="disabled_label">Disabled</string>
     <string name="is_enabled_label">Enabled</string>
@@ -462,6 +476,7 @@
     <string name="no_models">No models</string>
     <string name="add_models_hint">Tap the button below to add models</string>
     <string name="provider_no_models_hint">No models yet — add them in API settings</string>
+    <string name="no_models_in_category">No available models in this category</string>
     <string name="no_enabled_providers">No enabled providers — enable one in API settings</string>
 
     <!-- Chat -->
@@ -505,6 +520,12 @@
     <string name="image_generation_quality_medium">Medium</string>
     <string name="image_generation_quality_high">High</string>
     <string name="image_generation_auto">Auto</string>
+    <string name="image_generation_steps_value">Sampling steps: %1$d</string>
+    <string name="image_generation_random_seed">Random seed</string>
+    <string name="image_generation_random_seed_hint">Turn off to use a fixed Seed and reproduce an image</string>
+    <string name="image_generation_seed">Seed</string>
+    <string name="image_generation_include_context">Include chat context</string>
+    <string name="image_generation_include_context_hint">Also provides character instructions and the trimmed conversation history</string>
     <string name="thinking_budget_hint">Remembered per model. Reasoning models only — raising it on a regular model may make requests fail.</string>
     <string name="reasoning_off">Off</string>
     <string name="reasoning_off_desc">Explicitly tell the model not to think</string>
@@ -540,6 +561,18 @@
     <string name="model_builtin_tools_tab">Built-in Tools</string>
     <string name="model_name_label">Model name</string>
     <string name="model_input_modality">Input</string>
+    <string name="model_task_type">Model purpose</string>
+    <string name="chat_generation_route">Chat route</string>
+    <string name="chat_route_default">Default</string>
+    <string name="chat_route_completions">Chat</string>
+    <string name="chat_route_responses">Responses</string>
+    <string name="chat_generation_route_hint">Default follows the provider’s legacy switch; the other options override only this model.</string>
+    <string name="image_generation_route">Image route</string>
+    <string name="image_generation_route_direct">Direct image API</string>
+    <string name="image_generation_route_responses">Responses tool</string>
+    <string name="image_generation_route_direct_hint">Selects an image model directly. Single-prompt endpoints receive flattened chat context.</string>
+    <string name="image_generation_route_responses_hint">Uses a mainline model with an image generation tool and sends native message context. Mainline-model token charges may also apply.</string>
+    <string name="image_generation_output_auto">Output size and quality are chosen automatically by the mainline model and image tool</string>
     <string name="model_output_modality">Output</string>
     <string name="model_abilities">Abilities</string>
     <string name="model_abilities_hint">Detected from the model ID when added. Display only — edit if wrong.</string>
@@ -570,8 +603,8 @@
     <string name="unknown_format">Unknown</string>
     <string name="config_tab">Config</string>
     <string name="models_tab">Models</string>
-    <string name="response_api_label">Response API</string>
-    <string name="response_api_warning">OpenAI /responses endpoint</string>
+    <string name="response_api_label">Use Responses by default</string>
+    <string name="response_api_warning">Only applies to chat models whose route is Default; a model-level choice takes precedence.</string>
     <string name="balance_label">Check Balance</string>
     <string name="balance_api_path">Balance API Path</string>
     <string name="balance_json_key">Result JSON Key</string>

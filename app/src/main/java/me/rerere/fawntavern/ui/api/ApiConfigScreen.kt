@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -15,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,6 +26,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import me.rerere.fawntavern.R
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -35,6 +38,8 @@ import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ConnectionTester
 import me.rerere.fawntavern.data.api.ModelApi
 import me.rerere.fawntavern.data.api.ModelInfo
+import me.rerere.fawntavern.data.api.ModelType
+import me.rerere.fawntavern.data.api.Modality
 import me.rerere.fawntavern.data.api.modelInfoOf
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -50,7 +55,30 @@ import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 
-val API_TYPES = listOf("openai" to "OpenAI", "google" to "Google", "claude" to "Claude")
+val API_TYPES = listOf(
+    "openai" to "OpenAI",
+    "google" to "Google",
+    "claude" to "Claude",
+    "gradio" to "Gradio",
+)
+
+private const val HF_Z_IMAGE_URL = "https://mrfakename-z-image-turbo.hf.space"
+
+private fun huggingFaceImageTemplate() = ApiProvider(
+    name = "Hugging Face Space",
+    type = "gradio",
+    baseUrl = HF_Z_IMAGE_URL,
+    apiPath = "/generate_image",
+    models = listOf(
+        ModelInfo(
+            id = "z-image-turbo",
+            displayName = "Z-Image Turbo",
+            inputModalities = listOf(Modality.TEXT),
+            outputModalities = listOf(Modality.IMAGE),
+            type = ModelType.IMAGE,
+        ),
+    ),
+)
 
 @Composable
 fun ApiConfigScreen(onBack: () -> Unit) {
@@ -72,7 +100,8 @@ fun ApiConfigScreen(onBack: () -> Unit) {
     }
 
     var editingId by remember { mutableStateOf<String?>(null) }
-    var adding by remember { mutableStateOf(false) }
+    var addingProvider by remember { mutableStateOf<ApiProvider?>(null) }
+    var selectedModelType by rememberSaveable { mutableStateOf(ModelType.CHAT) }
     // SaveableStateHolder：进入详情页时列表离开组合，其 LazyListState 被暂存；
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
     val stateHolder = rememberSaveableStateHolder()
@@ -83,6 +112,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
             BackHandler { editingId = null }
             ProviderDetailScreen(
                 provider = prov,
+                isNew = false,
                 onBack = { editingId = null },
                 onSave = { updated ->
                     config = config.copy(providers = config.providers.map { if (it.id == updated.id) updated else it })
@@ -103,19 +133,20 @@ fun ApiConfigScreen(onBack: () -> Unit) {
         return
     }
 
-    if (adding) {
+    addingProvider?.let { draftProvider ->
         stateHolder.SaveableStateProvider("detail") {
             ProviderDetailScreen(
-                provider = ApiProvider(),
-                onBack = { adding = false },
+                provider = draftProvider,
+                isNew = true,
+                onBack = { addingProvider = null },
                 onSave = { newProv ->
                     config = config.copy(providers = config.providers + newProv)
                     save()
                     Toast.makeText(context, resources.getString(R.string.saved), Toast.LENGTH_SHORT).show()
-                    adding = false
+                    addingProvider = null
                     editingId = newProv.id
                 },
-                onDelete = { adding = false }
+                onDelete = { addingProvider = null }
             )
         }
         return
@@ -124,47 +155,97 @@ fun ApiConfigScreen(onBack: () -> Unit) {
     stateHolder.SaveableStateProvider("list") {
         BackHandler(onBack = onBack)
 
+    val visibleProviders = config.providers.filter { provider ->
+        when (selectedModelType) {
+            ModelType.CHAT -> provider.type != "gradio" && (
+                provider.models.isEmpty() || provider.models.any { it.type == ModelType.CHAT }
+            )
+            ModelType.IMAGE -> provider.type == "gradio" || provider.models.any { it.type == ModelType.IMAGE }
+            ModelType.VIDEO -> provider.models.any { it.type == ModelType.VIDEO }
+        }
+    }
+    val configuredHf = config.providers.firstOrNull {
+        it.type == "gradio" && it.models.any { model -> model.id == "z-image-turbo" }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppTopBar(stringResource(R.string.api_config), onBack) },
+        topBar = {
+            Column {
+                AppTopBar(stringResource(R.string.api_config), onBack)
+                PrimaryTabRow(
+                    selectedTabIndex = if (selectedModelType == ModelType.CHAT) 0 else 1,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ) {
+                    listOf(ModelType.CHAT, ModelType.IMAGE).forEach { type ->
+                        Tab(
+                            selected = selectedModelType == type,
+                            onClick = { selectedModelType = type },
+                            text = {
+                                Text(stringResource(
+                                    if (type == ModelType.CHAT) R.string.chat_models_tab
+                                    else R.string.image_models_tab,
+                                ))
+                            },
+                        )
+                    }
+                }
+            }
+        },
         floatingActionButton = {
-            FloatingActionButton(onClick = { adding = true }) {
+            FloatingActionButton(onClick = {
+                if (selectedModelType == ModelType.IMAGE) {
+                    if (configuredHf != null) editingId = configuredHf.id
+                    else addingProvider = huggingFaceImageTemplate()
+                } else {
+                    addingProvider = ApiProvider()
+                }
+            }) {
                 Icon(Lucide.Plus, stringResource(R.string.add_provider), Modifier.size(24.dp))
             }
         }
     ) { padding ->
-        if (config.providers.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.no_api_providers), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        } else {
-            // 长按 grip 手柄拖动排序，靠近边缘自动滚动（sh.calvin.reorderable）
-            val (listState, reorderState) = rememberReorderableList(
-                items = config.providers,
-                keyOf = { it.id },
-            ) { list ->
-                config = config.copy(providers = list)
-                save()
-            }
+        // Tab 只是同一份 provider 配置的任务视图；混合提供商仍共享地址和密钥。
+        val (listState, reorderState) = rememberReorderableList(
+            items = visibleProviders,
+            keyOf = { it.id },
+        ) { list ->
+            config = config.copy(providers = replaceVisibleProviderOrder(config.providers, list))
+            save()
+        }
 
-            LazyColumn(
-                Modifier.fillMaxSize().padding(padding),
-                state = listState,
-                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(Space12),
-            ) {
-                itemsIndexed(config.providers, key = { _, p -> p.id }) { _, prov ->
-                    ReorderableItem(reorderState, key = prov.id) { dragging ->
-                        ProviderCard(
-                            prov = prov,
-                            onClick = { editingId = prov.id },
-                            dragging = dragging,
-                            modifier = Modifier.longPressDraggableHandle(),
-                        )
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding),
+            state = listState,
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(Space12),
+        ) {
+            if (selectedModelType == ModelType.IMAGE && configuredHf == null) {
+                item(key = "hf-z-image-template") {
+                    HuggingFaceTemplateCard(
+                        onClick = { addingProvider = huggingFaceImageTemplate() },
+                    )
+                }
+            }
+            if (visibleProviders.isEmpty() && selectedModelType == ModelType.CHAT) {
+                item {
+                    Box(Modifier.fillParentMaxHeight(0.7f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(stringResource(R.string.no_api_providers), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                item { Spacer(Modifier.height(80.dp)) }
             }
+            itemsIndexed(visibleProviders, key = { _, p -> p.id }) { _, prov ->
+                ReorderableItem(reorderState, key = prov.id) { dragging ->
+                    ProviderCard(
+                        prov = prov,
+                        modelCount = prov.models.count { it.type == selectedModelType },
+                        onClick = { editingId = prov.id },
+                        dragging = dragging,
+                        modifier = Modifier.longPressDraggableHandle(),
+                    )
+                }
+            }
+            item { Spacer(Modifier.height(80.dp)) }
         }
     }
     } // SaveableStateProvider("list")
@@ -174,6 +255,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
 @Composable
 private fun ProviderCard(
     prov: ApiProvider,
+    modelCount: Int = prov.models.size,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     dragging: Boolean = false,
@@ -206,7 +288,7 @@ private fun ProviderCard(
                          else stringResource(R.string.disabled_label))
                 }
                 Tag(type = TagType.INFO) {
-                    Text(androidx.compose.ui.res.pluralStringResource(R.plurals.models_count_fmt, prov.models.size, prov.models.size))
+                    Text(androidx.compose.ui.res.pluralStringResource(R.plurals.models_count_fmt, modelCount, modelCount))
                 }
             }
         }
@@ -220,8 +302,47 @@ private fun ProviderCard(
 }
 
 @Composable
+private fun HuggingFaceTemplateCard(onClick: () -> Unit) {
+    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = Space16, vertical = Space12),
+            horizontalArrangement = Arrangement.spacedBy(Space12),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ProviderIcon("Hugging Face", size = 40.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space4)) {
+                Text(stringResource(R.string.hf_space_name), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.z_image_turbo_name),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    stringResource(R.string.hf_space_template_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Tag(type = TagType.INFO) {
+                Text(stringResource(R.string.template_label))
+            }
+        }
+    }
+}
+
+internal fun replaceVisibleProviderOrder(
+    all: List<ApiProvider>,
+    reordered: List<ApiProvider>,
+): List<ApiProvider> {
+    val ids = reordered.mapTo(hashSetOf()) { it.id }
+    val iterator = reordered.iterator()
+    return all.map { provider -> if (provider.id in ids) iterator.next() else provider }
+}
+
+@Composable
 private fun ProviderDetailScreen(
     provider: ApiProvider,
+    isNew: Boolean,
     onBack: () -> Unit,
     onSave: (ApiProvider) -> Unit,
     onDelete: () -> Unit,
@@ -230,7 +351,6 @@ private fun ProviderDetailScreen(
     var prov by remember { mutableStateOf(provider) }
     val pagerState = key(provider.id) { rememberPagerState(pageCount = { 2 }) }
     val scope = rememberCoroutineScope()
-    val isNew = provider.name.isBlank()
 
     BackHandler(onBack = onBack)
 
@@ -305,6 +425,26 @@ private fun ProviderConfigTab(
     var name by remember(prov) { mutableStateOf(prov.name) }
     var baseUrl by remember(prov) { mutableStateOf(prov.baseUrl) }
     var customApiPath by remember(prov) { mutableStateOf(prov.apiPath) }
+    var chatApiPath by remember(prov) {
+        mutableStateOf(if (prov.type == "openai") {
+            prov.chatApiPath.ifBlank { "/chat/completions" }
+        } else prov.chatApiPath)
+    }
+    var responsesApiPath by remember(prov) {
+        mutableStateOf(if (prov.type == "openai") {
+            prov.responsesApiPath.ifBlank { "/responses" }
+        } else prov.responsesApiPath)
+    }
+    var imageGenerationApiPath by remember(prov) {
+        mutableStateOf(if (prov.type == "openai") {
+            prov.imageGenerationApiPath.ifBlank { "/images/generations" }
+        } else prov.imageGenerationApiPath)
+    }
+    var imageEditApiPath by remember(prov) {
+        mutableStateOf(if (prov.type == "openai") {
+            prov.imageEditApiPath.ifBlank { "/images/edits" }
+        } else prov.imageEditApiPath)
+    }
     var apiKey by remember(prov) { mutableStateOf(prov.apiKey) }
     var enabledValue by remember(prov) { mutableStateOf(prov.enabled) }
     var responseApi by remember(prov) { mutableStateOf(prov.useResponseApi) }
@@ -315,7 +455,13 @@ private fun ProviderConfigTab(
     var showTestDialog by remember { mutableStateOf(false) }
 
     val currentProv = prov.copy(
-        name = name, baseUrl = baseUrl, apiPath = customApiPath,
+        name = name,
+        baseUrl = baseUrl,
+        apiPath = if (prov.type == "openai") "" else customApiPath,
+        chatApiPath = chatApiPath,
+        responsesApiPath = responsesApiPath,
+        imageGenerationApiPath = imageGenerationApiPath,
+        imageEditApiPath = imageEditApiPath,
         apiKey = apiKey, enabled = enabledValue,
         useResponseApi = responseApi,
         balanceEnabled = balanceEnabled, balancePath = balancePath, balanceJsonKey = balanceJsonKey,
@@ -325,9 +471,8 @@ private fun ProviderConfigTab(
             "/models/{model}:streamGenerateContent?alt=sse"
         }
         "claude" -> customApiPath.ifBlank { "/messages" }
-        else -> customApiPath.ifBlank {
-            if (responseApi) "/responses" else "/chat/completions"
-        }
+        "gradio" -> customApiPath.ifBlank { "/generate_image" }
+        else -> customApiPath
     }
 
     Column(
@@ -340,22 +485,40 @@ private fun ProviderConfigTab(
         val types = API_TYPES
         val typeIdx = types.indexOfFirst { it.first == prov.type }.coerceAtLeast(0)
         var selectedTypeIdx by remember(prov) { mutableIntStateOf(typeIdx) }
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            types.forEachIndexed { idx, (key, label) ->
-                SegmentedButton(
-                    shape = SegmentedButtonDefaults.itemShape(idx, types.size),
-                    selected = selectedTypeIdx == idx,
-                    onClick = {
-                        selectedTypeIdx = idx
-                        if (key != "openai") responseApi = false
-                        customApiPath = ""
-                        update(currentProv.copy(
-                            type = key,
-                            apiPath = "",
-                            useResponseApi = key == "openai" && responseApi,
-                        ))
-                    },
-                    label = { Text(label) })
+        val typeScrollState = rememberScrollState()
+        val typeItemWidthPx = with(LocalDensity.current) { 104.dp.roundToPx() }
+        LaunchedEffect(selectedTypeIdx, typeItemWidthPx) {
+            typeScrollState.animateScrollTo(selectedTypeIdx * typeItemWidthPx)
+        }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(typeScrollState),
+        ) {
+            SingleChoiceSegmentedButtonRow(Modifier.width((types.size * 104).dp)) {
+                types.forEachIndexed { idx, (key, label) ->
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(idx, types.size),
+                        selected = selectedTypeIdx == idx,
+                        onClick = {
+                            selectedTypeIdx = idx
+                            if (key != "openai") responseApi = false
+                            customApiPath = ""
+                            chatApiPath = ""
+                            responsesApiPath = ""
+                            imageGenerationApiPath = ""
+                            imageEditApiPath = ""
+                            update(currentProv.copy(
+                                type = key,
+                                apiPath = "",
+                                chatApiPath = "",
+                                responsesApiPath = "",
+                                imageGenerationApiPath = "",
+                                imageEditApiPath = "",
+                                useResponseApi = key == "openai" && responseApi,
+                            ))
+                        },
+                        label = { Text(label) },
+                    )
+                }
             }
         }
 
@@ -363,7 +526,9 @@ private fun ProviderConfigTab(
             label = { Text(stringResource(R.string.provider_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
 
         OutlinedTextField(apiKey, { apiKey = it; update(currentProv.copy(apiKey = it)) },
-            label = { Text(stringResource(R.string.api_key_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            label = { Text(stringResource(
+                if (prov.type == "gradio") R.string.hf_token_label else R.string.api_key_label,
+            )) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 IconButton(onClick = { keyVisible = !keyVisible }) {
@@ -373,18 +538,60 @@ private fun ProviderConfigTab(
 
         OutlinedTextField(baseUrl, { baseUrl = it; update(currentProv.copy(baseUrl = it)) },
             label = { Text(stringResource(R.string.api_base_url)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("https://api.openai.com/v1") })
+            placeholder = { Text(if (prov.type == "gradio") HF_Z_IMAGE_URL else "https://api.openai.com/v1") })
 
-        OutlinedTextField(
-            value = apiPath,
-            onValueChange = {
-                customApiPath = it
-                update(currentProv.copy(apiPath = it))
-            },
-            label = { Text(stringResource(R.string.api_path_label)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (prov.type == "gradio") {
+            Text(
+                stringResource(R.string.hf_token_optional_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (prov.type == "openai") {
+            OutlinedTextField(
+                value = chatApiPath,
+                onValueChange = { chatApiPath = it; update(currentProv.copy(chatApiPath = it)) },
+                label = { Text(stringResource(R.string.chat_api_path_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = responsesApiPath,
+                onValueChange = { responsesApiPath = it; update(currentProv.copy(responsesApiPath = it)) },
+                label = { Text(stringResource(R.string.responses_api_path_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = imageGenerationApiPath,
+                onValueChange = {
+                    imageGenerationApiPath = it
+                    update(currentProv.copy(imageGenerationApiPath = it))
+                },
+                label = { Text(stringResource(R.string.image_generation_api_path_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = imageEditApiPath,
+                onValueChange = { imageEditApiPath = it; update(currentProv.copy(imageEditApiPath = it)) },
+                label = { Text(stringResource(R.string.image_edit_api_path_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            OutlinedTextField(
+                value = apiPath,
+                onValueChange = {
+                    customApiPath = it
+                    update(currentProv.copy(apiPath = it))
+                },
+                label = { Text(stringResource(R.string.api_path_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween) {
@@ -401,8 +608,7 @@ private fun ProviderConfigTab(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Switch(responseApi, {
                         responseApi = it
-                        customApiPath = ""
-                        update(currentProv.copy(useResponseApi = it, apiPath = ""))
+                        update(currentProv.copy(useResponseApi = it))
                     })
                 }
                 Text(
@@ -413,14 +619,16 @@ private fun ProviderConfigTab(
             }
         }
 
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(stringResource(R.string.balance_label), style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Switch(balanceEnabled, { balanceEnabled = it; update(currentProv.copy(balanceEnabled = it)) })
+        if (prov.type != "gradio") {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(stringResource(R.string.balance_label), style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Switch(balanceEnabled, { balanceEnabled = it; update(currentProv.copy(balanceEnabled = it)) })
+            }
         }
 
-        if (balanceEnabled) {
+        if (balanceEnabled && prov.type != "gradio") {
             OutlinedTextField(balancePath, { balancePath = it; update(currentProv.copy(balancePath = it)) },
                 label = { Text(stringResource(R.string.balance_api_path)) }, singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -486,7 +694,13 @@ private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, m
     val editing = editingIdx?.let { prov.models.getOrNull(it) }
     if (adding || editing != null) {
         ModelDetailSheet(
-            model = editing ?: ModelInfo(),
+            model = editing ?: if (prov.type == "gradio") {
+                ModelInfo(
+                    inputModalities = listOf(Modality.TEXT),
+                    outputModalities = listOf(Modality.IMAGE),
+                    type = ModelType.IMAGE,
+                )
+            } else ModelInfo(),
             provider = prov,
             isNew = editing == null,
             onConfirm = { model ->
@@ -591,13 +805,15 @@ private fun ProviderModelTab(prov: ApiProvider, update: (ApiProvider) -> Unit, m
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val available = loadResult?.getOrNull()?.size ?: 0
-                BadgedBox(
-                    modifier = Modifier.padding(end = Space8),
-                    badge = { if (available > 0) Badge { Text(available.toString()) } },
-                ) {
-                    IconButton(onClick = { showPicker = true }) {
-                        Icon(Lucide.Package, stringResource(R.string.available_models),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (prov.type != "gradio") {
+                    BadgedBox(
+                        modifier = Modifier.padding(end = Space8),
+                        badge = { if (available > 0) Badge { Text(available.toString()) } },
+                    ) {
+                        IconButton(onClick = { showPicker = true }) {
+                            Icon(Lucide.Package, stringResource(R.string.available_models),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
                 Button(onClick = { adding = true }) {
@@ -753,6 +969,10 @@ private enum class ConnectionTestKind { NON_STREAMING, STREAMING, TOOL_CALL }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
+    if (prov.type == "gradio") {
+        GradioConnectionTestDialog(prov, onDismiss)
+        return
+    }
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
@@ -885,6 +1105,47 @@ private fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
             onDismiss = { detailKind = null },
         )
     }
+}
+
+@Composable
+private fun GradioConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var state by remember(prov.id) { mutableStateOf<TestState>(TestState.Idle) }
+
+    fun inspect() {
+        state = TestState.Loading
+        scope.launch {
+            state = runCatching {
+                TestState.Ok(ConnectionTester.testNonStreaming(prov, prov.models.firstOrNull()?.id.orEmpty()))
+            }.getOrElse { TestState.Err(it.message ?: it.toString()) }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.test_connection)) },
+        text = {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space12)) {
+                Text(
+                    stringResource(R.string.gradio_endpoint_check_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TestResultRow(
+                    label = stringResource(R.string.gradio_endpoint_label),
+                    state = state,
+                    onClick = {},
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { inspect() }, enabled = state !is TestState.Loading) {
+                Text(if (state is TestState.Loading) stringResource(R.string.testing)
+                    else stringResource(R.string.start_test))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+    )
 }
 
 @Composable

@@ -333,10 +333,12 @@ internal fun ChatBottomArea(
             }
         }
         AnimatedVisibility(visible = showAttachment) {
-            Row(Modifier.fillMaxWidth().padding(top = Space8), horizontalArrangement = Arrangement.Center) {
-                AttachBtn(Lucide.Camera, stringResource(R.string.take_photo), onClick = onCamera); Spacer(Modifier.width(Space8))
-                AttachBtn(Lucide.Image, stringResource(R.string.gallery), onClick = onGallery); Spacer(Modifier.width(Space8))
-                AttachBtn(Lucide.Paperclip, stringResource(R.string.file), onClick = onFile)
+            Column(Modifier.fillMaxWidth().padding(top = Space8), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(horizontalArrangement = Arrangement.Center) {
+                    AttachBtn(Lucide.Camera, stringResource(R.string.take_photo), onClick = onCamera); Spacer(Modifier.width(Space8))
+                    AttachBtn(Lucide.Image, stringResource(R.string.gallery), onClick = onGallery); Spacer(Modifier.width(Space8))
+                    AttachBtn(Lucide.Paperclip, stringResource(R.string.file), onClick = onFile)
+                }
             }
         }
     }

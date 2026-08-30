@@ -77,6 +77,31 @@ class ProviderAdapterStreamTest {
     }
 
     @Test
+    fun modelChatRouteAndProviderChatPathAreIndependent() {
+        enqueueSse("[DONE]")
+
+        OpenAiAdapter.stream(
+            provider = provider("openai").copy(
+                useResponseApi = true,
+                chatApiPath = "/custom/chat",
+                responsesApiPath = "/custom/responses",
+            ),
+            model = ModelInfo(
+                id = "chat-model",
+                chatGenerationRoute = ChatGenerationRoute.CHAT_COMPLETIONS,
+            ),
+            messages = listOf(ApiMessage("user", "hello")),
+            params = null,
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        assertTrue(server.takeRequest().requestLine.startsWith("POST /v1/custom/chat "))
+    }
+
+    @Test
     fun responsesApiParsesTextReasoningToolsRawBlocksAndUsage() {
         enqueueSse(
             """{"type":"response.reasoning_summary_text.delta","delta":"think"}""",
@@ -248,7 +273,7 @@ class ProviderAdapterStreamTest {
         )
 
         val end = OpenAiAdapter.stream(
-            provider = provider("openai"),
+            provider = provider("openai").copy(useResponseApi = true),
             model = ModelInfo(
                 "image-model",
                 outputModalities = listOf(Modality.TEXT, Modality.IMAGE),
@@ -268,9 +293,109 @@ class ProviderAdapterStreamTest {
         val requestBody = JSONObject(requireNotNull(request.body).utf8())
         assertTrue(request.requestLine.startsWith("POST /v1/images/generations "))
         assertEquals("image-model", requestBody.getString("model"))
-        assertEquals("draw a fawn", requestBody.getString("prompt"))
+        assertEquals(
+            "System context:\nignore this\n\nUser:\ndraw a fawn",
+            requestBody.getString("prompt"),
+        )
         assertTrue(end.generatedImages.single().bytes.contentEquals(pngHeader))
         assertEquals("image/png", end.generatedImages.single().mimeType)
+    }
+
+    @Test
+    fun openAiResponsesImageToolReceivesNativeConversationContext() {
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
+        val encoded = Base64.getEncoder().encodeToString(png)
+        enqueueSse(
+            JSONObject().put("type", "response.completed").put("response", JSONObject()
+                .put("usage", JSONObject().put("input_tokens", 20).put("output_tokens", 5))
+                .put("output", JSONArray().put(JSONObject()
+                    .put("type", "image_generation_call")
+                    .put("output_format", "png")
+                    .put("result", encoded)))).toString(),
+        )
+        val model = ModelInfo(
+            id = "gpt-5.6",
+            outputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+            type = ModelType.IMAGE,
+            imageGenerationRoute = ImageGenerationRoute.RESPONSES_TOOL,
+        )
+
+        val end = OpenAiAdapter.stream(
+            provider = provider("openai").copy(
+                apiPath = "/legacy/chat/completions",
+                responsesApiPath = "/custom/responses",
+            ),
+            model = model,
+            messages = listOf(
+                ApiMessage("system", "A fawn character with a blue scarf"),
+                ApiMessage("assistant", "The fawn enters the tavern"),
+                ApiMessage("user", "Draw this scene at night"),
+            ),
+            params = GenParams(imageGeneration = ImageGenerationSettings(
+                aspectRatio = "1:1",
+                quality = "high",
+                includeContext = true,
+            )),
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val request = server.takeRequest()
+        val body = JSONObject(requireNotNull(request.body).utf8())
+        assertTrue(request.requestLine.startsWith("POST /v1/custom/responses "))
+        assertEquals("gpt-5.6", body.getString("model"))
+        assertEquals("A fawn character with a blue scarf", body.getString("instructions"))
+        val input = body.getJSONArray("input")
+        assertEquals("assistant", input.getJSONObject(0).getString("role"))
+        assertEquals("The fawn enters the tavern", input.getJSONObject(0).getString("content"))
+        assertEquals("user", input.getJSONObject(1).getString("role"))
+        assertEquals("Draw this scene at night", input.getJSONObject(1).getString("content"))
+        val imageTool = body.getJSONArray("tools").getJSONObject(0)
+        assertEquals("image_generation", imageTool.getString("type"))
+        assertEquals("generate", imageTool.getString("action"))
+        assertEquals("1024x1024", imageTool.getString("size"))
+        assertEquals("high", imageTool.getString("quality"))
+        assertTrue(end.generatedImages.single().bytes.contentEquals(png))
+    }
+
+    @Test
+    fun xaiResponsesImageToolUsesNativeContextWithoutOpenAiOnlyOptions() {
+        val provider = ApiProvider(
+            type = "openai",
+            baseUrl = "https://api.x.ai/v1",
+        )
+        val model = ModelInfo(
+            id = "grok-4.6",
+            outputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+            type = ModelType.IMAGE,
+            imageGenerationRoute = ImageGenerationRoute.RESPONSES_TOOL,
+        )
+
+        val body = OpenAiResponsesAdapter.buildRequestBody(
+            provider = provider,
+            model = model,
+            messages = listOf(
+                ApiMessage("system", "Keep the character appearance consistent"),
+                ApiMessage("assistant", "The character enters a neon city"),
+                ApiMessage("user", "Draw the next scene"),
+            ),
+            params = GenParams(imageGeneration = ImageGenerationSettings(
+                aspectRatio = "16:9",
+                quality = "high",
+            )),
+            tools = emptyList(),
+            stream = true,
+        )
+
+        assertEquals("Keep the character appearance consistent", body.getString("instructions"))
+        assertEquals(2, body.getJSONArray("input").length())
+        val imageTool = body.getJSONArray("tools").getJSONObject(0)
+        assertEquals("image_generation", imageTool.getString("type"))
+        assertEquals("generate", imageTool.getString("action"))
+        assertFalse(imageTool.has("size"))
+        assertFalse(imageTool.has("quality"))
     }
 
     @Test
@@ -278,7 +403,11 @@ class ProviderAdapterStreamTest {
         enqueueGeneratedImage()
 
         val end = OpenAiAdapter.stream(
-            provider = ApiProvider(type = "openai", baseUrl = server.url("/v1").toString()),
+            provider = ApiProvider(
+                type = "openai",
+                baseUrl = server.url("/v1").toString(),
+                imageGenerationApiPath = "/custom/images/generations",
+            ),
             model = ModelInfo(
                 "gpt-image-1",
                 outputModalities = listOf(Modality.TEXT, Modality.IMAGE),
@@ -298,7 +427,9 @@ class ProviderAdapterStreamTest {
             onCall = {},
         )
 
-        val requestBody = JSONObject(requireNotNull(server.takeRequest().body).utf8())
+        val request = server.takeRequest()
+        val requestBody = JSONObject(requireNotNull(request.body).utf8())
+        assertTrue(request.requestLine.startsWith("POST /v1/custom/images/generations "))
         assertEquals(2, requestBody.getInt("n"))
         assertEquals("1024x1536", requestBody.getString("size"))
         assertEquals("high", requestBody.getString("quality"))
@@ -401,7 +532,7 @@ class ProviderAdapterStreamTest {
         val source = ApiImage("image/jpeg", "single-base64")
 
         OpenAiAdapter.stream(
-            provider = provider("openai"),
+            provider = provider("openai").copy(imageEditApiPath = "/custom/images/edits"),
             model = xaiImageModel(),
             messages = listOf(ApiMessage("user", "Turn this into a sketch", images = listOf(source))),
             params = null,
@@ -413,7 +544,7 @@ class ProviderAdapterStreamTest {
 
         val request = server.takeRequest()
         val requestBody = JSONObject(requireNotNull(request.body).utf8())
-        assertTrue(request.requestLine.startsWith("POST /v1/images/edits "))
+        assertTrue(request.requestLine.startsWith("POST /v1/custom/images/edits "))
         val image = requestBody.getJSONObject("image")
         assertEquals("image_url", image.getString("type"))
         assertEquals("data:image/jpeg;base64,single-base64", image.getString("url"))
@@ -489,6 +620,124 @@ class ProviderAdapterStreamTest {
         assertEquals(listOf("https://example.com/a.webp"), urls)
         assertTrue(images.single().bytes.contentEquals(expected.bytes))
         assertEquals("image/webp", images.single().mimeType)
+    }
+
+    @Test
+    fun imagePromptCanIncludeOrExcludeConversationContext() {
+        val messages = listOf(
+            ApiMessage("system", "A fawn character with a blue scarf"),
+            ApiMessage("assistant", "The fawn enters the tavern"),
+            ApiMessage("user", "Draw this scene at night"),
+        )
+
+        val contextual = imageGenerationPrompt(messages, includeContext = true)
+        val currentOnly = imageGenerationPrompt(messages, includeContext = false)
+
+        assertTrue(contextual.contains("System context:\nA fawn character with a blue scarf"))
+        assertTrue(contextual.contains("Assistant:\nThe fawn enters the tavern"))
+        assertTrue(contextual.endsWith("User:\nDraw this scene at night"))
+        assertEquals("Draw this scene at night", currentOnly)
+    }
+
+    @Test
+    fun gradioImageAdapterUsesNamedApiAndDownloadsCompletedImage() {
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
+        server.enqueue(MockResponse.Builder()
+            .addHeader("Content-Type", "application/json")
+            .body("""{"event_id":"event-1"}""")
+            .build())
+        server.enqueue(MockResponse.Builder()
+            .addHeader("Content-Type", "text/event-stream")
+            .body("event: complete\ndata: [{\"url\":\"/generated.png\"},123]\n\n")
+            .build())
+        server.enqueue(MockResponse.Builder()
+            .addHeader("Content-Type", "image/png")
+            .body(okio.Buffer().write(png))
+            .build())
+
+        val provider = ApiProvider(
+            type = "gradio",
+            baseUrl = server.url("/").toString().trimEnd('/'),
+            apiPath = "/generate_image",
+            apiKey = "hf-test",
+        )
+        val model = ModelInfo(
+            id = "z-image-turbo",
+            outputModalities = listOf(Modality.IMAGE),
+            type = ModelType.IMAGE,
+        )
+        val end = GradioImageAdapter.stream(
+            provider = provider,
+            model = model,
+            messages = listOf(ApiMessage("user", "draw a fawn")),
+            params = GenParams(
+                imageGeneration = ImageGenerationSettings(
+                    aspectRatio = "1:1",
+                    resolution = "1k",
+                    steps = 12,
+                    seed = 42,
+                ),
+            ),
+            tools = emptyList(),
+            onDelta = { _, _ -> },
+            stopped = {},
+            onCall = {},
+        )
+
+        val submit = server.takeRequest()
+        val events = server.takeRequest()
+        val download = server.takeRequest()
+        assertTrue(submit.requestLine.startsWith("POST /gradio_api/call/generate_image "))
+        assertEquals("Bearer hf-test", submit.headers["Authorization"])
+        val data = JSONObject(requireNotNull(submit.body).utf8()).getJSONArray("data")
+        assertEquals("draw a fawn", data.getString(0))
+        assertEquals(1024, data.getInt(1))
+        assertEquals(1024, data.getInt(2))
+        assertEquals(12, data.getInt(3))
+        assertEquals(42, data.getInt(4))
+        assertFalse(data.getBoolean(5))
+        assertTrue(events.requestLine.startsWith("GET /gradio_api/call/generate_image/event-1 "))
+        assertTrue(download.requestLine.startsWith("GET /generated.png "))
+        assertTrue(end.generatedImages.single().bytes.contentEquals(png))
+    }
+
+    @Test
+    fun gradioImageAdapterSubmitsRequestedCountSequentially() {
+        repeat(2) { index ->
+            server.enqueue(MockResponse.Builder()
+                .addHeader("Content-Type", "application/json")
+                .body("""{"event_id":"event-$index"}""")
+                .build())
+            val dataUrl = "data:image/png;base64," + Base64.getEncoder().encodeToString(byteArrayOf(index.toByte()))
+            server.enqueue(MockResponse.Builder()
+                .addHeader("Content-Type", "text/event-stream")
+                .body("event: complete\ndata: [\"$dataUrl\",$index]\n\n")
+                .build())
+        }
+        val provider = ApiProvider(
+            type = "gradio",
+            baseUrl = server.url("/").toString().trimEnd('/'),
+            apiPath = "/generate_image",
+        )
+        val model = ModelInfo(
+            id = "z-image-turbo",
+            outputModalities = listOf(Modality.IMAGE),
+            type = ModelType.IMAGE,
+        )
+
+        val end = GradioImageAdapter.stream(
+            provider, model,
+            listOf(ApiMessage("user", "draw")),
+            GenParams(imageGeneration = ImageGenerationSettings(count = 2, seed = 7)),
+            emptyList(), { _, _ -> }, {}, {},
+        )
+
+        assertEquals(2, end.generatedImages.size)
+        val first = JSONObject(requireNotNull(server.takeRequest().body).utf8()).getJSONArray("data")
+        server.takeRequest()
+        val second = JSONObject(requireNotNull(server.takeRequest().body).utf8()).getJSONArray("data")
+        assertEquals(7, first.getInt(4))
+        assertEquals(8, second.getInt(4))
     }
 
     @Test

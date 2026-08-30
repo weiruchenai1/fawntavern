@@ -67,6 +67,7 @@ object ChatApi {
     private fun adapterFor(type: String): ProviderAdapter = when (type) {
         "google" -> GoogleAdapter
         "claude" -> ClaudeAdapter
+        "gradio" -> GradioImageAdapter
         else -> OpenAiAdapter
     }
 }

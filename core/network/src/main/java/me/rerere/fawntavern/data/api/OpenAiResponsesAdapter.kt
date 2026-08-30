@@ -45,7 +45,7 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
         var receivedContentDelta = false
         var receivedReasoningDelta = false
 
-        val endpoint = endpoint(provider)
+        val endpoint = endpoint(provider, allowCustomPath = provider.useResponseApi)
         val body = buildRequestBody(provider, model, messages, params, tools, stream = true)
         val snapshot = requestSnapshot(endpoint, body)
         captureRequestFailure(snapshot, stopped) {
@@ -78,6 +78,14 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
                         call.name = item.strOr("name").ifBlank { call.name }
                         if (event.strOr("type") == "response.output_item.done") {
                             item.strOr("arguments").takeIf { it.isNotEmpty() }?.let { call.arguments = it }
+                        }
+                    } else if (
+                        event.strOr("type") == "response.output_item.done" &&
+                        item.strOr("type") == "image_generation_call"
+                    ) {
+                        item.strOr("result").takeIf { it.isNotBlank() }?.let { encoded ->
+                            decodeGeneratedImage(encoded, item.strOr("output_format"))
+                                ?.let { generatedImages = generatedImages + it }
                         }
                     }
                 }
@@ -112,7 +120,7 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
                     promptTokens = parsed.promptTokens
                     completionTokens = parsed.completionTokens
                     cachedTokens = parsed.cachedTokens
-                    generatedImages = parsed.generatedImages
+                    if (parsed.generatedImages.isNotEmpty()) generatedImages = parsed.generatedImages
                 }
             }
             }
@@ -137,10 +145,12 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
         )
     }
 
-    internal fun endpoint(provider: ApiProvider): String {
+    internal fun endpoint(provider: ApiProvider, allowCustomPath: Boolean = true): String {
         val base = provider.baseUrl.trimEnd('/')
-        if (provider.apiPath.isNotBlank()) {
-            return provider.apiEndpoint("/responses")
+        val legacy = provider.apiPath.takeIf { allowCustomPath && provider.useResponseApi }.orEmpty()
+        val configuredPath = provider.responsesApiPath.ifBlank { legacy }
+        if (configuredPath.isNotBlank()) {
+            return "$base/${configuredPath.trimStart('/')}"
         }
         if (base.endsWith("/responses")) return base
         val uri = runCatching { URI(base) }.getOrNull()
@@ -159,7 +169,17 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
         params: GenParams?,
         tools: List<ToolSpec>,
         stream: Boolean,
-    ): JSONObject = JSONObject().apply {
+    ): JSONObject {
+        val responseMessages = if (
+            model.imageGenerationRoute == ImageGenerationRoute.RESPONSES_TOOL &&
+            model.type == ModelType.IMAGE
+        ) {
+            imageGenerationMessages(
+                messages,
+                includeContext = params?.imageGeneration?.includeContext != false,
+            )
+        } else messages
+        return JSONObject().apply {
         put("model", model.id)
         put("stream", stream)
         put("store", false)
@@ -167,13 +187,13 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
         params?.topP?.let { put("top_p", it.roundedSamplingDouble()) }
         params?.maxTokens?.let { put("max_output_tokens", it) }
 
-        messages.filter { it.role == "system" }
+        responseMessages.filter { it.role == "system" }
             .map { it.content }
             .filter { it.isNotBlank() }
             .joinToString("\n\n")
             .takeIf { it.isNotBlank() }
             ?.let { put("instructions", it) }
-        put("input", encodeInput(messages))
+        put("input", encodeInput(responseMessages))
 
         if (ModelAbility.REASONING in model.abilities) {
             val supportsReasoningMetadata = runCatching { URI(provider.baseUrl).host.lowercase() }
@@ -199,9 +219,28 @@ internal object OpenAiResponsesAdapter : ProviderAdapter {
         if (BuiltInTool.SEARCH in model.tools) {
             encodedTools.put(JSONObject().put("type", "web_search"))
         }
+        if (model.type == ModelType.IMAGE &&
+            model.imageGenerationRoute == ImageGenerationRoute.RESPONSES_TOOL
+        ) {
+            val settings = params?.imageGeneration ?: ImageGenerationSettings()
+            encodedTools.put(JSONObject()
+                .put("type", "image_generation")
+                .put("action", "generate")
+                .apply {
+                    if (supportsImageToolOutputOptions(provider)) {
+                        OpenAiAdapter.openAiImageSize(settings.aspectRatio)?.let { put("size", it) }
+                        OpenAiAdapter.openAiImageQuality(settings.quality)?.let { put("quality", it) }
+                    }
+                })
+        }
         if (encodedTools.length() > 0) put("tools", encodedTools)
         applyCustomBodies(model)
+        }
     }
+
+    internal fun supportsImageToolOutputOptions(provider: ApiProvider): Boolean =
+        runCatching { URI(provider.baseUrl).host.lowercase().endsWith("openai.com") }
+            .getOrDefault(false)
 
     internal fun encodeInput(messages: List<ApiMessage>): JSONArray = JSONArray().apply {
         messages.filterNot { it.role == "system" }.forEach { message ->

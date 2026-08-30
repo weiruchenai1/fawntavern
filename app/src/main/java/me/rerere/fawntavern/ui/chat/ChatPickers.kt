@@ -15,13 +15,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
@@ -38,6 +41,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Lucide
@@ -135,13 +139,19 @@ internal fun ReasoningPickerSheet(
 internal fun ImageGenerationSettingsSheet(
     current: ImageGenerationSettings,
     useOpenAiSizes: Boolean,
+    useGradioControls: Boolean,
+    showOutputControls: Boolean = true,
+    maxCount: Int = 5,
     onChange: (ImageGenerationSettings) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    LaunchedEffect(current.count, maxCount) {
+        if (current.count > maxCount) onChange(current.copy(count = maxCount))
+    }
     PickerSheet(
         title = stringResource(R.string.image_generation_settings),
         onDismiss = onDismiss,
-        fillHeight = false,
+        fillHeight = useGradioControls,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
@@ -154,10 +164,11 @@ internal fun ImageGenerationSettingsSheet(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
                 Slider(
-                    value = current.count.toFloat(),
+                    value = current.count.coerceAtMost(maxCount).toFloat(),
                     onValueChange = { onChange(current.copy(count = it.toInt())) },
-                    valueRange = 1f..5f,
-                    steps = 3,
+                    valueRange = 1f..maxCount.coerceAtLeast(2).toFloat(),
+                    steps = (maxCount - 2).coerceAtLeast(0),
+                    enabled = maxCount > 1,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                     colors = SliderDefaults.colors(
                         thumbColor = MaterialTheme.colorScheme.primary,
@@ -167,7 +178,106 @@ internal fun ImageGenerationSettingsSheet(
                 )
             }
         }
-        if (useOpenAiSizes) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    stringResource(R.string.image_generation_include_context),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    stringResource(R.string.image_generation_include_context_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = current.includeContext,
+                onCheckedChange = { onChange(current.copy(includeContext = it)) },
+            )
+        }
+        if (useGradioControls) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    stringResource(R.string.image_generation_steps_value, current.steps),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                ) {
+                    Slider(
+                        value = current.steps.toFloat(),
+                        onValueChange = { onChange(current.copy(steps = it.toInt())) },
+                        valueRange = ImageGenerationStore.MIN_STEPS.toFloat()..ImageGenerationStore.MAX_STEPS.toFloat(),
+                        steps = ImageGenerationStore.MAX_STEPS - ImageGenerationStore.MIN_STEPS - 1,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        ),
+                    )
+                }
+            }
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        stringResource(R.string.image_generation_random_seed),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        stringResource(R.string.image_generation_random_seed_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = current.seed == null,
+                    onCheckedChange = { random ->
+                        onChange(current.copy(seed = if (random) null else current.seed ?: 42))
+                    },
+                )
+            }
+
+            if (current.seed != null) {
+                var seedText by remember(current.seed) { mutableStateOf(current.seed.toString()) }
+                val parsedSeed = seedText.toIntOrNull()?.takeIf { it >= 0 }
+                OutlinedTextField(
+                    value = seedText,
+                    onValueChange = { value ->
+                        seedText = value.filter(Char::isDigit).take(10)
+                        seedText.toIntOrNull()?.takeIf { it >= 0 }?.let { seed ->
+                            onChange(current.copy(seed = seed))
+                        }
+                    },
+                    label = { Text(stringResource(R.string.image_generation_seed)) },
+                    singleLine = true,
+                    isError = parsedSeed == null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        if (!showOutputControls) {
+            Text(
+                stringResource(R.string.image_generation_output_auto),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+        } else if (useOpenAiSizes) {
             ImageGenerationOptionFlow(
                 label = stringResource(R.string.image_generation_size),
                 value = openAiDisplaySize(current.aspectRatio),

@@ -18,6 +18,9 @@ object ImageGenerationStore {
             aspectRatio = item.optString("aspectRatio", "2:3").takeIf { it in ASPECT_RATIOS } ?: "2:3",
             resolution = item.optString("resolution", "1k").takeIf { it in RESOLUTIONS } ?: "1k",
             quality = item.optString("quality", "auto").takeIf { it in QUALITIES } ?: "auto",
+            steps = item.optInt("steps", DEFAULT_STEPS).coerceIn(MIN_STEPS, MAX_STEPS),
+            seed = item.optInt("seed", -1).takeIf { it >= 0 },
+            includeContext = item.optBoolean("includeContext", true),
         )
     }
 
@@ -28,13 +31,18 @@ object ImageGenerationStore {
             aspectRatio = settings.aspectRatio.takeIf { it in ASPECT_RATIOS } ?: "2:3",
             resolution = settings.resolution.takeIf { it in RESOLUTIONS } ?: "1k",
             quality = settings.quality.takeIf { it in QUALITIES } ?: "auto",
+            steps = settings.steps.coerceIn(MIN_STEPS, MAX_STEPS),
+            seed = settings.seed?.takeIf { it >= 0 },
         )
         val root = read(context)
         root.put(modelKey, JSONObject()
             .put("count", clean.count)
             .put("aspectRatio", clean.aspectRatio)
             .put("resolution", clean.resolution)
-            .put("quality", clean.quality))
+            .put("quality", clean.quality)
+            .put("steps", clean.steps)
+            .put("seed", clean.seed ?: JSONObject.NULL)
+            .put("includeContext", clean.includeContext))
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit { putString(KEY_SETTINGS, root.toString()) }
     }
@@ -51,4 +59,7 @@ object ImageGenerationStore {
     )
     val RESOLUTIONS = listOf("1k", "2k", "4k")
     val QUALITIES = listOf("auto", "low", "medium", "high")
+    const val DEFAULT_STEPS = 9
+    const val MIN_STEPS = 1
+    const val MAX_STEPS = 50
 }

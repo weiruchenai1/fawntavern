@@ -14,8 +14,14 @@ internal object GoogleAdapter : ProviderAdapter {
         onDelta: (String, String) -> Unit,
         stopped: () -> Unit, onCall: (okhttp3.Call) -> Unit,
     ): StreamEnd {
+        val effectiveMessages = if (isImageGenerationModel(model)) {
+            imageGenerationMessages(
+                messages,
+                includeContext = params?.imageGeneration?.includeContext != false,
+            )
+        } else messages
         // 开头连续 system → systemInstruction；对话中间的 system（深度注入等）降级为 user
-        val (system, rest) = splitLeadingSystem(messages)
+        val (system, rest) = splitLeadingSystem(effectiveMessages)
         val merged = mergeConsecutive(rest.map { if (it.role == "system") it.copy(role = "user") else it })
         val body = JSONObject().apply {
             if (system.isNotBlank()) {
@@ -158,7 +164,7 @@ internal object GoogleAdapter : ProviderAdapter {
     }
 
     internal fun isImageGenerationModel(model: ModelInfo): Boolean =
-        Modality.IMAGE in model.outputModalities
+        model.type == ModelType.IMAGE || Modality.IMAGE in model.outputModalities
 
     internal fun geminiImageAspectRatio(value: String): String? =
         value.takeUnless { it.equals("auto", ignoreCase = true) }

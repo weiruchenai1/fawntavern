@@ -17,6 +17,7 @@ object ModelApi {
         when (provider.type) {
             "google" -> listGoogleModels(provider)
             "claude" -> listClaudeModels(provider)
+            "gradio" -> emptyList()
             else -> listOpenAIModels(provider)
         }.sortedBy { it.id }
     }
@@ -66,9 +67,11 @@ object ModelApi {
         if (arch == null && params.isEmpty()) return guess
         val input = arch?.optJSONArray("input_modalities").strings()
         val output = arch?.optJSONArray("output_modalities").strings()
+        val outputModalities = if (output.isEmpty()) guess.outputModalities else modalitiesOf(output)
         return guess.copy(
             inputModalities = if (input.isEmpty()) guess.inputModalities else modalitiesOf(input),
-            outputModalities = if (output.isEmpty()) guess.outputModalities else modalitiesOf(output),
+            outputModalities = outputModalities,
+            type = modelTypeOf(outputModalities),
             abilities = if (params.isEmpty()) guess.abilities else buildList {
                 if (params.any { it == "tools" }) add(ModelAbility.TOOL)
                 if (params.any { it == "reasoning" || it == "include_reasoning" }) add(ModelAbility.REASONING)

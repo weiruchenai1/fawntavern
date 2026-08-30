@@ -9,6 +9,7 @@ import me.rerere.fawntavern.data.api.ApiConfigRepository
 import me.rerere.fawntavern.data.api.BuiltInTool
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.api.Modality
+import me.rerere.fawntavern.data.api.ModelType
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.api.supportsBuiltInTool
 
@@ -50,7 +51,8 @@ class ChatModelStateHolder(
         return ChatModelCapabilities(
             builtInSearchAvailable = selected.supportsBuiltInTool(BuiltInTool.SEARCH, provider),
             builtInSearchEnabled = BuiltInTool.SEARCH in selected.tools,
-            imageGenerationAvailable = Modality.IMAGE in selected.outputModalities,
+            imageGenerationAvailable = selected.type == ModelType.IMAGE ||
+                Modality.IMAGE in selected.outputModalities,
         )
     }
 

@@ -27,7 +27,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
@@ -55,6 +57,7 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ModelApi
 import me.rerere.fawntavern.data.api.ModelInfo
+import me.rerere.fawntavern.data.api.ModelType
 import me.rerere.fawntavern.ui.api.ModelCapabilityTags
 import me.rerere.fawntavern.ui.api.ProviderIcon
 
@@ -152,7 +155,12 @@ fun ModelSelectorSheet(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class, FlowPreview::class)
+@OptIn(
+    ExperimentalFoundationApi::class,
+    ExperimentalLayoutApi::class,
+    ExperimentalMaterial3Api::class,
+    FlowPreview::class,
+)
 @Composable
 private fun ColumnScope.ModelSelectorList(
     currentModel: String,
@@ -161,9 +169,20 @@ private fun ColumnScope.ModelSelectorList(
 ) {
     val coroutineScope = rememberCoroutineScope()
     var searchKeywords by remember { mutableStateOf("") }
+    var selectedType by remember {
+        mutableStateOf(modelTypeForSelection(providers, currentModel))
+    }
 
-    val filteredModels = remember(providers, searchKeywords) {
-        providers.associate { prov ->
+    LaunchedEffect(currentModel) {
+        selectedType = modelTypeForSelection(providers, currentModel)
+    }
+
+    val categoryProviders = remember(providers, selectedType) {
+        providersForModelType(providers, selectedType)
+    }
+
+    val filteredModels = remember(categoryProviders, searchKeywords) {
+        categoryProviders.associate { prov ->
             prov.id to prov.models.filter {
                 val kw = searchKeywords.trim()
                 kw.isBlank() || it.name.contains(kw, true) || it.id.contains(kw, true)
@@ -172,15 +191,33 @@ private fun ColumnScope.ModelSelectorList(
     }
 
     // 每个提供商分组在列表中的起始下标（stickyHeader 1 + 空态提示 1 + 模型数）
-    val providerPositions = remember(providers, filteredModels) {
+    val providerPositions = remember(categoryProviders, filteredModels) {
         var pos = 0
-        providers.map { prov ->
+        categoryProviders.map { prov ->
             val start = pos
             pos += 1 // stickyHeader
             if (prov.models.isEmpty()) pos += 1 // 空态提示
             pos += filteredModels[prov.id].orEmpty().size
             prov.id to start
         }.toMap()
+    }
+
+    PrimaryTabRow(
+        selectedTabIndex = if (selectedType == ModelType.CHAT) 0 else 1,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        listOf(ModelType.CHAT, ModelType.IMAGE).forEach { type ->
+            Tab(
+                selected = selectedType == type,
+                onClick = { selectedType = type },
+                text = {
+                    Text(stringResource(
+                        if (type == ModelType.CHAT) R.string.chat_models_tab
+                        else R.string.image_models_tab,
+                    ))
+                },
+            )
+        }
     }
 
     OutlinedTextField(
@@ -191,15 +228,15 @@ private fun ColumnScope.ModelSelectorList(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    val selectedModelPosition = remember(providers, currentModel) {
-        selectedModelListPosition(providers, currentModel)
+    val selectedModelPosition = remember(categoryProviders, currentModel) {
+        selectedModelListPosition(categoryProviders, currentModel)
     }
     val lazyListState = rememberLazyListState(
         initialFirstVisibleItemIndex = selectedModelPosition ?: 0,
     )
     val badgeListState = rememberLazyListState()
 
-    LaunchedEffect(currentModel, selectedModelPosition) {
+    LaunchedEffect(selectedType, currentModel, selectedModelPosition) {
         lazyListState.requestScrollToItem(selectedModelPosition ?: 0)
     }
 
@@ -210,7 +247,7 @@ private fun ColumnScope.ModelSelectorList(
             .debounce(BADGE_DEBOUNCE_MS)
             .collect { index ->
                 val current = providerPositions.entries.findLast { index > it.value }
-                val target = providers.indexOfFirst { it.id == current?.key }
+                val target = categoryProviders.indexOfFirst { it.id == current?.key }
                 if (target >= 0) badgeListState.animateScrollToItem(target)
                 else badgeListState.requestScrollToItem(0)
             }
@@ -222,16 +259,16 @@ private fun ColumnScope.ModelSelectorList(
         contentPadding = PaddingValues(8.dp),
         modifier = Modifier.weight(1f).fillMaxWidth(),
     ) {
-        if (providers.isEmpty()) {
+        if (categoryProviders.isEmpty()) {
             item {
-                Text(stringResource(R.string.no_enabled_providers),
+                Text(stringResource(R.string.no_models_in_category),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(8.dp))
             }
         }
 
-        providers.forEach { prov ->
+        categoryProviders.forEach { prov ->
             stickyHeader(key = "header:${prov.id}") {
                 Row(
                     Modifier.padding(horizontal = 8.dp).padding(bottom = 4.dp, top = 8.dp),
@@ -264,14 +301,14 @@ private fun ColumnScope.ModelSelectorList(
     }
 
     // 底部提供商快捷跳转条
-    if (providers.size > 1) {
+    if (categoryProviders.size > 1) {
         LazyRow(
             state = badgeListState,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(horizontal = 8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            items(providers, key = { it.id }) { provider ->
+            items(categoryProviders, key = { it.id }) { provider ->
                 AssistChip(
                     onClick = {
                         val position = providerPositions[provider.id] ?: 0
@@ -283,6 +320,28 @@ private fun ColumnScope.ModelSelectorList(
             }
         }
     }
+}
+
+internal fun modelTypeForSelection(
+    providers: List<ApiProvider>,
+    currentModel: String,
+): ModelType {
+    val providerId = currentModel.substringBefore("::", "")
+    val modelId = currentModel.substringAfter("::", "")
+    return providers.find { it.id == providerId }
+        ?.models
+        ?.find { it.id == modelId }
+        ?.type
+        ?.takeIf { it == ModelType.CHAT || it == ModelType.IMAGE }
+        ?: ModelType.CHAT
+}
+
+internal fun providersForModelType(
+    providers: List<ApiProvider>,
+    type: ModelType,
+): List<ApiProvider> = providers.mapNotNull { provider ->
+    val models = provider.models.filter { it.type == type }
+    provider.copy(models = models).takeIf { models.isNotEmpty() }
 }
 
 /** 模型行：「可用模型」面板的行样式 + 单选高亮（选中 primaryContainer + Check）。 */

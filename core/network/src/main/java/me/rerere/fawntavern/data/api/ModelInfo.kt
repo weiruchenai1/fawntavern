@@ -6,6 +6,18 @@ import org.json.JSONTokener
 /** 模型的输入/输出模态 */
 enum class Modality { TEXT, IMAGE }
 
+/** 模型承担的生成任务；与 provider.type 的网络协议分开。 */
+enum class ModelType { CHAT, IMAGE, VIDEO }
+
+/** OpenAI Responses 兼容协议下的图片传输方式：直接图片端点或内置图片工具。 */
+enum class ImageGenerationRoute { DIRECT, RESPONSES_TOOL }
+
+/** 聊天模型的 OpenAI 兼容端点选择；默认值兼容 provider 的旧开关。 */
+enum class ChatGenerationRoute { PROVIDER_DEFAULT, CHAT_COMPLETIONS, RESPONSES }
+
+fun modelTypeOf(outputModalities: List<Modality>): ModelType =
+    if (Modality.IMAGE in outputModalities) ModelType.IMAGE else ModelType.CHAT
+
 /** 模型能力。App 自身不发起工具调用，TOOL 仅作标记；REASONING 也只是标记（思考档位另存 ThinkingStore） */
 enum class ModelAbility { TOOL, REASONING }
 
@@ -28,6 +40,9 @@ data class ModelInfo(
     val headers: List<KeyValue> = emptyList(),
     val bodies: List<KeyValue> = emptyList(),
     val tools: Set<BuiltInTool> = emptySet(),
+    val type: ModelType = modelTypeOf(outputModalities),
+    val imageGenerationRoute: ImageGenerationRoute = ImageGenerationRoute.DIRECT,
+    val chatGenerationRoute: ChatGenerationRoute = ChatGenerationRoute.PROVIDER_DEFAULT,
 ) {
     /** 展示名，没填自定义名称时退回模型 ID */
     val name: String get() = displayName.ifBlank { id }
@@ -42,7 +57,14 @@ fun modelInfoOf(id: String): ModelInfo {
         inputModalities = caps.input,
         outputModalities = caps.output,
         abilities = caps.abilities,
+        type = modelTypeOf(caps.output),
     )
+}
+
+internal fun ModelInfo.usesResponsesApi(provider: ApiProvider): Boolean = when (chatGenerationRoute) {
+    ChatGenerationRoute.PROVIDER_DEFAULT -> provider.useResponseApi
+    ChatGenerationRoute.CHAT_COMPLETIONS -> false
+    ChatGenerationRoute.RESPONSES -> true
 }
 
 /** 自定义请求头叠在协议自带的鉴权头之上（同名覆盖），空键跳过 */

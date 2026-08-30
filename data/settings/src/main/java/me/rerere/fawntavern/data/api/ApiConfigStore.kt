@@ -14,7 +14,7 @@ object ApiConfigStore {
     private const val KEY_CURRENT = "current_model"
     private const val KEY_CORRUPTED = "providers_corrupted"
     private const val KEY_SCHEMA_VERSION = "schema_version"
-    private const val SCHEMA_VERSION = 1
+    private const val SCHEMA_VERSION = 3
     /** 预置的常见模型提供商（默认全部禁用、不带模型） */
     private fun defaultProviders(): List<ApiProvider> = listOf(
         ApiProvider(
@@ -112,15 +112,28 @@ object ApiConfigStore {
                         ma.optJSONObject(j)?.let { models.add(modelFromJson(it)) }
                     }
                 }
+                val type = obj.optString("type", "openai")
+                val useResponseApi = obj.optBoolean("useResponseApi", false)
+                val legacyApiPath = obj.optString("apiPath", "")
                 providers.add(ApiProvider(
                     id = obj.optString("id", java.util.UUID.randomUUID().toString()),
                     name = obj.optString("name", ""),
-                    type = obj.optString("type", "openai"),
+                    type = type,
                     baseUrl = obj.optString("baseUrl", ""),
-                    apiPath = obj.optString("apiPath", ""),
+                    apiPath = legacyApiPath,
+                    chatApiPath = obj.pathOrLegacy(
+                        "chatApiPath",
+                        legacyApiPath.takeIf { type == "openai" && !useResponseApi }.orEmpty(),
+                    ),
+                    responsesApiPath = obj.pathOrLegacy(
+                        "responsesApiPath",
+                        legacyApiPath.takeIf { type == "openai" && useResponseApi }.orEmpty(),
+                    ),
+                    imageGenerationApiPath = obj.optString("imageGenerationApiPath", ""),
+                    imageEditApiPath = obj.optString("imageEditApiPath", ""),
                     apiKey = obj.optString("apiKey", ""),
                     enabled = obj.optBoolean("enabled", true),
-                    useResponseApi = obj.optBoolean("useResponseApi", false),
+                    useResponseApi = useResponseApi,
                     models = models,
                     balanceEnabled = obj.optBoolean("balanceEnabled", false),
                     balancePath = obj.optString("balancePath", ""),
@@ -201,6 +214,10 @@ object ApiConfigStore {
             obj.put("type", p.type)
             obj.put("baseUrl", p.baseUrl)
             obj.put("apiPath", p.apiPath)
+            obj.put("chatApiPath", p.chatApiPath)
+            obj.put("responsesApiPath", p.responsesApiPath)
+            obj.put("imageGenerationApiPath", p.imageGenerationApiPath)
+            obj.put("imageEditApiPath", p.imageEditApiPath)
             obj.put("apiKey", p.apiKey)
             obj.put("enabled", p.enabled)
             obj.put("useResponseApi", p.useResponseApi)
@@ -221,15 +238,28 @@ object ApiConfigStore {
                     modelArray.optJSONObject(j)?.let { models.add(modelFromJson(it)) }
                 }
             }
+            val type = obj.optString("type", "openai")
+            val useResponseApi = obj.optBoolean("useResponseApi", false)
+            val legacyApiPath = obj.optString("apiPath", "")
             ApiProvider(
                 id = obj.optString("id", java.util.UUID.randomUUID().toString()),
                 name = obj.optString("name", ""),
-                type = obj.optString("type", "openai"),
+                type = type,
                 baseUrl = obj.optString("baseUrl", ""),
-                apiPath = obj.optString("apiPath", ""),
+                apiPath = legacyApiPath,
+                chatApiPath = obj.pathOrLegacy(
+                    "chatApiPath",
+                    legacyApiPath.takeIf { type == "openai" && !useResponseApi }.orEmpty(),
+                ),
+                responsesApiPath = obj.pathOrLegacy(
+                    "responsesApiPath",
+                    legacyApiPath.takeIf { type == "openai" && useResponseApi }.orEmpty(),
+                ),
+                imageGenerationApiPath = obj.optString("imageGenerationApiPath", ""),
+                imageEditApiPath = obj.optString("imageEditApiPath", ""),
                 apiKey = obj.optString("apiKey", ""),
                 enabled = obj.optBoolean("enabled", true),
-                useResponseApi = obj.optBoolean("useResponseApi", false),
+                useResponseApi = useResponseApi,
                 models = models,
                 balanceEnabled = obj.optBoolean("balanceEnabled", false),
                 balancePath = obj.optString("balancePath", ""),
@@ -252,6 +282,9 @@ object ApiConfigStore {
         put("input", JSONArray(m.inputModalities.map { it.name }))
         put("output", JSONArray(m.outputModalities.map { it.name }))
         put("abilities", JSONArray(m.abilities.map { it.name }))
+        put("modelType", m.type.name)
+        put("imageGenerationRoute", m.imageGenerationRoute.name)
+        put("chatGenerationRoute", m.chatGenerationRoute.name)
         put("tools", JSONArray(m.tools.map { it.name }))
         put("headers", kvToJson(m.headers))
         put("bodies", kvToJson(m.bodies))
@@ -259,15 +292,24 @@ object ApiConfigStore {
 
     private fun modelFromJson(obj: JSONObject): ModelInfo {
         val id = obj.optString("id")
+        val output = obj.enums("output", Modality.entries).ifEmpty { listOf(Modality.TEXT) }
         return ModelInfo(
             id = id,
             displayName = obj.optString("displayName", id),
             inputModalities = obj.enums("input", Modality.entries).ifEmpty { listOf(Modality.TEXT) },
-            outputModalities = obj.enums("output", Modality.entries).ifEmpty { listOf(Modality.TEXT) },
+            outputModalities = output,
             abilities = obj.enums("abilities", ModelAbility.entries),
             tools = obj.enums("tools", BuiltInTool.entries).toSet(),
             headers = obj.kvList("headers"),
             bodies = obj.kvList("bodies"),
+            type = ModelType.entries.find { it.name == obj.optString("modelType") }
+                ?: modelTypeOf(output),
+            imageGenerationRoute = ImageGenerationRoute.entries.find {
+                it.name == obj.optString("imageGenerationRoute")
+            } ?: ImageGenerationRoute.DIRECT,
+            chatGenerationRoute = ChatGenerationRoute.entries.find {
+                it.name == obj.optString("chatGenerationRoute")
+            } ?: ChatGenerationRoute.PROVIDER_DEFAULT,
         )
     }
 
@@ -291,4 +333,7 @@ object ApiConfigStore {
             KeyValue(o.optString("key"), o.optString("value"))
         }
     }
+
+    private fun JSONObject.pathOrLegacy(key: String, legacy: String): String =
+        if (has(key)) optString(key, "") else legacy
 }

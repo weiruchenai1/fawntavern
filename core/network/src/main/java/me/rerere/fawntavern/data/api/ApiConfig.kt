@@ -3,9 +3,13 @@ package me.rerere.fawntavern.data.api
 data class ApiProvider(
     val id: String = java.util.UUID.randomUUID().toString(),
     val name: String = "",
-    val type: String = "openai",  // openai, google, claude
+    val type: String = "openai",  // openai, google, claude, gradio
     val baseUrl: String = "",
-    val apiPath: String = "",
+    val apiPath: String = "",      // 非 OpenAI 协议及旧配置的单端点路径
+    val chatApiPath: String = "",
+    val responsesApiPath: String = "",
+    val imageGenerationApiPath: String = "",
+    val imageEditApiPath: String = "",
     val apiKey: String = "",
     val enabled: Boolean = true,
     val useResponseApi: Boolean = false,    // OpenAI Responses API (/responses)
