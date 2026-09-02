@@ -1,7 +1,9 @@
 package me.rerere.fawntavern.ui.chat
 
 import android.content.ClipData
+import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +64,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
 import me.rerere.fawntavern.R
@@ -78,13 +82,40 @@ import me.rerere.fawntavern.ui.components.vibrate
 
 private typealias Screen = ChatDestination
 
+/**
+ * Paging 首屏到达前，只有小会话可以用内存快照立即展示。大历史若回退到完整快照，会瞬间
+ * 组合数百个消息项（以及其中的 WebView），使 Paging 失去意义。
+ */
+private const val ImmediateMessageFallbackLimit = 60
+
+internal fun pagedMessageWindow(
+    paged: List<ChatMessage>,
+    inMemory: List<ChatMessage>,
+): List<ChatMessage> = paged.ifEmpty {
+    inMemory.takeIf { it.size <= ImmediateMessageFallbackLimit } ?: emptyList()
+}
+
+internal fun messageIndexesByTimestamp(messages: List<ChatMessage>): Map<Long, Int> =
+    messages.mapIndexed { index, message -> message.ts to index }.toMap()
+
+private fun Bitmap?.toFrontendDataUrl(): String {
+    val bitmap = this ?: return ""
+    return runCatching {
+        val bytes = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes)
+        "data:image/png;base64," + Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP)
+    }.getOrDefault("")
+}
+
 @Composable
 internal fun ChatContent(
     state: ChatUiState,
     inputState: TextFieldState,
     pagedMessages: Flow<PagingData<ChatMessage>>,
     effects: Flow<ChatEffect>,
+    frontendEvents: Flow<ChatFrontendEvent>,
     onAction: (ChatAction) -> Unit,
+    frontendRpc: FrontendRpcCall = { method, _ -> error("Frontend RPC method is unavailable: $method") },
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeModeChange: (ThemeMode) -> Unit = {},
     solidBackground: Boolean = false,
@@ -128,6 +159,9 @@ internal fun ChatContent(
     val mediaInput = remember(ctx) { ChatMediaInput(ctx) }
     val resources = LocalResources.current
     val clipboard = LocalClipboard.current
+    LaunchedEffect(frontendEvents) {
+        frontendEvents.collect(::dispatchFrontendEvent)
+    }
     val keyboardController = LocalSoftwareKeyboardController.current
 
     fun copyText(text: String) {
@@ -413,35 +447,100 @@ internal fun ChatContent(
                 val overlays = conversation.overlays
                 val genTs = generation.targetTimestamp
                 val usePaging = lazyMessages.itemCount > 0
-                val pagedBase: List<ChatMessage> = lazyMessages.itemSnapshotList.items
-                    .ifEmpty { conversation.current?.messages ?: emptyList() }
+                val inMemoryMessages = conversation.current?.messages.orEmpty()
+                val inMemoryVisibleMessages = remember(inMemoryMessages) {
+                    inMemoryMessages.filterNot(ChatMessage::isHidden)
+                }
+                val pagedBase = pagedMessageWindow(
+                    paged = lazyMessages.itemSnapshotList.items,
+                    inMemory = inMemoryVisibleMessages,
+                )
                 // 加载中视为已抵达底部：append 的 endOfPaginationReached 会在 refresh 时暂时重置，
                 // 此时若隐藏新 overlay，刚完成的消息会闪掉一帧再回来。
                 val append = lazyMessages.loadState.append
                 val allowOverlayAppend = !usePaging || append.endOfPaginationReached ||
                     append is LoadState.Loading || lazyMessages.loadState.refresh is LoadState.Loading
-                val msgs = mergeMessageWindow(pagedBase, overlays, allowOverlayAppend)
-                val webViewMessages = remember(msgs, profile.userName, conversation.current?.charName) {
+                val msgs = remember(pagedBase, overlays, allowOverlayAppend) {
+                    mergeMessageWindow(pagedBase, overlays, allowOverlayAppend)
+                }
+                val waitingForInitialMessagePage =
+                    lazyMessages.itemCount == 0 && pagedBase.isEmpty() &&
+                        inMemoryVisibleMessages.size > ImmediateMessageFallbackLimit &&
+                        lazyMessages.loadState.refresh !is LoadState.Error
+                // 前端卡只获得当前已加载的分页窗口。完整会话仍可通过 chat.get-messages RPC 按需读取，
+                // 避免每个可见 WebView 都持有并解析整段聊天历史。
+                val frontendMessages = msgs
+                val messageIndexes = remember(
+                    conversation.current?.id,
+                    inMemoryMessages.size,
+                    inMemoryMessages.firstOrNull()?.ts,
+                    inMemoryMessages.lastOrNull()?.ts,
+                ) {
+                    messageIndexesByTimestamp(inMemoryMessages)
+                }
+                val frontendMessageIds = remember(frontendMessages, messageIndexes) {
+                    frontendMessages.associate { message ->
+                        val id = messageIndexes[message.ts]
+                            ?: (inMemoryMessages.size + frontendMessages.indexOf(message))
+                        id to message
+                    }
+                }
+                val webViewMessages = remember(
+                    frontendMessages,
+                    profile.userName,
+                    conversation.current?.charName,
+                    renderPrefs.javascript,
+                ) {
+                    if (!renderPrefs.javascript) return@remember "[]"
                     JSONArray().apply {
-                        msgs.forEachIndexed { index, message ->
+                        frontendMessages.forEachIndexed { index, message ->
+                            val messageId = messageIndexes[message.ts] ?: (inMemoryMessages.size + index)
                             put(JSONObject().apply {
-                                put("message_id", index)
+                                put("message_id", messageId)
                                 put("name", if (message.role == "user") profile.userName else conversation.current?.charName.orEmpty())
                                 put("role", message.role)
-                                put("is_hidden", false)
+                                put("is_hidden", message.isHidden)
                                 put("message", message.content)
                                 put("swipe_id", message.altIdx)
                                 put("swipes", JSONArray().apply {
                                     val alternatives = message.alts.ifEmpty {
-                                        listOf(me.rerere.fawntavern.data.chat.MsgAlt(content = message.content))
+                                        listOf(me.rerere.fawntavern.data.chat.MsgAlt(
+                                            content = message.content,
+                                            dataJson = message.dataJson,
+                                        ))
                                     }
                                     alternatives.forEach { put(it.content) }
                                 })
-                                put("data", JSONObject())
+                                put("swipes_data", JSONArray().apply {
+                                    val alternatives = message.alts.ifEmpty {
+                                        listOf(me.rerere.fawntavern.data.chat.MsgAlt(
+                                            content = message.content,
+                                            dataJson = message.dataJson,
+                                        ))
+                                    }
+                                    alternatives.forEach { alternative ->
+                                        put(runCatching { JSONObject(alternative.dataJson) }.getOrElse { JSONObject() })
+                                    }
+                                })
+                                put("swipes_info", JSONArray().apply {
+                                    val count = message.alts.size.coerceAtLeast(1)
+                                    repeat(count) { put(JSONObject()) }
+                                })
+                                put("data", runCatching { JSONObject(message.dataJson) }.getOrElse { JSONObject() })
                                 put("extra", JSONObject())
                             })
                         }
                     }.toString()
+                }
+                val frontendLocalVariables = remember(conversation.current?.localVariables) {
+                    encodeFrontendVariables(conversation.current?.localVariables.orEmpty())
+                }
+                val frontendGlobalVariables = remember(state.globalVariables) {
+                    encodeFrontendVariables(state.globalVariables)
+                }
+                val frontendUserAvatar = remember(profile.userAvatar) { profile.userAvatar.toFrontendDataUrl() }
+                val frontendCharacterAvatar = remember(conversation.characterImage) {
+                    conversation.characterImage.toFrontendDataUrl()
                 }
                 // rememberUpdatedState：快照 Flow 的 collect lambda 里引用 msgs，需要始终读到最新值
                 val msgsNow by rememberUpdatedState(msgs)
@@ -510,9 +609,13 @@ internal fun ChatContent(
                 Box(Modifier.fillMaxSize()) {
                     if (msgs.isEmpty()) {
                         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                            Text(stringResource(R.string.chat_empty_hint),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (waitingForInitialMessagePage) {
+                                CircularProgressIndicator()
+                            } else {
+                                Text(stringResource(R.string.chat_empty_hint),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     } else {
                         LazyColumn(
@@ -608,26 +711,65 @@ internal fun ChatContent(
                                         thinkingMarkdown = prefs.thinkingMarkdown,
                                         renderPrefs = renderPrefs,
                                         chatMessagesJson = webViewMessages,
+                                        frontendContextJson = JSONObject().apply {
+                                            val messageId = messageIndexes[msg.ts] ?: -1
+                                            put("chatId", conversation.current?.id.orEmpty())
+                                            put("characterId", conversation.current?.charFile.orEmpty())
+                                            put("characterFile", conversation.current?.charFile.orEmpty())
+                                            put("presetId", conversation.card?.linkedPresetId.orEmpty())
+                                            put("characterName", conversation.card?.name ?: conversation.current?.charName.orEmpty())
+                                            conversation.card?.let { card ->
+                                                put("character", JSONObject().apply {
+                                                    put("name", card.name)
+                                                    put("description", card.description)
+                                                    put("personality", card.personality)
+                                                    put("scenario", card.scenario)
+                                                    put("first_mes", card.firstMes)
+                                                    put("mes_example", card.mesExample)
+                                                    put("creator_notes", card.creatorNotes)
+                                                })
+                                            }
+                                            put("userName", profile.userName)
+                                            put("userAvatarPath", frontendUserAvatar)
+                                            put("charAvatarPath", frontendCharacterAvatar)
+                                            put("messageId", messageId)
+                                            put("lastMessageId", frontendMessages.lastOrNull()
+                                                ?.let { messageIndexes[it.ts] } ?: -1)
+                                        }.toString(),
+                                        localVariablesJson = frontendLocalVariables,
+                                        globalVariablesJson = frontendGlobalVariables,
                                         onSetInputText = { onAction(ChatAction.SetInputText(it)) },
                                         onSetChatMessage = { messageId, value ->
-                                            val index = if (messageId < 0) msgs.size + messageId else messageId
-                                            msgs.getOrNull(index)?.let { target ->
-                                                onAction(ChatAction.UpdateMessage(target.ts, value))
+                                            val target = if (messageId < 0) {
+                                                frontendMessages.getOrNull(frontendMessages.size + messageId)
+                                            } else {
+                                                frontendMessageIds[messageId]
+                                            }
+                                            target?.let { message ->
+                                                onAction(ChatAction.UpdateMessage(message.ts, value))
                                             }
                                         },
                                         onSelectChatMessageSwipe = { messageId, swipeId ->
-                                            val index = if (messageId < 0) msgs.size + messageId else messageId
-                                            msgs.getOrNull(index)?.let { target ->
-                                                if (swipeId in target.alts.indices) {
+                                            val target = if (messageId < 0) {
+                                                frontendMessages.getOrNull(frontendMessages.size + messageId)
+                                            } else {
+                                                frontendMessageIds[messageId]
+                                            }
+                                            target?.let { message ->
+                                                if (swipeId in message.alts.indices) {
                                                     onAction(
                                                         ChatAction.SwitchAlternative(
-                                                            target.ts,
-                                                            swipeId - target.altIdx,
+                                                            message.ts,
+                                                            swipeId - message.altIdx,
                                                         ),
                                                     )
                                                 }
                                             }
                                         },
+                                        onReplaceVariables = { scopeName, values ->
+                                            onAction(ChatAction.ReplaceFrontendVariables(scopeName, values))
+                                        },
+                                        rpcCall = frontendRpc,
                                     )
                                 }
                             }

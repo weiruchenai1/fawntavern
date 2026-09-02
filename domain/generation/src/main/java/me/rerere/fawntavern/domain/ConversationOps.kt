@@ -77,6 +77,7 @@ object ConversationOps {
         val alts = m.alts.ifEmpty { listOf(MsgAlt()) }.toMutableList()
         val ai = m.altIdx.coerceIn(0, alts.lastIndex)
         alts[ai] = alts[ai].copy(content = m.content, reasoning = m.reasoning,
+            dataJson = m.dataJson,
             model = m.model, reasoningMs = m.reasoningMs, searches = m.searches, images = m.images,
             imageAspectRatio = m.imageAspectRatio,
             requestSnapshots = m.requestSnapshots,
@@ -85,6 +86,7 @@ object ConversationOps {
             generationMs = m.generationMs)
         alts += MsgAlt(model = modelId)
         return m.copy(content = "", reasoning = "", model = modelId, reasoningMs = 0, images = emptyList(),
+            dataJson = "{}",
             promptTokens = 0, completionTokens = 0, cachedTokens = 0, generationMs = 0,
             requestSnapshots = emptyList(),
             alts = alts, altIdx = alts.lastIndex)

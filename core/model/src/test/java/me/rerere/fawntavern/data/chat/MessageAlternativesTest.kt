@@ -13,12 +13,14 @@ class MessageAlternativesTest {
         val message = ChatMessage(
             role = "assistant",
             content = "edited",
+            dataJson = "{\"state\":1}",
             images = listOf("edited.png"),
             requestSnapshots = listOf(firstSnapshot),
             alts = listOf(
                 MsgAlt(content = "stale"),
                 MsgAlt(
                     content = "target",
+                    dataJson = "{\"state\":2}",
                     images = listOf("target.png"),
                     requestSnapshots = listOf(secondSnapshot),
                 ),
@@ -29,8 +31,10 @@ class MessageAlternativesTest {
 
         assertEquals(1, switched.altIdx)
         assertEquals("edited", switched.alts[0].content)
+        assertEquals("{\"state\":1}", switched.alts[0].dataJson)
         assertEquals(listOf("edited.png"), switched.alts[0].images)
         assertEquals("target", switched.content)
+        assertEquals("{\"state\":2}", switched.dataJson)
         assertEquals(listOf(secondSnapshot), switched.requestSnapshots)
     }
 

@@ -38,6 +38,7 @@ sealed interface ChatAction {
     data class DeleteMessage(val timestamp: Long) : ChatAction
     data class DeleteAllVersions(val timestamp: Long) : ChatAction
     data class UpdateMessage(val timestamp: Long, val content: String) : ChatAction
+    data class ReplaceFrontendVariables(val scope: String, val values: Map<String, String>) : ChatAction
     data class ClearOverlay(val timestamp: Long) : ChatAction
     data class SpeakMessage(val timestamp: Long) : ChatAction
     data object StopSpeaking : ChatAction

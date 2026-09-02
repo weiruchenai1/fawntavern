@@ -2,6 +2,7 @@ package me.rerere.fawntavern.ui.chat
 
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
@@ -10,6 +11,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.channels.BufferOverflow
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
@@ -27,6 +32,7 @@ import me.rerere.fawntavern.domain.chat.CommitChatGenerationUseCase
 import me.rerere.fawntavern.domain.chat.ChatSessionCoordinator
 import me.rerere.fawntavern.domain.chat.RepositoryChatSessionDataSource
 import me.rerere.fawntavern.extension.QuickReply
+import org.json.JSONObject
 
 private const val CHAT_VIEW_MODEL_TAG = "ChatViewModel"
 
@@ -43,6 +49,12 @@ class ChatViewModel(
 
     private val effectChannel = Channel<ChatEffect>(Channel.BUFFERED)
     val effects: Flow<ChatEffect> = effectChannel.receiveAsFlow()
+    private val frontendEventSequence = AtomicLong()
+    private val _frontendEvents = MutableSharedFlow<ChatFrontendEvent>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val frontendEvents: SharedFlow<ChatFrontendEvent> = _frontendEvents
 
     // ── 状态（写入只经由本类方法） ──
     private val model = ChatModelStateHolder(
@@ -116,6 +128,40 @@ class ChatViewModel(
         get() = promptContext.displayRegex
 
     private val chatRepository = dependencies.chatRepository
+    private val frontendVariablesRevision = mutableIntStateOf(0)
+    private val frontendRpcController by lazy {
+        ChatFrontendRpcController(
+            repository = chatRepository,
+            currentSession = { session },
+            replaceCurrent = { updated ->
+                if (session?.id == updated.id) conversation.replaceCurrent(updated)
+            },
+            loadGlobalVariables = dependencies.promptEnvironment::globalVariables,
+            saveGlobalVariables = { values ->
+                dependencies.generationResources.saveGlobalVariables(values)
+                frontendVariablesRevision.intValue++
+            },
+            scopedVariables = dependencies.frontendVariableDataSource,
+            scopeOwner = { scope, params ->
+                when (scope) {
+                    "character" -> session?.charFile.orEmpty()
+                    "preset" -> currentCard?.linkedPresetId.orEmpty()
+                    "script" -> params.optString("script_id").ifBlank {
+                        "message:${session?.id.orEmpty()}:${params.optInt("message_id", -1)}"
+                    }
+                    else -> ""
+                }.also { require(it.isNotBlank()) { "No active owner for $scope variables" } }
+            },
+            emitEvent = ::emitFrontendEvent,
+        )
+    }
+    private val frontendGeneration by lazy {
+        ChatFrontendGenerationController(
+            config = { apiConfig },
+            gateway = dependencies.generationGateway,
+            emitEvent = ::emitFrontendEvent,
+        )
+    }
     private val generation = GenerationEngine(dependencies.generationGateway)
     private val generationCoordinator by lazy {
         ChatGenerationCoordinator(
@@ -213,6 +259,7 @@ class ChatViewModel(
             sessions = sessionCoordinator,
             postGeneration = postGenerationCoordinator,
             snapshot = ::generationSnapshot,
+            onFrontendEvent = ::emitFrontendEvent,
         )
     }
 
@@ -257,41 +304,45 @@ class ChatViewModel(
     }
 
     val uiState: ChatUiState
-        get() = ChatUiState(
-            conversation = ChatConversationState(
-                sessions = sessions,
-                current = session,
-                card = currentCard,
-                characterImage = promptContext.characterImage,
-                overlays = overlays,
-                displayRegexScripts = displayRegexScripts,
-            ),
-            input = input.state,
-            generation = generationOrchestrator.uiState,
-            profile = ChatProfileState(
-                userName,
-                profile.avatar,
-                tts.speakingTimestamp,
-                tts.uiState,
-            ),
-            model = ChatUiState.ModelState(
-                apiConfig = apiConfig,
-                revision = model.revision,
-                displaySpec = displayModelSpec(),
-                reasoning = reasoning,
-                imageGeneration = imageGeneration,
-                imageGenerationAvailable = modelCapabilities.imageGenerationAvailable,
-            ),
-            search = ChatSearchState(
-                enabled = searchEnabled,
-                providerIndex = searchProviderIndex,
-                providerName = searchProviderName,
-                services = searchServices,
-                builtInAvailable = modelCapabilities.builtInSearchAvailable,
-                builtInEnabled = modelCapabilities.builtInSearchEnabled,
-            ),
-            settings = uiSettings.value,
-        )
+        get() {
+            frontendVariablesRevision.intValue
+            return ChatUiState(
+                conversation = ChatConversationState(
+                    sessions = sessions,
+                    current = session,
+                    card = currentCard,
+                    characterImage = promptContext.characterImage,
+                    overlays = overlays,
+                    displayRegexScripts = displayRegexScripts,
+                ),
+                input = input.state,
+                generation = generationOrchestrator.uiState,
+                profile = ChatProfileState(
+                    userName,
+                    profile.avatar,
+                    tts.speakingTimestamp,
+                    tts.uiState,
+                ),
+                model = ChatUiState.ModelState(
+                    apiConfig = apiConfig,
+                    revision = model.revision,
+                    displaySpec = displayModelSpec(),
+                    reasoning = reasoning,
+                    imageGeneration = imageGeneration,
+                    imageGenerationAvailable = modelCapabilities.imageGenerationAvailable,
+                ),
+                search = ChatSearchState(
+                    enabled = searchEnabled,
+                    providerIndex = searchProviderIndex,
+                    providerName = searchProviderName,
+                    services = searchServices,
+                    builtInAvailable = modelCapabilities.builtInSearchAvailable,
+                    builtInEnabled = modelCapabilities.builtInSearchEnabled,
+                ),
+                settings = uiSettings.value,
+                globalVariables = dependencies.promptEnvironment.globalVariables(),
+            )
+        }
 
     fun dispatch(action: ChatAction) {
         when (action) {
@@ -335,6 +386,8 @@ class ChatViewModel(
             is ChatAction.DeleteMessage -> deleteMessage(action.timestamp)
             is ChatAction.DeleteAllVersions -> deleteAllVersions(action.timestamp)
             is ChatAction.UpdateMessage -> updateMessage(action.timestamp, action.content)
+            is ChatAction.ReplaceFrontendVariables ->
+                replaceFrontendVariables(action.scope, action.values)
             is ChatAction.ClearOverlay -> clearOverlay(action.timestamp)
             is ChatAction.SpeakMessage -> speakMessage(action.timestamp)
             ChatAction.StopSpeaking -> stopSpeaking()
@@ -363,7 +416,10 @@ class ChatViewModel(
             effectChannel.trySend(ChatEffect.HideKeyboard)
         }
         when (outcome) {
-            ChatSendOutcome.STARTED -> if (scrollToBottom) effectChannel.trySend(ChatEffect.ScrollToBottom)
+            ChatSendOutcome.STARTED -> {
+                emitFrontendEvent("message_sent", JSONObject().put("message_id", session?.messages?.lastIndex ?: -1).toString())
+                if (scrollToBottom) effectChannel.trySend(ChatEffect.ScrollToBottom)
+            }
             ChatSendOutcome.NO_MODEL -> {
                 showMessage(dependencies.texts.selectModelFirst)
                 effectChannel.trySend(ChatEffect.OpenModelSelector)
@@ -447,6 +503,7 @@ class ChatViewModel(
     private fun openSession(id: String) {
         if (generating) return
         sessionActions.open(id)
+        emitFrontendEvent("chat_id_changed", JSONObject().put("chat_id", id).toString())
     }
 
     /** 顶栏"新聊天"：当前已是无用户消息的新聊天则不重复创建 */
@@ -615,22 +672,62 @@ class ChatViewModel(
     private fun switchAlt(ts: Long, dir: Int) {
         if (generating) return
         messageMutations.switchAlternative(ts, dir)
+        emitFrontendEvent("message_swiped", JSONObject().put("message_ts", ts).toString())
     }
 
     /** 删除消息：多版本时只删当前显示的版本（下文不受影响），单版本删除整条 */
     private fun deleteMessage(ts: Long) {
         if (generating) return
         messageMutations.deleteMessage(ts)
+        emitFrontendEvent("message_deleted", JSONObject().put("message_ts", ts).toString())
     }
 
     /** 删除消息的全部版本（整条消息） */
     private fun deleteAllVersions(ts: Long) {
         if (generating) return
         messageMutations.deleteAllVersions(ts)
+        emitFrontendEvent("message_deleted", JSONObject().put("message_ts", ts).toString())
     }
 
     private fun updateMessage(ts: Long, content: String) {
         messageMutations.updateMessage(ts, content)
+        emitFrontendEvent("message_edited", JSONObject().put("message_ts", ts).toString())
+    }
+
+    private fun replaceFrontendVariables(scope: String, values: Map<String, String>) {
+        if (scope == "global") {
+            viewModelScope.launch {
+                runCatching { dependencies.generationResources.saveGlobalVariables(values) }
+                    .onSuccess { frontendVariablesRevision.intValue++ }
+                    .onFailure { SafeLog.warn(CHAT_VIEW_MODEL_TAG, "frontend_global_variables_save_failed", it) }
+            }
+            return
+        }
+        val current = session ?: return
+        conversation.updateCurrent(current.id) { it.copy(localVariables = values) }
+        viewModelScope.launch {
+            runCatching { chatRepository.saveLocalVariables(current.id, values) }
+                .onFailure { error ->
+                    SafeLog.warn(CHAT_VIEW_MODEL_TAG, "frontend_chat_variables_save_failed", error)
+                    chatRepository.get(current.id)?.let(conversation::replaceCurrent)
+                }
+        }
+    }
+
+    suspend fun frontendRpc(method: String, paramsJson: String): String =
+        when (method) {
+            "generation.list-models" -> frontendGeneration.models()
+            "generation.call" -> frontendGeneration.generate(
+                runCatching { JSONObject(paramsJson) }.getOrElse { JSONObject() },
+            )
+            "generation.stop" -> frontendGeneration.stop(
+                runCatching { JSONObject(paramsJson).optString("generation_id") }.getOrNull(),
+            )
+            else -> frontendRpcController.call(method, paramsJson)
+        }
+
+    private fun emitFrontendEvent(type: String, payloadJson: String = "{}") {
+        _frontendEvents.tryEmit(ChatFrontendEvent(frontendEventSequence.incrementAndGet(), type, payloadJson))
     }
 
     /** UI 检测到分页已把该 ts 的最终内容补齐后调用：撤下顶替显示的 overlay */

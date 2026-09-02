@@ -11,6 +11,8 @@ import me.rerere.fawntavern.data.api.ApiRequestSnapshot
 @Serializable
 data class MsgAlt(
     val content: String = "",
+    /** 该回复版本的前端/MVU 私有状态；始终是 JSON 对象字符串。 */
+    val dataJson: String = "{}",
     val reasoning: String = "",
     val model: String = "",
     val reasoningMs: Long = 0,
@@ -59,6 +61,9 @@ data class MsgFile(
 data class ChatMessage(
     val role: String,             // "user" | "assistant"
     val content: String = "",
+    /** 当前版本的前端/MVU 私有状态；有 alts 时始终镜像 alts[altIdx].dataJson。 */
+    val dataJson: String = "{}",
+    val isHidden: Boolean = false,
     val reasoning: String = "",   // 思考过程（如 deepseek-reasoner / claude thinking）
     val model: String = "",       // 生成该消息的模型 ID（仅 assistant；开场白为空）
     val reasoningMs: Long = 0,    // 思考耗时（毫秒）

@@ -104,7 +104,7 @@ object SummarizeExtension : Extension, PromptContributor, GenerationLifecycle {
         val state = parseState(ctx.extState)
         val end = msgs.size - cfg.keepRecent.coerceAtLeast(0)
         if (end <= state.coveredUpTo) return                     // 没有新的可折叠历史
-        val chunk = msgs.subList(state.coveredUpTo, end).filter { it.content.isNotBlank() }
+        val chunk = msgs.subList(state.coveredUpTo, end).filter { !it.isHidden && it.content.isNotBlank() }
         if (chunk.isEmpty()) return
         if (chunk.sumOf { TokenEstimator.estimate(it.content) } < cfg.triggerTokens.coerceAtLeast(1)) return
 

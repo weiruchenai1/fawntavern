@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 
 class HtmlMessageContentTest {
     @Test
@@ -68,6 +69,42 @@ class HtmlMessageContentTest {
     }
 
     @Test
+    fun extractFencedHtmlMessageAcceptsUntypedFrontendDocument() {
+        assertEquals(
+            "<!doctype html>\n<html><body><main>card</main></body></html>",
+            extractFencedHtmlMessage(
+                "```\n<!doctype html>\n<html><body><main>card</main></body></html>\n```",
+            ),
+        )
+    }
+
+    @Test
+    fun extractFencedHtmlMessageAcceptsArbitraryLanguageAndTildeFence() {
+        assertEquals(
+            "<html><body>card</body></html>",
+            extractFencedHtmlMessage("~~~~frontend\n<html><body>card</body></html>\n~~~~"),
+        )
+    }
+
+    @Test
+    fun extractFencedHtmlMessageLeavesUnrelatedCodeFenceAlone() {
+        val extracted = extractFencedHtmlMessage(
+            "```html\n<div>card</div>\n```\n```kotlin\nval value = 1\n```",
+        ).orEmpty()
+
+        assertTrue(extracted.contains("<div>card</div>"))
+        assertTrue(extracted.contains("```kotlin\nval value = 1\n```"))
+    }
+
+    @Test
+    fun extractFencedHtmlMessageAcceptsUnclosedFrontendFence() {
+        assertEquals(
+            "<html><body>unfinished but renderable</body></html>",
+            extractFencedHtmlMessage("```html\n<html><body>unfinished but renderable</body></html>"),
+        )
+    }
+
+    @Test
     fun replaceViewportHeightUnitsUsesParentViewportVariable() {
         assertEquals(
             ".full{min-height:var(--TH-viewport-height);}.half{max-height:calc(var(--TH-viewport-height) * 0.5);}.fixed{height:calc(var(--TH-viewport-height) * 0.7);}",
@@ -114,5 +151,39 @@ class HtmlMessageContentTest {
         assertTrue(sanitized.contains("https://example.com/card.png"))
         assertTrue(sanitized.contains("https://example.com/card@2x.png"))
         assertTrue(sanitized.contains("loading=\"eager\""))
+    }
+
+    @Test
+    fun frontendVariablesKeepJsonValuesAndPlainStrings() {
+        val encoded = encodeFrontendVariables(
+            mapOf("score" to "42", "enabled" to "true", "name" to "Alice", "nested" to "{\"level\":3}"),
+        )
+        val json = JSONObject(encoded)
+
+        assertEquals(42, json.getInt("score"))
+        assertTrue(json.getBoolean("enabled"))
+        assertEquals("Alice", json.getString("name"))
+        assertEquals(3, json.getJSONObject("nested").getInt("level"))
+        assertEquals(
+            mapOf("score" to "42", "enabled" to "true", "name" to "Alice", "nested" to "{\"level\":3}"),
+            decodeFrontendVariables(encoded),
+        )
+    }
+
+    @Test
+    fun frontendRuntimeMacrosExpandAvatarAndMessageContext() {
+        val context = JSONObject()
+            .put("userAvatarPath", "data:image/png;base64,user")
+            .put("charAvatarPath", "data:image/png;base64,char")
+            .put("lastMessageId", 8)
+            .toString()
+
+        assertEquals(
+            "data:image/png;base64,user|data:image/png;base64,char|8",
+            expandFrontendRuntimeMacros(
+                "{{userAvatarPath}}|{{charAvatarPath}}|{{lastMessageId}}",
+                context,
+            ),
+        )
     }
 }

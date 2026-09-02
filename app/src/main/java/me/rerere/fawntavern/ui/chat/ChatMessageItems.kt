@@ -191,9 +191,14 @@ internal fun AIMsg(
     thinkingMarkdown: Boolean = true,
     renderPrefs: RenderPrefs = RenderPrefs(),
     chatMessagesJson: String = "[]",
+    frontendContextJson: String = "{}",
+    localVariablesJson: String = "{}",
+    globalVariablesJson: String = "{}",
     onSetInputText: (String) -> Unit = {},
     onSetChatMessage: (Int, String) -> Unit = { _, _ -> },
     onSelectChatMessageSwipe: (Int, Int) -> Unit = { _, _ -> },
+    onReplaceVariables: (String, Map<String, String>) -> Unit = { _, _ -> },
+    rpcCall: FrontendRpcCall = { method, _ -> error("Frontend RPC method is unavailable: $method") },
 ) {
     val s8 = (Space8.value * scale).dp
     val iconSz = (18f * scale).dp
@@ -244,9 +249,14 @@ internal fun AIMsg(
                 charName = charName,
                 renderPrefs = renderPrefs,
                 chatMessagesJson = chatMessagesJson,
+                frontendContextJson = frontendContextJson,
+                localVariablesJson = localVariablesJson,
+                globalVariablesJson = globalVariablesJson,
                 onSetInputText = onSetInputText,
                 onSetChatMessage = onSetChatMessage,
                 onSelectChatMessageSwipe = onSelectChatMessageSwipe,
+                onReplaceVariables = onReplaceVariables,
+                rpcCall = rpcCall,
             )
         }
         // 引用胶囊卡：流式结束后显示在正文之后，点击弹出来源列表。

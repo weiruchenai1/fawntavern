@@ -85,7 +85,9 @@ class ChatPromptAssembler(
         }
 
         val buildHistory = request.buildHistory.trimHistory(historySkip, request.trimSummarizedHistory)
+            .filterNot(ChatMessage::isHidden)
         val promptHistory = request.promptHistory.trimHistory(historySkip, request.trimSummarizedHistory)
+            .filterNot(ChatMessage::isHidden)
         val variableState = MacroVariableState(
             localVariables = request.session.localVariables,
             globalVariables = environment.globalVariables(),

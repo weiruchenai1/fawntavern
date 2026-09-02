@@ -299,6 +299,8 @@ object ChatRepository {
     private fun MessageEntity.toModel() = ChatMessage(
         role = role,
         content = content,
+        dataJson = dataJson.ifBlank { "{}" },
+        isHidden = isHidden,
         reasoning = reasoning,
         model = model,
         reasoningMs = reasoningMs,
@@ -331,6 +333,8 @@ object ChatRepository {
         ts = ts,
         role = role,
         content = content,
+        dataJson = dataJson.takeIf { it.isNotBlank() && it != "{}" }.orEmpty(),
+        isHidden = isHidden,
         reasoning = reasoning,
         model = model,
         reasoningMs = reasoningMs,

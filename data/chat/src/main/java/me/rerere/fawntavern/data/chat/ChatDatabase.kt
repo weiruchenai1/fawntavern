@@ -51,6 +51,8 @@ internal data class MessageEntity(
     val ts: Long,
     val role: String,
     val content: String,
+    @ColumnInfo(defaultValue = "") val dataJson: String = "",
+    @ColumnInfo(defaultValue = "0") val isHidden: Boolean = false,
     val reasoning: String,
     val model: String,
     val reasoningMs: Long,
@@ -136,10 +138,12 @@ internal interface ChatDao {
         FROM sessions s
         JOIN messages m ON m.sessionId = s.id
         WHERE s.charFile = :charFile
+          AND m.isHidden = 0
           AND instr(lower(m.content), lower(:query)) > 0
           AND m.ts = (
               SELECT MIN(hit.ts) FROM messages hit
               WHERE hit.sessionId = s.id
+                AND hit.isHidden = 0
                 AND instr(lower(hit.content), lower(:query)) > 0
           )
         ORDER BY s.updatedAt DESC
@@ -187,7 +191,7 @@ internal interface ChatDao {
     @Query("DELETE FROM messages WHERE sessionId = :sid AND ts = :ts")
     suspend fun deleteMessageRow(sid: String, ts: Long)
 
-    @Query("SELECT COUNT(*) FROM messages WHERE sessionId = :sid")
+    @Query("SELECT COUNT(*) FROM messages WHERE sessionId = :sid AND isHidden = 0")
     suspend fun countMessages(sid: String): Int
 
     /** 截断：删掉该会话内 ts 大于给定值的所有消息（用户消息后无 AI 回复时的重答兜底） */
@@ -257,7 +261,7 @@ internal interface ChatDao {
     suspend fun clearSessions()
 
     /** 单会话消息的分页数据源（Paging 3），按 ts 升序 */
-    @Query("SELECT * FROM messages WHERE sessionId = :id ORDER BY ts ASC")
+    @Query("SELECT * FROM messages WHERE sessionId = :id AND isHidden = 0 ORDER BY ts ASC")
     fun messagesPaged(id: String): PagingSource<Int, MessageEntity>
 
     /** 回写会话标题 */
@@ -268,7 +272,7 @@ internal interface ChatDao {
     suspend fun updatePinned(id: String, pinned: Boolean)
 }
 
-@Database(entities = [SessionEntity::class, MessageEntity::class], version = 13, exportSchema = true)
+@Database(entities = [SessionEntity::class, MessageEntity::class], version = 14, exportSchema = true)
 internal abstract class ChatDatabase : RoomDatabase() {
 
     abstract fun dao(): ChatDao
@@ -299,11 +303,19 @@ internal abstract class ChatDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN dataJson TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE messages ADD COLUMN isHidden INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         private val ALL_MIGRATIONS = arrayOf(
             MIGRATION_9_10,
             MIGRATION_10_11,
             MIGRATION_11_12,
             MIGRATION_12_13,
+            MIGRATION_13_14,
         )
 
         @Volatile private var instance: ChatDatabase? = null

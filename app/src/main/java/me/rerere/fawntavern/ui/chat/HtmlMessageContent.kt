@@ -36,6 +36,16 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import java.io.File
 import java.util.LinkedHashMap
+import java.util.WeakHashMap
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import me.rerere.fawntavern.data.api.Http
 import okhttp3.Cache
 import okhttp3.OkHttpClient
@@ -45,6 +55,8 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Entities
 import org.jsoup.nodes.TextNode
+import org.json.JSONObject
+import org.json.JSONTokener
 
 private data class HtmlFragmentKey(
     val html: String,
@@ -53,6 +65,54 @@ private data class HtmlFragmentKey(
 
 private const val MinHtmlWebViewHeightDp = 120
 private const val MaxHtmlWebViewHeightDp = 600
+private const val FrontendAssetOrigin = "https://appassets.androidplatform.net/frontend/"
+private const val FrontendRpcTimeoutMs = 15_000L
+private const val FrontendRpcMaxPayloadBytes = 256 * 1024
+
+internal typealias FrontendRpcCall = suspend (method: String, paramsJson: String) -> String
+
+private object FrontendWebViewRegistry {
+    private val views = WeakHashMap<MessageWebView, String>()
+
+    fun register(view: MessageWebView, contextJson: String) {
+        val chatId = runCatching { JSONObject(contextJson).optString("chatId") }.getOrDefault("")
+        synchronized(views) { views[view] = chatId }
+    }
+
+    fun unregister(view: MessageWebView) {
+        synchronized(views) { views.remove(view) }
+    }
+
+    fun dispatch(event: ChatFrontendEvent) {
+        val eventChatId = runCatching { JSONObject(event.payloadJson).optString("chat_id") }.getOrDefault("")
+        val targets = synchronized(views) {
+            views.entries.filter { eventChatId.isBlank() || it.value == eventChatId }.map { it.key }
+        }
+        targets.forEach { it.dispatchFrontendEvent(event) }
+    }
+}
+
+internal fun dispatchFrontendEvent(event: ChatFrontendEvent) = FrontendWebViewRegistry.dispatch(event)
+
+/** 只向消息 WebView 暴露随 APK 发布的前端兼容资源。 */
+private object FrontendAssetResources {
+    fun intercept(context: Context, request: WebResourceRequest): WebResourceResponse? {
+        if (request.method != "GET" || request.url.scheme != "https" ||
+            request.url.host != "appassets.androidplatform.net") return null
+        val relative = request.url.encodedPath.orEmpty().removePrefix("/frontend/")
+        if (relative.isBlank() || relative.contains("..") || relative.startsWith('/')) return null
+        val mime = when (relative.substringAfterLast('.', "").lowercase()) {
+            "js" -> "application/javascript"
+            "css" -> "text/css"
+            "woff2" -> "font/woff2"
+            "ttf" -> "font/ttf"
+            "png" -> "image/png"
+            else -> return null
+        }
+        val stream = runCatching { context.assets.open("frontend/$relative") }.getOrNull() ?: return null
+        return WebResourceResponse(mime, if (mime.startsWith("text/") || mime.contains("javascript")) "utf-8" else null, stream)
+    }
+}
 
 /** 浏览器渲染的 HTTPS 图片专用缓存，不依赖服务器返回的缓存头。 */
 private object HtmlImageResourceCache {
@@ -158,10 +218,16 @@ internal fun HtmlMessageContent(
     textStyle: TextStyle,
     modifier: Modifier,
     allowContentJavaScript: Boolean,
+    isStreaming: Boolean = false,
     chatMessagesJson: String = "[]",
+    frontendContextJson: String = "{}",
+    localVariablesJson: String = "{}",
+    globalVariablesJson: String = "{}",
     onSetInputText: (String) -> Unit = {},
     onSetChatMessage: (Int, String) -> Unit = { _, _ -> },
     onSelectChatMessageSwipe: (Int, Int) -> Unit = { _, _ -> },
+    onReplaceVariables: (String, Map<String, String>) -> Unit = { _, _ -> },
+    rpcCall: FrontendRpcCall = { method, _ -> error("Frontend RPC method is unavailable: $method") },
 ) {
     val density = LocalDensity.current
     val uriHandler = LocalUriHandler.current
@@ -179,8 +245,11 @@ internal fun HtmlMessageContent(
         textStyle.lineHeight.value / textStyle.fontSize.value
     } else 1.5f
 
-    val fragmentKey = remember(html, allowContentJavaScript) {
-        HtmlFragmentKey(stripStandaloneHtmlFence(html), allowContentJavaScript)
+    val expandedHtml = remember(html, frontendContextJson) {
+        expandFrontendRuntimeMacros(html, frontendContextJson)
+    }
+    val fragmentKey = remember(expandedHtml, allowContentJavaScript) {
+        HtmlFragmentKey(stripStandaloneHtmlFence(expandedHtml), allowContentJavaScript)
     }
     val fragment = remember(fragmentKey) {
         HtmlMessageCache.fragment(fragmentKey) {
@@ -201,7 +270,7 @@ internal fun HtmlMessageContent(
         )
     }
     val shell = remember(
-        textColor, mutedColor, surface, outline, accent, fontCssPx, lineHeight,
+        textColor, mutedColor, surface, outline, accent, fontCssPx, lineHeight, allowContentJavaScript,
     ) {
         htmlShell(
             textColor = textColor,
@@ -211,6 +280,7 @@ internal fun HtmlMessageContent(
             accent = accent,
             fontSizeCssPx = fontCssPx,
             lineHeight = lineHeight,
+            allowContentJavaScript = allowContentJavaScript,
         )
     }
     // 内容编辑直接更新现有页面；主题或 JavaScript 策略变化时重建页面，避免旧文档安装的定时器
@@ -222,12 +292,18 @@ internal fun HtmlMessageContent(
                     context = context,
                     shell = shell,
                     initialFragment = fragment,
+                    streaming = isStreaming,
                     allowContentJavaScript = allowContentJavaScript,
                     chatMessagesJson = chatMessagesJson,
+                    frontendContextJson = frontendContextJson,
+                    localVariablesJson = localVariablesJson,
+                    globalVariablesJson = globalVariablesJson,
                     onPageHeight = onPageHeight,
                     onSetInputText = onSetInputText,
                     onSetChatMessage = onSetChatMessage,
                     onSelectChatMessageSwipe = onSelectChatMessageSwipe,
+                    onReplaceVariables = onReplaceVariables,
+                    rpcCall = rpcCall,
                     onOpenImage = { previewImage = it },
                     onOpenLink = { url -> runCatching { uriHandler.openUri(url) } },
                 )
@@ -235,10 +311,16 @@ internal fun HtmlMessageContent(
             update = {
                 it.bind(
                     chatMessagesJson = chatMessagesJson,
+                    frontendContextJson = frontendContextJson,
+                    localVariablesJson = localVariablesJson,
+                    globalVariablesJson = globalVariablesJson,
+                    streaming = isStreaming,
                     onPageHeight = onPageHeight,
                     onSetInputText = onSetInputText,
                     onSetChatMessage = onSetChatMessage,
                     onSelectChatMessageSwipe = onSelectChatMessageSwipe,
+                    onReplaceVariables = onReplaceVariables,
+                    rpcCall = rpcCall,
                     onOpenImage = { previewImage = it },
                     onOpenLink = { url -> runCatching { uriHandler.openUri(url) } },
                 )
@@ -264,30 +346,45 @@ private class MessageWebView(
     context: Context,
     shell: String,
     initialFragment: String,
+    streaming: Boolean,
     private val allowContentJavaScript: Boolean,
     chatMessagesJson: String,
+    frontendContextJson: String,
+    localVariablesJson: String,
+    globalVariablesJson: String,
     onPageHeight: (Int) -> Unit,
     onSetInputText: (String) -> Unit,
     onSetChatMessage: (Int, String) -> Unit,
     onSelectChatMessageSwipe: (Int, Int) -> Unit,
+    onReplaceVariables: (String, Map<String, String>) -> Unit,
+    rpcCall: FrontendRpcCall,
     onOpenImage: (String) -> Unit,
     onOpenLink: (String) -> Unit,
 ) : WebView(context) {
     @Volatile private var active = true
     @Volatile private var chatMessagesJson: String = chatMessagesJson
+    @Volatile private var frontendContextJson: String = frontendContextJson
+    @Volatile private var localVariablesJson: String = localVariablesJson
+    @Volatile private var globalVariablesJson: String = globalVariablesJson
     private var onPageHeight: (Int) -> Unit = onPageHeight
     private var onSetInputText: (String) -> Unit = onSetInputText
     private var onSetChatMessage: (Int, String) -> Unit = onSetChatMessage
     private var onSelectChatMessageSwipe: (Int, Int) -> Unit = onSelectChatMessageSwipe
+    private var onReplaceVariables: (String, Map<String, String>) -> Unit = onReplaceVariables
+    private var rpcCall: FrontendRpcCall = rpcCall
     private var onOpenImage: (String) -> Unit = onOpenImage
     private var onOpenLink: (String) -> Unit = onOpenLink
     private var ready = false
     private var latestFragment = initialFragment
     private var deliveredFragment: String? = null
+    private var streaming = streaming
     private var lastTouchY = 0f
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val rpcScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val rpcJobs = ConcurrentHashMap<String, Job>()
 
     init {
+        FrontendWebViewRegistry.register(this, frontendContextJson)
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
         isVerticalScrollBarEnabled = true
         isHorizontalScrollBarEnabled = false
@@ -317,6 +414,8 @@ private class MessageWebView(
         addJavascriptInterface(
             TavernBridge(
                 messages = { this.chatMessagesJson },
+                context = { this.frontendContextJson },
+                variables = { scope -> if (scope == "global") this.globalVariablesJson else this.localVariablesJson },
                 reportHeight = { height ->
                     dispatchToMain { this@MessageWebView.onPageHeight(height) }
                 },
@@ -327,6 +426,13 @@ private class MessageWebView(
                 selectSwipe = { index, swipeId ->
                     dispatchToMain { this@MessageWebView.onSelectChatMessageSwipe(index, swipeId) }
                 },
+                replaceVariables = { scope, values ->
+                    dispatchToMain { this@MessageWebView.onReplaceVariables(scope, values) }
+                },
+                rpcCall = { requestId, method, params ->
+                    dispatchToMain { runRpc(requestId, method, params) }
+                },
+                cancelRpc = { requestId -> dispatchToMain { cancelRpc(requestId) } },
                 showImage = { source -> dispatchToMain { this@MessageWebView.onOpenImage(source) } },
             ),
             "FawnBridge",
@@ -336,7 +442,8 @@ private class MessageWebView(
                 view: WebView?,
                 request: WebResourceRequest?,
             ): WebResourceResponse? {
-                return request?.let { HtmlImageResourceCache.intercept(context, it) }
+                return request?.let { FrontendAssetResources.intercept(context, it) }
+                    ?: request?.let { HtmlImageResourceCache.intercept(context, it) }
                     ?: super.shouldInterceptRequest(view, request)
             }
 
@@ -365,7 +472,7 @@ private class MessageWebView(
                 return true
             }
         }
-        val bootstrap = "window.__fawnUpdate(" + org.json.JSONObject.quote(initialFragment) + ");"
+        val bootstrap = "window.__fawnUpdate(" + org.json.JSONObject.quote(initialFragment) + ",false);"
         val initialPage = shell.replace("</body>", "<script>$bootstrap</script></body>")
         loadDataWithBaseURL("https://appassets.androidplatform.net/", initialPage, "text/html", "utf-8", null)
     }
@@ -377,28 +484,47 @@ private class MessageWebView(
 
     fun bind(
         chatMessagesJson: String,
+        frontendContextJson: String,
+        localVariablesJson: String,
+        globalVariablesJson: String,
+        streaming: Boolean,
         onPageHeight: (Int) -> Unit,
         onSetInputText: (String) -> Unit,
         onSetChatMessage: (Int, String) -> Unit,
         onSelectChatMessageSwipe: (Int, Int) -> Unit,
+        onReplaceVariables: (String, Map<String, String>) -> Unit,
+        rpcCall: FrontendRpcCall,
         onOpenImage: (String) -> Unit,
         onOpenLink: (String) -> Unit,
     ) {
         active = true
         this.chatMessagesJson = chatMessagesJson
+        this.frontendContextJson = frontendContextJson
+        FrontendWebViewRegistry.register(this, frontendContextJson)
+        this.localVariablesJson = localVariablesJson
+        this.globalVariablesJson = globalVariablesJson
+        this.streaming = streaming
         this.onPageHeight = onPageHeight
         this.onSetInputText = onSetInputText
         this.onSetChatMessage = onSetChatMessage
         this.onSelectChatMessageSwipe = onSelectChatMessageSwipe
+        this.onReplaceVariables = onReplaceVariables
+        this.rpcCall = rpcCall
         this.onOpenImage = onOpenImage
         this.onOpenLink = onOpenLink
+        if (ready && allowContentJavaScript) {
+            evaluateJavascript("window.__fawnCompatibilityContextChanged&&window.__fawnCompatibilityContextChanged();", null)
+        }
     }
 
     fun deactivate() {
         active = false
+        FrontendWebViewRegistry.unregister(this)
         // LazyColumn 可能在系统处理焦点时移除此 AndroidView，因此分离前清除焦点和待处理回调，
         // 避免 Android 10 在 CompositionImpl.drainPendingModificationsForCompositionLocked 中崩溃。
         mainHandler.removeCallbacksAndMessages(null)
+        rpcJobs.values.forEach { it.cancel() }
+        rpcJobs.clear()
         stopLoading()
         clearFocus()
         descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -410,6 +536,55 @@ private class MessageWebView(
     private fun dispatchToMain(block: () -> Unit) {
         if (!active) return
         mainHandler.post { if (active) block() }
+    }
+
+    private fun runRpc(requestId: String, method: String, paramsJson: String) {
+        if (!allowContentJavaScript || requestId.length !in 1..80 ||
+            !method.matches(Regex("^[a-z][a-z0-9_.-]{0,79}$")) ||
+            paramsJson.toByteArray(Charsets.UTF_8).size > FrontendRpcMaxPayloadBytes) {
+            resolveRpc(requestId, false, "invalid-request")
+            return
+        }
+        rpcJobs.remove(requestId)?.cancel()
+        rpcJobs[requestId] = rpcScope.launch {
+            val result = runCatching {
+                withTimeout(FrontendRpcTimeoutMs) { rpcCall(method, paramsJson) }
+            }
+            rpcJobs.remove(requestId)
+            if (result.exceptionOrNull() is CancellationException) return@launch
+            result.fold(
+                onSuccess = { payload ->
+                    if (payload.toByteArray(Charsets.UTF_8).size > FrontendRpcMaxPayloadBytes) {
+                        resolveRpc(requestId, false, "result-too-large")
+                    } else {
+                        resolveRpc(requestId, true, payload)
+                    }
+                },
+                onFailure = { error -> resolveRpc(requestId, false, error.message.orEmpty().take(300)) },
+            )
+        }
+    }
+
+    private fun cancelRpc(requestId: String) {
+        rpcJobs.remove(requestId)?.cancel()
+    }
+
+    private fun resolveRpc(requestId: String, ok: Boolean, payload: String) {
+        if (!active) return
+        evaluateJavascript(
+            "window.__fawnResolve&&window.__fawnResolve(" +
+                JSONObject.quote(requestId) + "," + ok + "," + JSONObject.quote(payload) + ");",
+            null,
+        )
+    }
+
+    fun dispatchFrontendEvent(event: ChatFrontendEvent) {
+        if (!active || !ready || !allowContentJavaScript) return
+        evaluateJavascript(
+            "window.__fawnEmitHostEvent&&window.__fawnEmitHostEvent(" +
+                JSONObject.quote(event.type) + "," + JSONObject.quote(event.payloadJson) + "," + event.sequence + ");",
+            null,
+        )
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -440,13 +615,14 @@ private class MessageWebView(
         if (!ready || latestFragment == deliveredFragment) return
         deliveredFragment = latestFragment
         evaluateJavascript(
-            "window.__fawnUpdate(${org.json.JSONObject.quote(latestFragment)});",
+            "window.__fawnUpdate(${org.json.JSONObject.quote(latestFragment)},${streaming});",
             null,
         )
     }
 
     fun destroySafely() {
         deactivate()
+        rpcScope.cancel()
         removeJavascriptInterface("FawnBridge")
         destroy()
     }
@@ -461,14 +637,38 @@ private class MessageWebView(
 
 private class TavernBridge(
     private val messages: () -> String,
+    private val context: () -> String,
+    private val variables: (String) -> String,
     private val reportHeight: (Int) -> Unit,
     private val setInput: (String) -> Unit,
     private val setMessage: (Int, String) -> Unit,
     private val selectSwipe: (Int, Int) -> Unit,
+    private val replaceVariables: (String, Map<String, String>) -> Unit,
+    private val rpcCall: (String, String, String) -> Unit,
+    private val cancelRpc: (String) -> Unit,
     private val showImage: (String) -> Unit,
 ) {
     @JavascriptInterface
     fun getChatMessages(): String = messages()
+
+    @JavascriptInterface
+    fun getFrontendContext(): String = context()
+
+    @JavascriptInterface
+    fun getVariables(scope: String): String = variables(scope.lowercase())
+
+    @JavascriptInterface
+    fun replaceVariables(scope: String, json: String) {
+        val normalized = scope.lowercase()
+        if (normalized != "chat" && normalized != "global") return
+        decodeFrontendVariables(json)?.let { replaceVariables(normalized, it) }
+    }
+
+    @JavascriptInterface
+    fun call(requestId: String, method: String, paramsJson: String) = rpcCall(requestId, method, paramsJson)
+
+    @JavascriptInterface
+    fun cancel(requestId: String) = cancelRpc(requestId)
 
     @JavascriptInterface
     fun reportPageHeight(height: Int) = reportHeight(height)
@@ -515,26 +715,122 @@ internal fun stripStandaloneHtmlFenceLines(source: String): String {
 
 internal fun extractFencedHtmlMessage(source: String): String? {
     val normalized = source.replace("\r\n", "\n").replace('\r', '\n')
-    val hasHtmlFence = Regex("(?im)^\\s*```(?:html|css)\\s*$").containsMatchIn(normalized)
-    val hasHtml = Regex("(?is)<(?:!doctype|html|head|body|style|script|iframe|div|section|article|details|form)\\b")
-        .containsMatchIn(normalized)
-    if (!hasHtmlFence || !hasHtml) return null
-    val resourceFence = Regex(
-        "(?ims)^[ \\t]*```(html|css|javascript|js)[ \\t]*\\n(.*?)^[ \\t]*```[ \\t]*(?=\\n|$)",
-    )
-    val transformed = resourceFence.replace(normalized) { match ->
-        val language = match.groupValues[1].lowercase()
-        val body = match.groupValues[2].removeSuffix("\n")
-        when (language) {
-            "css" -> wrapFencedResource(body, "style")
-            "javascript", "js" -> wrapFencedResource(body, "script")
-            else -> body
+    val blocks = parseFrontendFences(normalized)
+    if (blocks.none { it.isHtmlResource() }) return null
+
+    val byStart = blocks.associateBy(FrontendFence::startLine)
+    val lines = normalized.split('\n')
+    return buildString(normalized.length) {
+        var lineIndex = 0
+        while (lineIndex < lines.size) {
+            val block = byStart[lineIndex]
+            if (block == null) {
+                append(lines[lineIndex])
+                if (lineIndex != lines.lastIndex) append('\n')
+                lineIndex++
+                continue
+            }
+
+            val replacement = when {
+                block.language == "css" -> wrapFencedResource(block.body, "style")
+                block.language == "javascript" || block.language == "js" ->
+                    wrapFencedResource(block.body, "script")
+                block.isHtmlResource() -> block.body
+                else -> block.source
+            }
+            append(replacement)
+            if (block.endLine != lines.lastIndex) append('\n')
+            lineIndex = block.endLine + 1
         }
     }
-    // 兼容使用无类型起始围栏并在后面追加有类型区段的旧角色卡。
-    return transformed.lineSequence()
-        .filterNot { it.trim() == "```" }
-        .joinToString("\n")
+}
+
+internal fun encodeFrontendVariables(values: Map<String, String>): String = JSONObject().apply {
+    values.forEach { (key, raw) ->
+        val value = runCatching { JSONTokener(raw).nextValue() }.getOrElse { raw }
+        put(key, value)
+    }
+}.toString()
+
+internal fun decodeFrontendVariables(raw: String): Map<String, String>? {
+    if (raw.toByteArray(Charsets.UTF_8).size > 256 * 1024) return null
+    val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+    if (json.length() > 512) return null
+    return buildMap {
+        json.keys().forEach { key ->
+            if (key.length > 256) return@forEach
+            val value = json.opt(key)
+            put(key, if (value == null || value === JSONObject.NULL) "null" else value.toString())
+        }
+    }
+}
+
+internal fun expandFrontendRuntimeMacros(source: String, contextJson: String): String {
+    val context = runCatching { JSONObject(contextJson) }.getOrElse { JSONObject() }
+    val replacements = mapOf(
+        "userAvatarPath" to context.optString("userAvatarPath"),
+        "charAvatarPath" to context.optString("charAvatarPath"),
+        "lastMessageId" to context.optInt("lastMessageId", -1).toString(),
+    )
+    var result = source
+    replacements.forEach { (name, value) ->
+        result = result.replace(Regex("(?i)\\{\\{${Regex.escape(name)}\\}\\}"), value)
+    }
+    return result
+}
+
+private data class FrontendFence(
+    val startLine: Int,
+    val endLine: Int,
+    val language: String,
+    val body: String,
+    val source: String,
+) {
+    fun isHtmlResource(): Boolean {
+        val hasDocumentTag = Regex("(?is)<(?:!doctype\\s+html|html|head|body)\\b").containsMatchIn(body)
+        val hasHtmlElement = Regex(
+            "(?is)<(?:style|script|iframe|div|section|article|details|form|main|header|footer|table|svg)\\b",
+        ).containsMatchIn(body)
+        return hasDocumentTag || (language in setOf("html", "htm", "frontend", "web", "xml", "vue") && hasHtmlElement) ||
+            (language.isBlank() && hasHtmlElement)
+    }
+}
+
+/**
+ * 前端卡常把完整文档放进无类型、任意语言或波浪线围栏；围栏标签不能作为是否渲染的依据。
+ * 这里只做结构提取，是否属于前端文档由块正文中的 HTML 元素决定。
+ */
+private fun parseFrontendFences(source: String): List<FrontendFence> {
+    val lines = source.split('\n')
+    val blocks = mutableListOf<FrontendFence>()
+    var index = 0
+    while (index < lines.size) {
+        val trimmed = lines[index].trim()
+        val marker = trimmed.takeWhile { it == '`' || it == '~' }
+        if (marker.length < 3 || marker.any { it != marker.first() }) {
+            index++
+            continue
+        }
+        val language = trimmed.drop(marker.length).trim().substringBefore(' ').lowercase()
+        var end = index + 1
+        while (end < lines.size) {
+            val closing = lines[end].trim()
+            val closingMarker = closing.takeWhile { it == marker.first() }
+            if (closingMarker.length >= marker.length && closing.drop(closingMarker.length).isBlank()) break
+            end++
+        }
+        val closed = end < lines.size
+        val endLine = if (closed) end else lines.lastIndex
+        blocks += FrontendFence(
+            startLine = index,
+            endLine = endLine,
+            language = language,
+            body = lines.subList(index + 1, if (closed) end else lines.size).joinToString("\n"),
+            source = lines.subList(index, endLine + 1).joinToString("\n"),
+        )
+        index = endLine + 1
+    }
+    return blocks
 }
 
 private fun wrapFencedResource(source: String, tag: String): String {
@@ -650,6 +946,16 @@ private fun iframeDocument(source: String, allowContentJavaScript: Boolean): Str
         "*,*::before,*::after{box-sizing:border-box}html,body{margin:0;padding:0;max-width:100%;overflow:hidden!important}",
     )
     document.head().prependElement("script").attr("data-fawn-runtime", "iframe").append(iframeRuntime)
+    if (allowContentJavaScript) {
+        listOf(
+            "vendor/fontawesome/css/all.min.css",
+            "vendor/jquery-ui.min.css",
+            "vendor/toastr.min.css",
+        ).forEach { path ->
+            document.head().appendElement("link").attr("rel", "stylesheet").attr("href", FrontendAssetOrigin + path)
+        }
+        document.head().appendElement("script").attr("src", FrontendAssetOrigin + "vendor/tailwindcss.min.js")
+    }
     document.outputSettings().prettyPrint(false)
     return document.outerHtml()
 }
@@ -670,6 +976,7 @@ internal fun replaceViewportHeightUnits(source: String): String = viewportHeight
 
 private val iframeRuntime = """
 (function(){
+try{const names=['_','$','jQuery','Vue','VueRouter','YAML','z','Zod','showdown','toastr','TavernHelper','SillyTavern','tavern_events','iframe_events'];names.forEach(name=>{if(window[name]===undefined&&window.parent&&window.parent[name]!==undefined)window[name]=window.parent[name]});if(window.parent&&window.parent.TavernHelper){Object.keys(window.parent.TavernHelper).forEach(name=>{if(window[name]===undefined)window[name]=window.parent.TavernHelper[name]})}}catch(_){}
 let resizeRaf=0;
 function viewport(){const h=window.screen?.availHeight||window.screen?.height||window.innerHeight;document.documentElement.style.setProperty('--TH-viewport-height',h+'px')}
 function resize(){resizeRaf=0;const b=document.body,d=document.documentElement;if(!b||!d)return;const h=Math.max(1,Math.ceil(Math.max(b.scrollHeight,b.offsetHeight,d.scrollHeight,d.offsetHeight)));if(frameElement)frameElement.style.setProperty('height',h+'px','important')}
@@ -737,9 +1044,11 @@ private fun htmlShell(
     accent: Color,
     fontSizeCssPx: Float,
     lineHeight: Float,
+    allowContentJavaScript: Boolean,
 ): String = """
 <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob: https: http:; media-src data: blob: https: http:; font-src data: https: http:; style-src 'unsafe-inline' https: http:; script-src 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; connect-src data: blob: https: http: wss: ws:; worker-src data: blob: https: http:; frame-src 'self' data: blob: https: http:; form-action 'none'">
+${frontendDependencyHead(allowContentJavaScript)}
 <style>
 :root{color-scheme:light dark}*{box-sizing:border-box}html,body{margin:0;padding:0;background:transparent;color:${textColor.css()};font-family:system-ui,-apple-system,sans-serif;font-size:${fontSizeCssPx}px;line-height:$lineHeight;letter-spacing:0;overflow-x:hidden;overflow-y:auto}
 #content{display:flow-root;width:100%}#content>:first-child{margin-top:0}#content>:last-child{margin-bottom:0}p{margin:.45em 0}h1,h2,h3,h4,h5,h6{line-height:1.3;margin:.7em 0 .35em}h1{font-size:1.5em}h2{font-size:1.3em}h3{font-size:1.15em}h4{font-size:1.05em}h5,h6{font-size:1em}a{color:${accent.css()}}img,video{max-width:100%;height:auto}.fawn-table-scroll{display:block;width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}.fawn-table-scroll table{width:max-content;min-width:100%;border-collapse:collapse}.fawn-table-scroll th,.fawn-table-scroll td{border:1px solid ${outline.css()};padding:.35em .55em;white-space:normal;overflow-wrap:anywhere}blockquote{margin:.5em 0;padding-left:.8em;border-left:3px solid ${outline.css()};color:${mutedColor.css()}}
@@ -755,7 +1064,7 @@ window.__fawnStructureChanged=function(){requestAnimationFrame(schedulePageHeigh
 function bridgeInput(){FawnBridge.setInputText(sendTextarea.value)}
 sendTextarea.addEventListener('input',bridgeInput);sendTextarea.addEventListener('change',bridgeInput);
 window.setInputText=function(value){const text=String(value??'');sendTextarea.value=text;FawnBridge.setInputText(text)};
-window.getChatMessages=function(range){let messages=[];try{messages=JSON.parse(FawnBridge.getChatMessages())}catch(_){}if(range===undefined||range===null)return messages;if(typeof range==='number'){const i=range<0?messages.length+range:range;return i>=0&&i<messages.length?[messages[i]]:[]}const match=String(range).match(/^(-?\d+)(?:-(-?\d+))?$/);if(!match)return messages;const index=x=>{const n=Number(x);return n<0?messages.length+n:n};const start=index(match[1]),end=index(match[2]??match[1]);return messages.slice(Math.max(0,Math.min(start,end)),Math.min(messages.length,Math.max(start,end)+1))};
+window.getChatMessages=function(range,options){let messages=[];try{messages=JSON.parse(FawnBridge.getChatMessages())}catch(_){}const opts=options&&typeof options==='object'?options:{};if(opts.role)messages=messages.filter(x=>x.role===opts.role);if(opts.hide_state==='hidden')messages=messages.filter(x=>x.is_hidden);else if(opts.hide_state==='unhidden')messages=messages.filter(x=>!x.is_hidden);if(!opts.include_swipes)messages=messages.map(x=>{const copy=Object.assign({},x);delete copy.swipes;return copy});if(range===undefined||range===null)return messages;const last=messages.length?messages[messages.length-1].message_id:-1;if(typeof range==='number'){const id=range<0?last+1+range:range;return messages.filter(x=>x.message_id===id)}const match=String(range).match(/^(-?\d+)(?:-(-?\d+))?$/);if(!match)return messages;const index=x=>{const n=Number(x);return n<0?last+1+n:n};const start=index(match[1]),end=index(match[2]??match[1]);return messages.filter(x=>x.message_id>=Math.min(start,end)&&x.message_id<=Math.max(start,end))};
 window.setChatMessage=function(fields,messageId,options){const id=Number(messageId);const swipeId=options&&Number(options.swipe_id);if(Number.isInteger(swipeId)&&swipeId>=0){FawnBridge.selectChatMessageSwipe(id,swipeId);return Promise.resolve()}const value=typeof fields==='string'?fields:(fields&&fields.message);if(value!==undefined)FawnBridge.setChatMessage(id,String(value));return Promise.resolve()};
 window.__fawnOpenImage=function(source){if(source)FawnBridge.openImage(String(source))};
 async function activateScripts(root){
@@ -783,9 +1092,29 @@ function watchMedia(root){
 new MutationObserver(records=>{records.forEach(record=>{record.addedNodes.forEach(node=>{if(node.nodeType!==1)return;if(node.matches&&node.matches('iframe'))fitFrame(node);if(node.querySelectorAll){activateFrames(node);watchMedia(node)}})})}).observe(content,{subtree:true,childList:true});
 content.addEventListener('click',event=>{const image=event.target&&event.target.closest?event.target.closest('img'):null;if(image){event.preventDefault();window.__fawnOpenImage(image.currentSrc||image.src)}requestAnimationFrame(schedulePageHeight)},true);content.addEventListener('toggle',()=>requestAnimationFrame(schedulePageHeight),true);
 let contentRevision=0;
-window.__fawnUpdate=async function(html){const revision=++contentRevision,details=[...content.querySelectorAll('details')].map(x=>x.open);content.innerHTML=html;content.querySelectorAll('details').forEach((x,i)=>{if(i<details.length)x.open=details[i]});activateFrames(content);watchMedia(content);await activateScripts(content);if(revision!==contentRevision)return;activateFrames(content);watchMedia(content);schedulePageHeight()};
-</script></body></html>
+window.__fawnUpdate=async function(html,incremental){const revision=++contentRevision,details=[...content.querySelectorAll('details')].map(x=>x.open);content.innerHTML=html;content.querySelectorAll('details').forEach((x,i)=>{if(i<details.length)x.open=details[i]});activateFrames(content);watchMedia(content);if(!incremental)await activateScripts(content);if(revision!==contentRevision)return;activateFrames(content);watchMedia(content);schedulePageHeight()};
+</script>${frontendCompatibilityScript(allowContentJavaScript)}</body></html>
 """.trimIndent()
+
+private fun frontendDependencyHead(enabled: Boolean): String = if (!enabled) "" else """
+<link rel="stylesheet" href="${FrontendAssetOrigin}vendor/fontawesome/css/all.min.css">
+<link rel="stylesheet" href="${FrontendAssetOrigin}vendor/jquery-ui.min.css">
+<link rel="stylesheet" href="${FrontendAssetOrigin}vendor/toastr.min.css">
+<script src="${FrontendAssetOrigin}vendor/tailwindcss.min.js"></script>
+<script src="${FrontendAssetOrigin}vendor/lodash.min.js"></script>
+<script src="${FrontendAssetOrigin}vendor/jquery.min.js"></script>
+<script src="${FrontendAssetOrigin}vendor/jquery-ui.min.js"></script>
+<script src="${FrontendAssetOrigin}vendor/jquery.ui.touch-punch.min.js"></script>
+<script src="${FrontendAssetOrigin}vendor/vue.runtime.global.prod.js"></script>
+<script src="${FrontendAssetOrigin}vendor/vue-router.global.prod.js"></script>
+<script src="${FrontendAssetOrigin}vendor/js-yaml.min.js"></script>
+<script src="${FrontendAssetOrigin}vendor/zod.umd.js"></script>
+<script src="${FrontendAssetOrigin}vendor/showdown.min.js"></script>
+<script src="${FrontendAssetOrigin}vendor/toastr.min.js"></script>
+""".trimIndent()
+
+private fun frontendCompatibilityScript(enabled: Boolean): String =
+    if (enabled) "<script src=\"${FrontendAssetOrigin}tavern-helper-compat.js\"></script>" else ""
 
 private fun Color.css(): String = String.format("#%08X", toArgb()).let { argb ->
     "#" + argb.substring(3) + argb.substring(1, 3)

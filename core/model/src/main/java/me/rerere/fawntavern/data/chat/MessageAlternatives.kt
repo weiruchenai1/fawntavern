@@ -31,6 +31,7 @@ object MessageAlternatives {
 
     private fun MsgAlt.copyFrom(message: ChatMessage): MsgAlt = copy(
         content = message.content,
+        dataJson = message.dataJson,
         reasoning = message.reasoning,
         model = message.model,
         reasoningMs = message.reasoningMs,
@@ -46,6 +47,7 @@ object MessageAlternatives {
 
     private fun ChatMessage.copyFrom(alternative: MsgAlt): ChatMessage = copy(
         content = alternative.content,
+        dataJson = alternative.dataJson,
         reasoning = alternative.reasoning,
         model = alternative.model,
         reasoningMs = alternative.reasoningMs,

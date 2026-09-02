@@ -264,7 +264,7 @@ class GenerationEngine(
         if (cur.alts.isNotEmpty()) {
             val alts = cur.alts.toMutableList()
             alts[cur.altIdx] = alts[cur.altIdx].copy(
-                content = cur.content, reasoning = cur.reasoning,
+                content = cur.content, dataJson = cur.dataJson, reasoning = cur.reasoning,
                 model = cur.model, reasoningMs = cur.reasoningMs, searches = cur.searches,
                 images = cur.images, imageAspectRatio = cur.imageAspectRatio,
                 requestSnapshots = cur.requestSnapshots,

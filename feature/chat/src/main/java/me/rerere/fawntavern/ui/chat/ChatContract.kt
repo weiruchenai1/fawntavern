@@ -12,6 +12,7 @@ data class ChatUiState(
     val model: ModelState,
     val search: ChatSearchState,
     val settings: ChatUiSettings,
+    val globalVariables: Map<String, String> = emptyMap(),
 ) {
     data class ModelState(
         val apiConfig: ApiConfig,

@@ -14,6 +14,7 @@ import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.domain.ChatGenerationMode
 import me.rerere.fawntavern.domain.ChatRegenerationPlan
 import me.rerere.fawntavern.domain.chat.ChatSessionCoordinator
+import org.json.JSONObject
 
 internal data class ChatGenerationSnapshot(
     val card: CharacterCard?,
@@ -37,6 +38,7 @@ internal class ChatGenerationOrchestrator(
     private val sessions: ChatSessionCoordinator,
     private val postGeneration: ChatPostGenerationCoordinator,
     private val snapshot: () -> ChatGenerationSnapshot,
+    private val onFrontendEvent: (String, String) -> Unit = { _, _ -> },
 ) {
     val isRunning: Boolean
         get() = generationState.isRunning
@@ -111,16 +113,29 @@ internal class ChatGenerationOrchestrator(
                 conversation.replaceCurrent(base)
                 generationState.markTarget(message.ts)
                 conversation.putOverlay(message)
+                onFrontendEvent(
+                    "generation_started",
+                    JSONObject().put("message_ts", message.ts).toString(),
+                )
             },
             onLocalVariablesCommitted = { variables ->
                 conversation.updateCurrent(sessionId) { it.copy(localVariables = variables) }
             },
-            onUpdate = conversation::putOverlay,
+            onUpdate = { message ->
+                conversation.putOverlay(message)
+                onFrontendEvent(
+                    "stream_token_received",
+                    JSONObject().put("message_ts", message.ts).put("text", message.content).toString(),
+                )
+            },
         ) ?: return
 
         result.completedSession?.let { completed ->
             if (conversation.current?.id == sessionId) conversation.replaceCurrent(completed)
             runPostGeneration(completed)
+            val messageId = completed.messages.lastIndex
+            onFrontendEvent("message_received", JSONObject().put("message_id", messageId).toString())
+            onFrontendEvent("generation_ended", JSONObject().put("message_id", messageId).toString())
         }
     }
 

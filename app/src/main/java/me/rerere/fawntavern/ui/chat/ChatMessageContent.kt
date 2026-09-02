@@ -114,9 +114,14 @@ fun MessageContent(
     charName: String = "",
     renderPrefs: RenderPrefs = RenderPrefs(),
     chatMessagesJson: String = "[]",
+    frontendContextJson: String = "{}",
+    localVariablesJson: String = "{}",
+    globalVariablesJson: String = "{}",
     onSetInputText: (String) -> Unit = {},
     onSetChatMessage: (Int, String) -> Unit = { _, _ -> },
     onSelectChatMessageSwipe: (Int, Int) -> Unit = { _, _ -> },
+    onReplaceVariables: (String, Map<String, String>) -> Unit = { _, _ -> },
+    rpcCall: FrontendRpcCall = { method, _ -> error("Frontend RPC method is unavailable: $method") },
     /** 是否撑满可用宽度。AI 消息用 true（整行宽）；用户气泡内传 false 让气泡拥抱内容 */
     fillWidth: Boolean = true,
 ) {
@@ -157,9 +162,10 @@ fun MessageContent(
     // 测量和显示；真实结束围栏到达后补丁自然消失，不会改变最终存储内容。
     // 带围栏的角色卡输出属于同一文档，样式、脚本、正文和 iframe 必须放在同一个 WebView 中。
     // 若先移除围栏再按 Markdown 分段，会破坏同一文档内的运行环境。
-    val wholeHtmlPage = remember(processed, isStreaming, renderPrefs.htmlCss) {
-        if (isStreaming || !renderPrefs.htmlCss) null else {
+    val wholeHtmlPage = remember(processed, renderPrefs.htmlCss) {
+        if (!renderPrefs.htmlCss) null else {
             extractFencedHtmlMessage(processed)
+                ?: extractStandaloneHtmlDocument(processed)
                 ?: processed.takeIf(::isBareHtmlFragment)
         }
     }
@@ -169,10 +175,16 @@ fun MessageContent(
             textStyle = textStyle,
             modifier = if (fillWidth) modifier.fillMaxWidth() else modifier,
             allowContentJavaScript = renderPrefs.javascript,
+            isStreaming = isStreaming,
             chatMessagesJson = chatMessagesJson,
+            frontendContextJson = frontendContextJson,
+            localVariablesJson = localVariablesJson,
+            globalVariablesJson = globalVariablesJson,
             onSetInputText = onSetInputText,
             onSetChatMessage = onSetChatMessage,
             onSelectChatMessageSwipe = onSelectChatMessageSwipe,
+            onReplaceVariables = onReplaceVariables,
+            rpcCall = rpcCall,
         )
         return
     }
@@ -195,10 +207,16 @@ fun MessageContent(
                                 textStyle = textStyle,
                                 modifier = Modifier.fillMaxWidth(),
                                 allowContentJavaScript = renderPrefs.javascript,
+                                isStreaming = isStreaming,
                                 chatMessagesJson = chatMessagesJson,
+                                frontendContextJson = frontendContextJson,
+                                localVariablesJson = localVariablesJson,
+                                globalVariablesJson = globalVariablesJson,
                                 onSetInputText = onSetInputText,
                                 onSetChatMessage = onSetChatMessage,
                                 onSelectChatMessageSwipe = onSelectChatMessageSwipe,
+                                onReplaceVariables = onReplaceVariables,
+                                rpcCall = rpcCall,
                             )
                         }
                     } else if (renderPrefs.markdown) {

@@ -35,5 +35,6 @@ class ChatFeatureDependencies(
     val titleSettingsDataSource: ChatTitleSettingsDataSource,
     val ttsControllerFactory: () -> ChatTtsController,
     val texts: ChatTextProvider,
+    val frontendVariableDataSource: ChatFrontendVariableDataSource = EmptyChatFrontendVariableDataSource,
     val initialize: () -> Unit = {},
 )

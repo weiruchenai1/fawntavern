@@ -29,6 +29,7 @@ internal fun createChatFeatureDependencies(
         titleSettingsDataSource = AndroidChatTitleSettingsDataSource(appContext),
         ttsControllerFactory = { AndroidChatTtsController(appContext) },
         texts = AndroidChatTextProvider(appContext),
+        frontendVariableDataSource = AndroidChatFrontendVariableDataSource(appContext),
         initialize = {
             BuiltinExtensions.registerAll()
             PromptLog.enabled = PromptLogStore.isEnabled(appContext)

@@ -86,6 +86,19 @@ class ChatDaoTest {
     }
 
     @Test
+    fun pagingSourceExcludesHiddenMessages() = runBlocking {
+        dao.insertSession(session("s1"))
+        dao.upsertMessage(message("s1", 10, "user", "visible"))
+        dao.upsertMessage(message("s1", 20, "assistant", "hidden").copy(isHidden = true))
+
+        val page = dao.messagesPaged("s1").load(
+            PagingSource.LoadParams.Refresh(key = null, loadSize = 20, placeholdersEnabled = false),
+        ) as PagingSource.LoadResult.Page<Int, MessageEntity>
+
+        assertEquals(listOf("visible"), page.data.map { it.content })
+    }
+
+    @Test
     fun failedBatchRestoreRollsBackEverySession() = runBlocking {
         dao.saveSession(
             session("existing", title = "before"),
