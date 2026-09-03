@@ -25,14 +25,6 @@ val appVersionName = providers.gradleProperty("versionName")
     .orElse(providers.environmentVariable("VERSION_NAME"))
     .orElse("0.1.0")
     .get()
-val buglyAppId = providers.gradleProperty("buglyAppId")
-    .orElse(providers.environmentVariable("BUGLY_APP_ID"))
-    .orElse("")
-    .get()
-
-fun buildConfigString(value: String): String =
-    "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
-
 android {
     namespace = "me.rerere.fawntavern"
     compileSdk = 37
@@ -43,7 +35,6 @@ android {
         targetSdk = 37
         versionCode = appVersionCode
         versionName = appVersionName
-        buildConfigField("String", "BUGLY_APP_ID", buildConfigString(buglyAppId))
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -76,15 +67,11 @@ android {
             // ctx.packageName，都会跟着后缀走，无需改动。
             applicationIdSuffix = ".debug"
             // Debug uses a different application ID and is intentionally excluded from Firebase.
-            buildConfigField("boolean", "FIREBASE_ENABLED", "false")
-            buildConfigField("boolean", "BUGLY_ENABLED", "false")
         }
         release {
             // findByName 而非 getByName：没有 keystore.properties 时 release 保持未签名，
             // 不至于在配置阶段抛 "SigningConfig not found" 把所有任务（含 assembleDebug）带崩
             signingConfig = signingConfigs.findByName("release")
-            buildConfigField("boolean", "FIREBASE_ENABLED", "true")
-            buildConfigField("boolean", "BUGLY_ENABLED", "true")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -102,7 +89,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-        aidl = true
     }
 
     kotlin {
@@ -120,20 +106,26 @@ dependencies {
     implementation(project(":domain:generation"))
     implementation(project(":domain:chat"))
     implementation(project(":data:chat"))
+    implementation(project(":data:backup"))
     implementation(project(":data:resources"))
     implementation(project(":data:generation"))
     implementation(project(":data:search"))
     implementation(project(":data:settings"))
+    implementation(project(":data:speech"))
+    implementation(project(":data:update"))
     implementation(project(":feature:chat"))
+    implementation(project(":feature:api"))
     implementation(project(":feature:character"))
+    implementation(project(":feature:extension"))
+    implementation(project(":feature:diagnostics"))
     implementation(project(":feature:preset"))
+    implementation(project(":feature:regex"))
+    implementation(project(":feature:settings"))
+    implementation(project(":feature:statistics"))
+    implementation(project(":feature:translator"))
     implementation(project(":feature:worldbook"))
-    implementation(files("libs/crashreport-4.1.9.3.aar"))
-
-    val firebaseBom = platform(libs.firebase.bom)
-    implementation(firebaseBom)
-    implementation(libs.firebase.analytics)
-    implementation(libs.firebase.crashlytics)
+    implementation(project(":platform:plugin"))
+    implementation(project(":platform:diagnostics"))
 
     // Compose BOM
     val composeBom = platform(libs.androidx.compose.bom)
@@ -180,10 +172,6 @@ dependencies {
     // TTS 悬浮窗
     implementation(libs.floatingx)
 
-    // 第三方插件 JS 运行时（QuickJS）：仅 Android 变体打包 .so；JVM 单测跑不了 Android native，
-    // 官方文档要求用 -jvm 变体替换（见下方 configurations 块）
-    implementation(libs.quickjs.kt)
-
     // 聊天记录存储：Room + Paging；alts 列用 kotlinx.serialization 编码
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)
@@ -197,14 +185,6 @@ dependencies {
 
     androidTestImplementation(composeBom)
     androidTestImplementation(libs.androidx.ui.test.junit4)
-}
-
-// quickjs-kt 官方要求：桌面 JVM 无法加载 Android native 库，JVM 单元测试需把 android 变体替换成 -jvm 变体
-configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
-    resolutionStrategy.dependencySubstitution {
-        substitute(module("io.github.dokar3:quickjs-kt-android"))
-            .using(module("io.github.dokar3:quickjs-kt-jvm:${libs.versions.quickjsKt.get()}"))
-    }
 }
 
 googleServices {

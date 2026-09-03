@@ -15,8 +15,8 @@ android {
 dependencies {
     api(project(":core:model"))
     api(project(":core:network"))
-    api(project(":data:search"))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.json)
 
     testImplementation(libs.junit)

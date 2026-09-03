@@ -21,7 +21,6 @@ import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiProvider
-import me.rerere.fawntavern.data.api.ModelApi
 import me.rerere.fawntavern.data.api.ModelInfo
 import me.rerere.fawntavern.data.api.ModelType
 import me.rerere.fawntavern.data.api.Modality
@@ -47,7 +46,7 @@ internal fun ProviderModelTab(
     var reloadKey by remember { mutableIntStateOf(0) }
     LaunchedEffect(prov.id, prov.type, prov.baseUrl, prov.apiKey, reloadKey) {
         loadResult = null
-        loadResult = runCatching { ModelApi.listModels(prov) }
+        loadResult = runCatching { AndroidApiRuntime.models(prov) }
     }
 
     // 新增与编辑共用同一个底部面板；编辑目标按下标现取（列表随时可增删，不缓存 ModelInfo）

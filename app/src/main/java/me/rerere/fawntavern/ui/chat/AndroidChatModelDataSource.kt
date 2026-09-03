@@ -5,6 +5,7 @@ import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.settings.CharacterModelStore
 import me.rerere.fawntavern.data.settings.DefaultModelStore
+import me.rerere.fawntavern.data.settings.DefaultModelRole
 import me.rerere.fawntavern.data.settings.ImageGenerationStore
 import me.rerere.fawntavern.data.settings.ThinkingStore
 
@@ -18,10 +19,10 @@ internal class AndroidChatModelDataSource(
         CharacterModelStore.set(context, characterName, modelSpec)
 
     override fun defaultChatModel(): String =
-        DefaultModelStore.get(context, DefaultModelStore.ROLE_CHAT).model
+        DefaultModelStore.get(context, DefaultModelRole.CHAT.storageKey).model
 
     override fun saveDefaultChatModel(modelSpec: String) =
-        DefaultModelStore.setModel(context, DefaultModelStore.ROLE_CHAT, modelSpec)
+        DefaultModelStore.setModel(context, DefaultModelRole.CHAT.storageKey, modelSpec)
 
     override fun reasoning(modelSpec: String): ReasoningLevel = ThinkingStore.get(context, modelSpec)
 

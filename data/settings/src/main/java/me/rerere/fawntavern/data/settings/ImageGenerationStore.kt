@@ -15,10 +15,11 @@ object ImageGenerationStore {
         val item = read(context).optJSONObject(modelKey) ?: return ImageGenerationSettings()
         return ImageGenerationSettings(
             count = item.optInt("count", 1).coerceIn(1, 5),
-            aspectRatio = item.optString("aspectRatio", "auto").takeIf { it in ASPECT_RATIOS } ?: "auto",
-            resolution = item.optString("resolution", "1k").takeIf { it in RESOLUTIONS } ?: "1k",
-            quality = item.optString("quality", "auto").takeIf { it in QUALITIES } ?: "auto",
-            steps = item.optInt("steps", DEFAULT_STEPS).coerceIn(MIN_STEPS, MAX_STEPS),
+            aspectRatio = item.optString("aspectRatio", "auto").takeIf { it in ImageGenerationSettings.ASPECT_RATIOS } ?: "auto",
+            resolution = item.optString("resolution", "1k").takeIf { it in ImageGenerationSettings.RESOLUTIONS } ?: "1k",
+            quality = item.optString("quality", "auto").takeIf { it in ImageGenerationSettings.QUALITIES } ?: "auto",
+            steps = item.optInt("steps", ImageGenerationSettings.DEFAULT_STEPS)
+                .coerceIn(ImageGenerationSettings.MIN_STEPS, ImageGenerationSettings.MAX_STEPS),
             seed = item.optInt("seed", -1).takeIf { it >= 0 },
             includeContext = item.optBoolean("includeContext", true),
         )
@@ -28,10 +29,10 @@ object ImageGenerationStore {
         if (modelKey.isBlank()) return
         val clean = settings.copy(
             count = settings.count.coerceIn(1, 5),
-            aspectRatio = settings.aspectRatio.takeIf { it in ASPECT_RATIOS } ?: "auto",
-            resolution = settings.resolution.takeIf { it in RESOLUTIONS } ?: "1k",
-            quality = settings.quality.takeIf { it in QUALITIES } ?: "auto",
-            steps = settings.steps.coerceIn(MIN_STEPS, MAX_STEPS),
+            aspectRatio = settings.aspectRatio.takeIf { it in ImageGenerationSettings.ASPECT_RATIOS } ?: "auto",
+            resolution = settings.resolution.takeIf { it in ImageGenerationSettings.RESOLUTIONS } ?: "1k",
+            quality = settings.quality.takeIf { it in ImageGenerationSettings.QUALITIES } ?: "auto",
+            steps = settings.steps.coerceIn(ImageGenerationSettings.MIN_STEPS, ImageGenerationSettings.MAX_STEPS),
             seed = settings.seed?.takeIf { it >= 0 },
         )
         val root = read(context)
@@ -53,13 +54,4 @@ object ImageGenerationStore {
         return runCatching { if (raw == null) JSONObject() else JSONObject(raw) }.getOrDefault(JSONObject())
     }
 
-    val ASPECT_RATIOS = listOf(
-        "auto", "2:3", "3:2", "1:1", "9:16", "16:9", "4:3", "3:4", "2:1", "1:2",
-        "4:5", "5:4", "21:9", "19.5:9", "9:19.5", "20:9", "9:20",
-    )
-    val RESOLUTIONS = listOf("1k", "2k", "4k")
-    val QUALITIES = listOf("auto", "low", "medium", "high")
-    const val DEFAULT_STEPS = 9
-    const val MIN_STEPS = 1
-    const val MAX_STEPS = 50
 }

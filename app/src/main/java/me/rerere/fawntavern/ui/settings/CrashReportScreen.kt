@@ -39,9 +39,6 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.Trash2
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.core.diagnostics.CrashReportStore
-import me.rerere.fawntavern.core.diagnostics.SafeLog
-import me.rerere.fawntavern.data.diagnostics.RemoteDiagnostics
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
@@ -49,18 +46,20 @@ import me.rerere.fawntavern.ui.components.Space12
 @Composable
 fun CrashReportScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val controller = remember(context) { DiagnosticsController(AndroidDiagnosticsDataSource(context)) }
+    val initialState = remember(controller) { controller.load() }
     val reportSubject = stringResource(R.string.crash_feedback_subject)
     val shareLabel = stringResource(R.string.crash_feedback_share)
-    val remoteAvailable = remember(context) { RemoteDiagnostics.isAvailable(context) }
+    val remoteAvailable = initialState.remoteAvailable
     var remoteEnabled by remember(context) {
-        mutableStateOf(RemoteDiagnostics.isEnabled(context))
+        mutableStateOf(initialState.remoteEnabled)
     }
     var report by remember(context) {
-        mutableStateOf(runCatching { CrashReportStore.readLatest(context) }.getOrNull())
+        mutableStateOf(initialState.report)
     }
     var reportExpanded by remember { mutableStateOf(false) }
     var showClearConfirmation by remember { mutableStateOf(false) }
-    val safeLogCount = remember { SafeLog.snapshot().size }
+    val safeLogCount = initialState.safeLogCount
     var includeSafeLogs by remember { mutableStateOf(safeLogCount > 0) }
     BackHandler(onBack = onBack)
 
@@ -86,7 +85,7 @@ fun CrashReportScreen(onBack: () -> Unit) {
                     checked = remoteEnabled,
                     enabled = remoteAvailable,
                     onCheckedChange = {
-                        remoteEnabled = RemoteDiagnostics.setEnabled(context, it)
+                        remoteEnabled = controller.setRemoteEnabled(it)
                     },
                 )
             }
@@ -180,13 +179,13 @@ fun CrashReportScreen(onBack: () -> Unit) {
                 Button(
                     onClick = {
                         runCatching {
-                            val safeLogs = if (includeSafeLogs) SafeLog.snapshot() else emptyList()
+                            val safeLogs = if (includeSafeLogs) controller.safeLogsText() else ""
                             val shareContent = buildString {
                                 append(currentReport.trimEnd())
                                 if (safeLogs.isNotEmpty()) {
                                     appendLine()
                                     appendLine()
-                                    append(SafeLog.format(safeLogs))
+                                    append(safeLogs)
                                 }
                             }
                             shareDiagnosticsText(
@@ -228,7 +227,7 @@ fun CrashReportScreen(onBack: () -> Unit) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (CrashReportStore.clear(context)) {
+                        if (controller.clearReport()) {
                             report = null
                             reportExpanded = false
                         }

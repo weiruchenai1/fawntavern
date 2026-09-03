@@ -107,7 +107,7 @@ object SearchStore {
         return true
     }
 
-    internal fun exportPortable(context: Context): String = JSONObject()
+    fun exportPortable(context: Context): String = JSONObject()
         .put("formatVersion", SCHEMA_VERSION)
         .put("enabled", isEnabled(context))
         .put("resultSize", getResultSize(context))
@@ -115,7 +115,7 @@ object SearchStore {
         .put("services", JSONArray().apply { getServices(context).forEach { put(toJson(it)) } })
         .toString()
 
-    internal fun parsePortable(raw: String): PortableSearchConfig {
+    fun parsePortable(raw: String): PortableSearchConfig {
         val root = JSONObject(raw)
         require(root.optInt("formatVersion", 1) in 1..SCHEMA_VERSION) {
             "Unsupported search configuration version"
@@ -131,7 +131,7 @@ object SearchStore {
         )
     }
 
-    internal fun importPortable(context: Context, config: PortableSearchConfig) {
+    fun importPortable(context: Context, config: PortableSearchConfig) {
         val services = JSONArray().apply { config.services.forEach { put(toJson(it)) } }
         val p = prefs(context)
         SecurePreferences.putStringSync(context, p, KEY_SERVICES, services.toString())
@@ -145,7 +145,7 @@ object SearchStore {
         ) { "Unable to persist search configuration" }
     }
 
-    internal data class PortableSearchConfig(
+    data class PortableSearchConfig(
         val enabled: Boolean,
         val resultSize: Int,
         val selected: Int,

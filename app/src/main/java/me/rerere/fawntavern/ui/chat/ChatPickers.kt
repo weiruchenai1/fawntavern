@@ -52,10 +52,10 @@ import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
-import me.rerere.fawntavern.data.character.CharacterRepository
-import me.rerere.fawntavern.data.settings.ImageGenerationStore
 import me.rerere.fawntavern.ui.components.PickerRow
 import me.rerere.fawntavern.ui.components.reasoningIcon
+import me.rerere.fawntavern.ui.character.AndroidCharacterLibraryDataSource
+import me.rerere.fawntavern.ui.character.CharacterLibraryController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -215,8 +215,8 @@ internal fun ImageGenerationSettingsSheet(
                     Slider(
                         value = current.steps.toFloat(),
                         onValueChange = { onChange(current.copy(steps = it.roundToInt())) },
-                        valueRange = ImageGenerationStore.MIN_STEPS.toFloat()..ImageGenerationStore.MAX_STEPS.toFloat(),
-                        steps = ImageGenerationStore.MAX_STEPS - ImageGenerationStore.MIN_STEPS - 1,
+                        valueRange = ImageGenerationSettings.MIN_STEPS.toFloat()..ImageGenerationSettings.MAX_STEPS.toFloat(),
+                        steps = ImageGenerationSettings.MAX_STEPS - ImageGenerationSettings.MIN_STEPS - 1,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                         colors = SliderDefaults.colors(
                             thumbColor = MaterialTheme.colorScheme.primary,
@@ -290,20 +290,20 @@ internal fun ImageGenerationSettingsSheet(
             ImageGenerationOptionFlow(
                 label = stringResource(R.string.image_generation_quality),
                 value = current.quality,
-                options = ImageGenerationStore.QUALITIES,
+                options = ImageGenerationSettings.QUALITIES,
                 onSelect = { onChange(current.copy(quality = it)) },
             )
         } else {
             ImageGenerationOptionFlow(
                 label = stringResource(R.string.image_generation_aspect_ratio),
                 value = current.aspectRatio,
-                options = ImageGenerationStore.ASPECT_RATIOS,
+                options = ImageGenerationSettings.ASPECT_RATIOS,
                 onSelect = { onChange(current.copy(aspectRatio = it)) },
             )
             ImageGenerationOptionFlow(
                 label = stringResource(R.string.image_generation_resolution),
                 value = current.resolution,
-                options = ImageGenerationStore.RESOLUTIONS,
+                options = ImageGenerationSettings.RESOLUTIONS,
                 onSelect = { onChange(current.copy(resolution = it)) },
             )
         }
@@ -415,17 +415,17 @@ internal fun CharacterPickerSheet(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    val controller = remember(context) { CharacterLibraryController(AndroidCharacterLibraryDataSource(context)) }
     var charNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var thumbs by remember { mutableStateOf<Map<String, android.graphics.Bitmap>>(emptyMap()) }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            val repo = CharacterRepository
-            val names = repo.listNames(context)
-            charNames = names.associateWith { fileName ->
-                try { repo.load(context, fileName).name } catch (_: Exception) { fileName }
+            val library = controller.load()
+            charNames = library.names.associateWith { fileName ->
+                library.cards[fileName]?.name ?: fileName
             }
-            thumbs = names.mapNotNull { n ->
-                repo.decodeImageThumb(context, n)?.let { n to it }
+            thumbs = library.names.mapNotNull { name ->
+                controller.thumbnail(name)?.let { name to it }
             }.toMap()
         }
     }

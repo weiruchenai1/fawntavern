@@ -71,7 +71,6 @@ import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Volume2
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.speech.TTSProviderSetting
-import me.rerere.fawntavern.data.speech.TtsEngine
 import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.Space4
@@ -328,7 +327,7 @@ private fun TtsProviderEditScreen(
     val draftState = remember(service.id) { mutableStateOf(service) }
     var draft by draftState
     var testing by remember { mutableStateOf(false) }
-    val testEngine = remember { TtsEngine(context) { draftState.value } }
+    val testEngine: TtsPreview = remember { AndroidTtsPreview(context) { draftState.value } }
     DisposableEffect(Unit) { onDispose { testEngine.release() } }
     BackHandler(onBack = onBack)
 

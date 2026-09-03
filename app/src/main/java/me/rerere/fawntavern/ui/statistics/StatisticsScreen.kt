@@ -46,53 +46,21 @@ import com.composables.icons.lucide.Rocket
 import com.composables.icons.lucide.Zap
 import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.chat.ChatRepository
-import me.rerere.fawntavern.data.settings.AppStatisticsStore
 import me.rerere.fawntavern.ui.components.AppTopBar
-
-private data class StatisticsUiState(
-    val loading: Boolean = true,
-    val totalConversations: Int = 0,
-    val totalMessages: Int = 0,
-    val promptTokens: Long = 0,
-    val completionTokens: Long = 0,
-    val cachedTokens: Long = 0,
-    val launchCount: Int = 0,
-    val messagesPerDay: Map<LocalDate, Int> = emptyMap(),
-)
 
 @Composable
 fun StatisticsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var state by remember { mutableStateOf(StatisticsUiState()) }
+    val controller = remember(context) { StatisticsController(AndroidStatisticsDataSource(context)) }
 
     LaunchedEffect(Unit) {
-        val today = LocalDate.now()
-        val startDate = today.minusDays(364)
-        val startMillis = startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        state = withContext(Dispatchers.IO) {
-            val stats = ChatRepository.statistics(context, startMillis)
-            StatisticsUiState(
-                loading = false,
-                totalConversations = stats.totalConversations,
-                totalMessages = stats.totalMessages,
-                promptTokens = stats.promptTokens,
-                completionTokens = stats.completionTokens,
-                cachedTokens = stats.cachedTokens,
-                launchCount = AppStatisticsStore.launchCount(context),
-                messagesPerDay = stats.messagesPerDay.mapNotNull { (day, count) ->
-                    runCatching { LocalDate.parse(day) to count }.getOrNull()
-                }.toMap(),
-            )
-        }
+        state = controller.load()
     }
 
     BackHandler(onBack = onBack)

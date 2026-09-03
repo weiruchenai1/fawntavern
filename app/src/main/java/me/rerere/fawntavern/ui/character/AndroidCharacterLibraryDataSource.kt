@@ -55,4 +55,5 @@ internal class AndroidCharacterLibraryDataSource(
     override suspend fun exportPng(name: String): ByteArray = CharacterRepository.exportPngBytes(context, name)
     override suspend fun exportJson(name: String): ByteArray = CharacterRepository.exportJsonBytes(context, name)
     override fun imageFile(name: String): File = CharacterRepository.imageFile(context, name)
+    override fun thumbnail(name: String) = CharacterRepository.decodeImageThumb(context, name)
 }

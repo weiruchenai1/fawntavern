@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.ui.settings
 
+import me.rerere.fawntavern.data.settings.DefaultModelRole
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.ui.character
 
 import android.net.Uri
+import android.graphics.Bitmap
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,7 @@ interface CharacterLibraryDataSource {
     suspend fun exportPng(name: String): ByteArray
     suspend fun exportJson(name: String): ByteArray
     fun imageFile(name: String): File
+    fun thumbnail(name: String): Bitmap? = null
 }
 
 class CharacterLibraryController(
@@ -62,6 +64,7 @@ class CharacterLibraryController(
     suspend fun exportPng(name: String): ByteArray = dataSource.exportPng(name)
     suspend fun exportJson(name: String): ByteArray = dataSource.exportJson(name)
     fun imageFile(name: String): File = dataSource.imageFile(name)
+    fun thumbnail(name: String): Bitmap? = dataSource.thumbnail(name)
 }
 
 /** 串行保存排序，并丢弃尚未落盘就已过期的快照。 */

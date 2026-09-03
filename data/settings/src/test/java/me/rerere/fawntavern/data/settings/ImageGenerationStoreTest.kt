@@ -85,7 +85,7 @@ class ImageGenerationStoreTest {
         )
 
         val restored = ImageGenerationStore.get(context, "gradio::z-image-turbo")
-        assertEquals(ImageGenerationStore.MAX_STEPS, restored.steps)
+        assertEquals(me.rerere.fawntavern.data.api.ImageGenerationSettings.MAX_STEPS, restored.steps)
         assertEquals(null, restored.seed)
     }
 }

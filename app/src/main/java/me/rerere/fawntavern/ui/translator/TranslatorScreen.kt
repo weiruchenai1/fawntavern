@@ -73,13 +73,9 @@ import com.composables.icons.lucide.Square
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiConfig
-import me.rerere.fawntavern.data.api.ApiMessage
-import me.rerere.fawntavern.data.api.ChatApi
-import me.rerere.fawntavern.data.settings.DefaultModelStore
 import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -116,13 +112,12 @@ fun TranslatorScreen(
     val resources = LocalResources.current
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
-    val storedEntry = remember(context) {
-        DefaultModelStore.get(context, DefaultModelStore.ROLE_TRANSLATION)
-    }
+    val controller = remember(context) { TranslatorController(AndroidTranslatorDataSource(context)) }
+    val defaults = remember(controller, fallbackModelSpec) { controller.defaults(fallbackModelSpec) }
     var selectedModelSpec by rememberSaveable {
-        mutableStateOf(storedEntry.model.ifBlank { fallbackModelSpec })
+        mutableStateOf(defaults.modelSpec)
     }
-    val translationPrompt = storedEntry.prompt.ifBlank { DefaultModelStore.DEFAULT_TRANSLATION_PROMPT }
+    val translationPrompt = defaults.prompt
     var selectedLanguageTag by rememberSaveable { mutableStateOf(translationLanguages.first().tag) }
     val selectedLanguage = translationLanguages.firstOrNull { it.tag == selectedLanguageTag }
         ?: translationLanguages.first()
@@ -163,32 +158,16 @@ fun TranslatorScreen(
         translatedText = ""
         translating = true
         translationJob = scope.launch {
-            val updates = Channel<String>(Channel.CONFLATED)
-            val collector = launch {
-                for (text in updates) translatedText = text
-            }
             try {
-                val result = StringBuilder()
-                ChatApi.streamChat(
+                controller.translate(
                     provider = provider,
                     modelId = modelId,
-                    messages = listOf(
-                        ApiMessage(
-                            role = "system",
-                            content = translationPrompt.replace("{language}", selectedLanguage.promptName),
-                        ),
-                        ApiMessage(role = "user", content = sourceText),
-                    ),
-                    params = null,
+                    sourceText = sourceText,
+                    language = selectedLanguage.promptName,
+                    prompt = translationPrompt,
                     isCancelled = stopFlag::get,
-                    onDelta = { content, _ ->
-                        if (content.isNotEmpty()) {
-                            result.append(content)
-                            updates.trySend(result.toString())
-                        }
-                    },
+                    onUpdate = { translatedText = it },
                 )
-            } catch (_: ChatApi.Stopped) {
             } catch (_: CancellationException) {
             } catch (error: Exception) {
                 Toast.makeText(
@@ -197,8 +176,6 @@ fun TranslatorScreen(
                     Toast.LENGTH_LONG,
                 ).show()
             } finally {
-                updates.close()
-                collector.join()
                 translating = false
                 translationJob = null
             }
@@ -353,11 +330,7 @@ fun TranslatorScreen(
         state = modelSelector,
         onSelect = { providerId, modelId ->
             selectedModelSpec = "$providerId::$modelId"
-            DefaultModelStore.setModel(
-                context,
-                DefaultModelStore.ROLE_TRANSLATION,
-                selectedModelSpec,
-            )
+            controller.saveModel(selectedModelSpec)
         },
     )
 

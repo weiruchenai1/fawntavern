@@ -67,13 +67,9 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Trash2
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.search.SearchCommonOptions
 import me.rerere.fawntavern.data.search.SearchServiceOptions
-import me.rerere.fawntavern.data.search.createSearchService
 import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.PickerRow
@@ -477,8 +473,10 @@ private fun DepthSegmented(depth: String, onChange: (String) -> Unit) {
 /** 测试搜索：输入关键词实时跑一遍该提供商，展示前几条结果 */
 @Composable
 private fun SearchTesterCard(options: SearchServiceOptions, resultSize: Int) {
+    val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
+    val controller = remember(context) { WebSearchConfigController(AndroidWebSearchConfigDataSource(context)) }
     var query by remember(options.id) { mutableStateOf("") }
     var running by remember { mutableStateOf(false) }
     var output by remember { mutableStateOf<String?>(null) }
@@ -502,17 +500,13 @@ private fun SearchTesterCard(options: SearchServiceOptions, resultSize: Int) {
                 running = true
                 output = null
                 scope.launch {
-                    val text = withContext(Dispatchers.IO) {
-                        runCatching {
-                            val result = createSearchService(options)
-                                .search(query, SearchCommonOptions(resultSize), options)
-                                .getOrThrow()
+                    val text = runCatching {
+                            val result = controller.test(options, query, resultSize)
                             if (result.items.isEmpty()) resources.getString(R.string.web_search_no_results)
                             else result.items.take(3).joinToString("\n\n") {
                                 "${it.title}\n${it.url}\n${it.text}"
                             }
                         }.getOrElse { resources.getString(R.string.web_search_error_fmt, it.message ?: "") }
-                    }
                     output = text
                     running = false
                 }

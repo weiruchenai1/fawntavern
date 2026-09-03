@@ -62,12 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.character.CharacterRepository
-import me.rerere.fawntavern.data.preset.PresetParser
-import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.preset.RegexScript
-import me.rerere.fawntavern.data.regex.GlobalRegexRepository
-import me.rerere.fawntavern.data.regex.RegexSetRepository
 import me.rerere.fawntavern.ui.components.AddItemSheet
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
@@ -77,13 +72,6 @@ import me.rerere.fawntavern.ui.components.appClickable
 import me.rerere.fawntavern.ui.preset.RegexEditDialog
 import java.io.IOException
 
-private enum class RegexScope { GLOBAL, PRESET, LOCAL }
-private data class RegexSource(val scope: RegexScope, val name: String = "")
-private data class RegexGroup(
-    val name: String,
-    val displayName: String,
-    val scripts: List<RegexScript>,
-)
 private data class RegexEditTarget(val source: RegexSource, val index: Int, val script: RegexScript)
 private data class RegexDeleteTarget(val source: RegexSource, val index: Int, val name: String)
 
@@ -92,6 +80,7 @@ fun RegexListScreen(onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val resources = LocalResources.current
     val coroutineScope = rememberCoroutineScope()
+    val controller = remember(context) { RegexLibraryController(AndroidRegexLibraryDataSource(context)) }
     val pagerState = rememberPagerState(pageCount = { 3 })
     var globalGroups by remember { mutableStateOf<List<RegexGroup>>(emptyList()) }
     var presetGroups by remember { mutableStateOf<List<RegexGroup>>(emptyList()) }
@@ -132,12 +121,10 @@ fun RegexListScreen(onBack: () -> Unit) {
     }
 
     suspend fun reloadGroups() {
-        val regexSets = RegexSetRepository.loadAll(context)
-        globalGroups = regexSets.filter { it.global }.map { RegexGroup(it.name, it.name, it.scripts) }
-        presetGroups = PresetRepository.listNames(context).mapNotNull { name ->
-            runCatching { RegexGroup(name, name, PresetRepository.load(context, name).regexScripts) }.getOrNull()
-        }
-        localGroups = regexSets.filterNot { it.global }.map { RegexGroup(it.name, it.name, it.scripts) }
+        val catalog = controller.load()
+        globalGroups = catalog.global
+        presetGroups = catalog.preset
+        localGroups = catalog.local
     }
 
     fun appendScripts(source: RegexSource, additions: List<RegexScript>) {
@@ -145,15 +132,7 @@ fun RegexListScreen(onBack: () -> Unit) {
         val updated = scripts(source) + additions
         updateGroup(source, updated)
         coroutineScope.launch {
-            when (source.scope) {
-                RegexScope.GLOBAL, RegexScope.LOCAL -> {
-                    additions.forEach { RegexSetRepository.appendScript(context, source.name, it) }
-                }
-                RegexScope.PRESET -> {
-                    val preset = PresetRepository.load(context, source.name)
-                    PresetRepository.save(context, preset.copy(regexScripts = updated))
-                }
-            }
+            controller.append(source, additions)
         }
     }
 
@@ -171,20 +150,7 @@ fun RegexListScreen(onBack: () -> Unit) {
         updated[target.index] = script
         updateGroup(target.source, updated)
         coroutineScope.launch {
-            when (target.source.scope) {
-                RegexScope.GLOBAL, RegexScope.LOCAL -> {
-                    RegexSetRepository.updateScript(
-                        context,
-                        target.source.name,
-                        target.index,
-                        script,
-                    )
-                }
-                RegexScope.PRESET -> {
-                    val preset = PresetRepository.load(context, target.source.name)
-                    PresetRepository.save(context, preset.copy(regexScripts = updated))
-                }
-            }
+            controller.update(target.source, target.index, script, updated)
         }
     }
 
@@ -194,15 +160,7 @@ fun RegexListScreen(onBack: () -> Unit) {
         updated.removeAt(target.index)
         updateGroup(target.source, updated)
         coroutineScope.launch {
-            when (target.source.scope) {
-                RegexScope.GLOBAL, RegexScope.LOCAL -> {
-                    RegexSetRepository.deleteScript(context, target.source.name, target.index)
-                }
-                RegexScope.PRESET -> {
-                    val preset = PresetRepository.load(context, target.source.name)
-                    PresetRepository.save(context, preset.copy(regexScripts = updated))
-                }
-            }
+            controller.deleteScript(target.source, target.index, updated)
         }
     }
 
@@ -213,7 +171,7 @@ fun RegexListScreen(onBack: () -> Unit) {
             val additions = mutableListOf<RegexScript>()
             var failed = 0
             for (uri in uris) {
-                val script = runCatching { GlobalRegexRepository.parseUri(context, uri) }.getOrNull()
+                val script = runCatching { controller.importScript(uri) }.getOrNull()
                 if (script != null) {
                     additions += script
                 } else {
@@ -241,7 +199,7 @@ fun RegexListScreen(onBack: () -> Unit) {
         if (uri == null || script == null) return
         coroutineScope.launch {
             try {
-                val bytes = PresetParser.serializeRegexScript(script).toString(2).toByteArray()
+                val bytes = controller.serialize(script)
                 withContext(Dispatchers.IO) {
                     val output = context.contentResolver.openOutputStream(uri)
                         ?: throw IOException("Unable to open the selected destination")
@@ -360,7 +318,7 @@ fun RegexListScreen(onBack: () -> Unit) {
                         onDismissMenu = { longPressSource = null },
                         onRename = { renameSource = it },
                         onDelete = { deleteSource = it },
-                        canDelete = { it != PresetRepository.defaultPresetName(context) },
+                        canDelete = { it != controller.defaultPresetName() },
                     )
                     else -> RegexGroupsList(
                         scope = RegexScope.LOCAL,
@@ -385,13 +343,7 @@ fun RegexListScreen(onBack: () -> Unit) {
                 onCreate = { requestedName ->
                     coroutineScope.launch {
                         try {
-                            when (target.scope) {
-                                RegexScope.GLOBAL -> {
-                                    RegexSetRepository.create(context, requestedName, global = true)
-                                }
-                                RegexScope.PRESET -> PresetRepository.create(context, requestedName)
-                                RegexScope.LOCAL -> RegexSetRepository.create(context, requestedName)
-                            }
+                            controller.create(target, requestedName)
                             reloadGroups()
                             addTarget = null
                         } catch (error: Exception) {
@@ -439,11 +391,7 @@ fun RegexListScreen(onBack: () -> Unit) {
             }),
             onConfirm = { newName ->
                 coroutineScope.launch {
-                    val renamed = when (target.scope) {
-                        RegexScope.GLOBAL, RegexScope.LOCAL ->
-                            CharacterRepository.renameRegexSet(context, target.name, newName.trim())
-                        RegexScope.PRESET -> PresetRepository.rename(context, target.name, newName.trim())
-                    }
+                    val renamed = controller.rename(target, newName)
                     if (renamed) {
                         reloadGroups()
                         Toast.makeText(context, resources.getString(R.string.toast_renamed), Toast.LENGTH_SHORT).show()
@@ -472,11 +420,7 @@ fun RegexListScreen(onBack: () -> Unit) {
             ),
             onConfirm = {
                 coroutineScope.launch {
-                    when (target.scope) {
-                        RegexScope.GLOBAL, RegexScope.LOCAL ->
-                            CharacterRepository.deleteRegexSet(context, target.name)
-                        RegexScope.PRESET -> CharacterRepository.deletePreset(context, target.name)
-                    }
+                    controller.delete(target)
                     reloadGroups()
                     Toast.makeText(context, resources.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
                 }

@@ -59,7 +59,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiProvider
-import me.rerere.fawntavern.data.api.ModelApi
+import me.rerere.fawntavern.ui.api.AndroidApiRuntime
 import me.rerere.fawntavern.data.api.ModelInfo
 import me.rerere.fawntavern.data.api.ModelType
 import me.rerere.fawntavern.ui.api.ModelCapabilityTags
@@ -421,7 +421,7 @@ internal fun ProviderBalanceText(prov: ApiProvider) {
     if (!prov.balanceEnabled || prov.balancePath.isBlank() || prov.apiKey.isBlank()) return
     var balance by remember(prov.id) { mutableStateOf("~") }
     LaunchedEffect(prov.id, prov.balancePath, prov.balanceJsonKey) {
-        balance = try { ModelApi.getBalance(prov) } catch (_: Exception) { "--" }
+        balance = try { AndroidApiRuntime.balance(prov) } catch (_: Exception) { "--" }
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Icon(Lucide.Wallet, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)

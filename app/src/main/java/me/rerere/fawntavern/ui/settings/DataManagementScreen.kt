@@ -62,7 +62,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.backup.AppBackup
+import me.rerere.fawntavern.data.backup.BackupDefaults
+import me.rerere.fawntavern.data.backup.BackupSection
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space4
 import me.rerere.fawntavern.ui.components.Space8
@@ -79,21 +80,21 @@ private data class DataCategory(
 )
 
 private val credentialBackupSections = setOf(
-    AppBackup.Section.API_CONFIG,
-    AppBackup.Section.SEARCH_CONFIG,
-    AppBackup.Section.TTS_CONFIG,
+    BackupSection.API_CONFIG,
+    BackupSection.SEARCH_CONFIG,
+    BackupSection.TTS_CONFIG,
 )
 
-private fun AppBackup.Section.labelResId(): Int = when (this) {
-    AppBackup.Section.CHARACTERS -> R.string.backup_section_characters
-    AppBackup.Section.PRESETS -> R.string.backup_section_presets
-    AppBackup.Section.WORLDBOOKS -> R.string.backup_section_worldbooks
-    AppBackup.Section.REGEXSETS -> R.string.backup_section_regexsets
-    AppBackup.Section.CHATS -> R.string.backup_section_chats
-    AppBackup.Section.API_CONFIG -> R.string.backup_section_api
-    AppBackup.Section.SEARCH_CONFIG -> R.string.backup_section_search
-    AppBackup.Section.TTS_CONFIG -> R.string.backup_section_tts
-    AppBackup.Section.AVATAR -> R.string.backup_section_avatar
+private fun BackupSection.labelResId(): Int = when (this) {
+    BackupSection.CHARACTERS -> R.string.backup_section_characters
+    BackupSection.PRESETS -> R.string.backup_section_presets
+    BackupSection.WORLDBOOKS -> R.string.backup_section_worldbooks
+    BackupSection.REGEXSETS -> R.string.backup_section_regexsets
+    BackupSection.CHATS -> R.string.backup_section_chats
+    BackupSection.API_CONFIG -> R.string.backup_section_api
+    BackupSection.SEARCH_CONFIG -> R.string.backup_section_search
+    BackupSection.TTS_CONFIG -> R.string.backup_section_tts
+    BackupSection.AVATAR -> R.string.backup_section_avatar
 }
 
 @Composable
@@ -117,11 +118,11 @@ fun DataManagementScreen(
     var showResetApi by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var showExportSelection by remember { mutableStateOf(false) }
-    var exportSections by remember { mutableStateOf(AppBackup.defaultExportSections) }
-    var pendingExportSections by remember { mutableStateOf<Set<AppBackup.Section>>(emptySet()) }
+    var exportSections by remember { mutableStateOf(BackupDefaults.exportSections) }
+    var pendingExportSections by remember { mutableStateOf<Set<BackupSection>>(emptySet()) }
     var pendingImport by remember { mutableStateOf<PendingBackup?>(null) }
-    var importAvailableSections by remember { mutableStateOf<Set<AppBackup.Section>>(emptySet()) }
-    var importSections by remember { mutableStateOf<Set<AppBackup.Section>>(emptySet()) }
+    var importAvailableSections by remember { mutableStateOf<Set<BackupSection>>(emptySet()) }
+    var importSections by remember { mutableStateOf<Set<BackupSection>>(emptySet()) }
     val currentPendingImport by rememberUpdatedState(pendingImport)
 
     DisposableEffect(controller) {
@@ -334,7 +335,7 @@ fun DataManagementScreen(
     if (showExportSelection) {
         BackupSelectionDialog(
             title = stringResource(R.string.select_export_content),
-            available = AppBackup.Section.entries.toSet(),
+            available = BackupSection.entries.toSet(),
             selected = exportSections,
             showSensitiveWarning = exportSections.any { it in credentialBackupSections },
             confirmLabel = stringResource(R.string.export_backup_confirm),
@@ -485,11 +486,11 @@ fun DataManagementScreen(
 @Composable
 private fun BackupSelectionDialog(
     title: String,
-    available: Set<AppBackup.Section>,
-    selected: Set<AppBackup.Section>,
+    available: Set<BackupSection>,
+    selected: Set<BackupSection>,
     showSensitiveWarning: Boolean,
     confirmLabel: String,
-    onSelectedChange: (Set<AppBackup.Section>) -> Unit,
+    onSelectedChange: (Set<BackupSection>) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     confirmEnabled: Boolean = true,

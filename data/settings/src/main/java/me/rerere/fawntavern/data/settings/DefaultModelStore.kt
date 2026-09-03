@@ -15,39 +15,6 @@ object DefaultModelStore {
     private const val PREFS = "default_model"
     private const val KEY_DATA = "data"
 
-    // ── 角色常量 ──
-    const val ROLE_CHAT = "chat"
-    const val ROLE_TITLE = "title"
-    const val ROLE_SUMMARY = "summary"
-    const val ROLE_TRANSLATION = "translation"
-
-    // ── 内建默认提示词（用户未自定义时生效） ──
-
-    /** 标题模型默认提示词：{content} 占位符会被替换为首轮对话摘要 */
-    const val DEFAULT_TITLE_PROMPT =
-        "I will give you some dialogue content in the `<content>` block.\n" +
-        "You need to summarize the conversation between user and assistant into a short title.\n" +
-        "1. The title language should be consistent with the user's primary language\n" +
-        "2. Do not use punctuation or other special symbols\n" +
-        "3. Reply directly with the title\n" +
-        "4. The title should be short (around 5-10 words)\n" +
-        "5. Output only the title, no quotes or extra text\n\n" +
-        "<content>\n" +
-        "{content}\n" +
-        "</content>"
-
-    /** 摘要模型默认系统提示词（与 SummarizeExtension.COMPRESS_SYSTEM 一致） */
-    const val DEFAULT_SUMMARY_PROMPT =
-        "You are a summarization engine for a roleplay chat. Merge the previous summary (if any) and the new " +
-        "conversation into a single, updated summary. Preserve key facts, character state, relationships, ongoing " +
-        "goals and unresolved threads; drop small talk. Write in the same language as the conversation. Aim for " +
-        "about {target} tokens. Output only the summary text, with no preamble."
-
-    /** 翻译模型默认提示词；{language} 会在翻译请求时替换为当前目标语言。 */
-    const val DEFAULT_TRANSLATION_PROMPT =
-        "Translate the user's text into {language}. Preserve meaning, names, tone, paragraphs, and formatting. " +
-        "Output only the translation without commentary."
-
     data class Entry(val model: String = "", val prompt: String = "")
 
     fun get(context: Context, role: String): Entry {
@@ -90,7 +57,7 @@ object DefaultModelStore {
     fun removeProvider(context: Context, providerId: String) {
         val root = read(context)
         var changed = false
-        for (role in listOf(ROLE_CHAT, ROLE_TITLE, ROLE_SUMMARY, ROLE_TRANSLATION)) {
+        for (role in DefaultModelRole.entries.map { it.storageKey }) {
             val o = root.optJSONObject(role) ?: continue
             val m = o.optString("model", "")
             if (m.startsWith("$providerId::")) {

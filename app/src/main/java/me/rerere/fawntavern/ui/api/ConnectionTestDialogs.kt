@@ -25,7 +25,6 @@ import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.api.ApiProvider
-import me.rerere.fawntavern.data.api.ConnectionTester
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.ModelSelectorSheet
 import me.rerere.fawntavern.ui.components.Space4
@@ -78,21 +77,21 @@ internal fun ConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit) {
         streamingText = ""
         toolCall = TestState.Loading
         scope.launch {
-            nonStreaming = runCatching { TestState.Ok(ConnectionTester.testNonStreaming(prov, selectedModel)) }
+            nonStreaming = runCatching { TestState.Ok(AndroidApiRuntime.testNonStreaming(prov, selectedModel)) }
                 .getOrElse { TestState.Err(it.message ?: it.toString()) }
         }
         scope.launch {
             streaming = runCatching {
-                ConnectionTester.testStreaming(prov, selectedModel) { streamingText += it }
+                AndroidApiRuntime.testStreaming(prov, selectedModel) { streamingText += it }
                 TestState.Ok(streamingText)
             }.getOrElse { TestState.Err(it.message ?: it.toString()) }
         }
         scope.launch {
             toolCall = runCatching {
-                val result = ConnectionTester.testToolCall(prov, selectedModel)
+                val result = AndroidApiRuntime.testToolCall(prov, selectedModel)
                 TestState.Ok(
                     if (result.toolName.isNotBlank())
-                        resources.getString(R.string.test_tool_called_fmt, result.toolName, result.args)
+                        resources.getString(R.string.test_tool_called_fmt, result.toolName, result.arguments)
                     else resources.getString(R.string.test_tool_not_called_fmt, result.text)
                 )
             }.getOrElse { TestState.Err(it.message ?: it.toString()) }
@@ -197,7 +196,7 @@ private fun GradioConnectionTestDialog(prov: ApiProvider, onDismiss: () -> Unit)
         state = TestState.Loading
         scope.launch {
             state = runCatching {
-                TestState.Ok(ConnectionTester.testNonStreaming(prov, prov.models.firstOrNull()?.id.orEmpty()))
+                TestState.Ok(AndroidApiRuntime.testNonStreaming(prov, prov.models.firstOrNull()?.id.orEmpty()))
             }.getOrElse { TestState.Err(it.message ?: it.toString()) }
         }
     }

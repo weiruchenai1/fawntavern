@@ -50,7 +50,19 @@ data class ImageGenerationSettings(
     /** null 表示每次生成时随机；非空时固定使用该 Seed。 */
     val seed: Int? = null,
     val includeContext: Boolean = true,
-)
+) {
+    companion object {
+        val ASPECT_RATIOS = listOf(
+            "auto", "2:3", "3:2", "1:1", "9:16", "16:9", "4:3", "3:4", "2:1", "1:2",
+            "4:5", "5:4", "21:9", "19.5:9", "9:19.5", "20:9", "9:20",
+        )
+        val RESOLUTIONS = listOf("1k", "2k", "4k")
+        val QUALITIES = listOf("auto", "low", "medium", "high")
+        const val DEFAULT_STEPS = 9
+        const val MIN_STEPS = 1
+        const val MAX_STEPS = 50
+    }
+}
 
 /** 协议无关的生成参数；null 字段表示使用供应商默认值。 */
 data class GenParams(
