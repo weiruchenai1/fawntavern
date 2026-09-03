@@ -23,6 +23,7 @@ import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.domain.GenerationEngine
+import me.rerere.fawntavern.domain.ChatGenerationMode
 import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.domain.ChatRegenerationPlan
@@ -134,7 +135,7 @@ class ChatViewModel(
             repository = chatRepository,
             currentSession = { session },
             replaceCurrent = { updated ->
-                if (session?.id == updated.id) conversation.replaceCurrent(updated)
+                if (session?.id == updated.id) conversation.replacePersistedCurrent(updated)
             },
             loadGlobalVariables = dependencies.promptEnvironment::globalVariables,
             saveGlobalVariables = { values ->
@@ -381,15 +382,15 @@ class ChatViewModel(
             is ChatAction.RemoveAttachment -> input.removeAttachment(action.value)
             is ChatAction.SetInputText -> input.text = action.text
             ChatAction.CancelEdit -> cancelEdit()
-            is ChatAction.StartEdit -> startEdit(action.timestamp)
-            is ChatAction.SwitchAlternative -> switchAlt(action.timestamp, action.direction)
+            is ChatAction.StartEdit -> startEdit(action.message)
+            is ChatAction.SwitchAlternative -> switchAlt(action.message, action.direction)
             is ChatAction.DeleteMessage -> deleteMessage(action.timestamp)
             is ChatAction.DeleteAllVersions -> deleteAllVersions(action.timestamp)
-            is ChatAction.UpdateMessage -> updateMessage(action.timestamp, action.content)
+            is ChatAction.UpdateMessage -> updateMessage(action.message, action.content)
             is ChatAction.ReplaceFrontendVariables ->
                 replaceFrontendVariables(action.scope, action.values)
             is ChatAction.ClearOverlay -> clearOverlay(action.timestamp)
-            is ChatAction.SpeakMessage -> speakMessage(action.timestamp)
+            is ChatAction.SpeakMessage -> speakMessage(action.message)
             ChatAction.StopSpeaking -> stopSpeaking()
             ChatAction.PauseSpeaking -> pauseTts()
             ChatAction.ResumeSpeaking -> resumeTts()
@@ -417,7 +418,7 @@ class ChatViewModel(
         }
         when (outcome) {
             ChatSendOutcome.STARTED -> {
-                emitFrontendEvent("message_sent", JSONObject().put("message_id", session?.messages?.lastIndex ?: -1).toString())
+                emitFrontendEvent("message_sent", JSONObject().put("message_id", session?.totalMessageCount ?: -1).toString())
                 if (scrollToBottom) effectChannel.trySend(ChatEffect.ScrollToBottom)
             }
             ChatSendOutcome.NO_MODEL -> {
@@ -555,10 +556,10 @@ class ChatViewModel(
     private fun sendMessage(): ChatSendOutcome = sendCoordinator.send()
 
     /** 进入编辑态：把该消息内容填入输入框，发送即更新该消息 */
-    private fun startEdit(ts: Long) {
+    private fun startEdit(message: ChatMessage) {
         if (generating) return
-        val msg = overlays[ts] ?: session?.messages?.firstOrNull { it.ts == ts } ?: return
-        input.beginEditing(ts, msg.content)
+        val current = overlays[message.ts] ?: message
+        input.beginEditing(current)
     }
 
     /** 取消编辑：退出编辑态并清空输入 */
@@ -589,10 +590,9 @@ class ChatViewModel(
     }
 
     /** 朗读/停止朗读指定 AI 消息：同一消息再次点击即停止，换消息则打断旧朗读 */
-    private fun speakMessage(ts: Long) {
-        val s = session ?: return
-        val msg = overlays[ts] ?: s.messages.firstOrNull { it.ts == ts } ?: return
-        tts.speak(ts, msg.content)
+    private fun speakMessage(message: ChatMessage) {
+        val current = overlays[message.ts] ?: message
+        tts.speak(current.ts, current.content)
     }
 
     private fun stopSpeaking() {
@@ -628,27 +628,46 @@ class ChatViewModel(
     private fun regenerateAi(ts: Long): ChatSendOutcome {
         if (generating) return ChatSendOutcome.SKIPPED
         if (!promptContext.isLoadedFor(session?.charFile.orEmpty())) return ChatSendOutcome.SKIPPED
-        val s = session ?: return ChatSendOutcome.SKIPPED
-        val plan = ChatRegenerationPlanner.forAssistant(s, ts) ?: return ChatSendOutcome.SKIPPED
-        return executeRegeneration(s, plan)
+        val sessionId = session?.id ?: return ChatSendOutcome.SKIPPED
+        return launchRegeneration(sessionId) { ChatRegenerationPlanner.forAssistant(it, ts) }
     }
 
     /** 用户消息重答：对其后的 AI 回复生成新版本 */
     private fun regenerateAfterUser(ts: Long): ChatSendOutcome {
         if (generating) return ChatSendOutcome.SKIPPED
         if (!promptContext.isLoadedFor(session?.charFile.orEmpty())) return ChatSendOutcome.SKIPPED
-        val s = session ?: return ChatSendOutcome.SKIPPED
-        val plan = ChatRegenerationPlanner.afterUser(s, ts) ?: return ChatSendOutcome.SKIPPED
-        return executeRegeneration(s, plan)
+        val sessionId = session?.id ?: return ChatSendOutcome.SKIPPED
+        return launchRegeneration(sessionId) { ChatRegenerationPlanner.afterUser(it, ts) }
     }
 
-    private fun executeRegeneration(
-        session: ChatSession,
-        plan: ChatRegenerationPlan,
+    private fun launchRegeneration(
+        sessionId: String,
+        createPlan: (ChatSession) -> ChatRegenerationPlan?,
     ): ChatSendOutcome {
         val (prov, modelId) = currentProviderAndModel() ?: return ChatSendOutcome.NO_MODEL
-        generationOrchestrator.launchRegeneration(session, prov, modelId, plan)
-        return ChatSendOutcome.STARTED
+        val started = generationOrchestrator.launch {
+            val fullSession = chatRepository.get(sessionId) ?: return@launch
+            when (val plan = createPlan(fullSession) ?: return@launch) {
+                is ChatRegenerationPlan.Regenerate -> generationOrchestrator.generate(
+                    sessionId = sessionId,
+                    provider = prov,
+                    modelId = modelId,
+                    mode = ChatGenerationMode.REGENERATE,
+                    targetTimestamp = plan.targetTimestamp,
+                )
+                is ChatRegenerationPlan.TruncateAndSend -> {
+                    chatRepository.truncateAfter(sessionId, plan.afterTimestamp)
+                    generationOrchestrator.generate(
+                        sessionId = sessionId,
+                        provider = prov,
+                        modelId = modelId,
+                        mode = ChatGenerationMode.SEND,
+                        targetTimestamp = null,
+                    )
+                }
+            }
+        }
+        return if (started) ChatSendOutcome.STARTED else ChatSendOutcome.SKIPPED
     }
 
     private fun generationSnapshot(): ChatGenerationSnapshot = ChatGenerationSnapshot(
@@ -669,10 +688,10 @@ class ChatViewModel(
     //   DB 回来后把 overlay 校准到权威结果，最终由 UI 在分页补齐后 clearOverlay 撤下。
 
     /** 左右切换消息版本（DB 落盘 + 乐观 overlay 即时切换，供锚定同帧读到新内容） */
-    private fun switchAlt(ts: Long, dir: Int) {
+    private fun switchAlt(message: ChatMessage, dir: Int) {
         if (generating) return
-        messageMutations.switchAlternative(ts, dir)
-        emitFrontendEvent("message_swiped", JSONObject().put("message_ts", ts).toString())
+        messageMutations.switchAlternative(message, dir)
+        emitFrontendEvent("message_swiped", JSONObject().put("message_ts", message.ts).toString())
     }
 
     /** 删除消息：多版本时只删当前显示的版本（下文不受影响），单版本删除整条 */
@@ -689,9 +708,9 @@ class ChatViewModel(
         emitFrontendEvent("message_deleted", JSONObject().put("message_ts", ts).toString())
     }
 
-    private fun updateMessage(ts: Long, content: String) {
-        messageMutations.updateMessage(ts, content)
-        emitFrontendEvent("message_edited", JSONObject().put("message_ts", ts).toString())
+    private fun updateMessage(message: ChatMessage, content: String) {
+        messageMutations.updateMessage(message, content)
+        emitFrontendEvent("message_edited", JSONObject().put("message_ts", message.ts).toString())
     }
 
     private fun replaceFrontendVariables(scope: String, values: Map<String, String>) {
@@ -709,7 +728,7 @@ class ChatViewModel(
             runCatching { chatRepository.saveLocalVariables(current.id, values) }
                 .onFailure { error ->
                     SafeLog.warn(CHAT_VIEW_MODEL_TAG, "frontend_chat_variables_save_failed", error)
-                    chatRepository.get(current.id)?.let(conversation::replaceCurrent)
+                    chatRepository.get(current.id)?.let(conversation::replacePersistedCurrent)
                 }
         }
     }

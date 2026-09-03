@@ -19,9 +19,20 @@ interface ChatDataRepository {
     ): List<SearchResult>
     suspend fun count(): Int
     suspend fun get(id: String): ChatSession?
+    /** Reads session metadata and message count without loading message bodies. */
+    suspend fun getMetadata(id: String): ChatSession? =
+        get(id)?.let {
+            it.copy(
+                messages = emptyList(),
+                totalMessageCount = it.messages.size,
+                messageTimestamps = it.messages.map(ChatMessage::ts),
+            )
+        }
     suspend fun save(session: ChatSession)
     suspend fun delete(id: String)
     suspend fun messageCount(sessionId: String): Int
+    suspend fun getMessage(sessionId: String, timestamp: Long): ChatMessage? =
+        get(sessionId)?.messages?.firstOrNull { it.ts == timestamp }
     suspend fun putMessage(sessionId: String, message: ChatMessage)
     suspend fun commitGeneration(
         sessionId: String,

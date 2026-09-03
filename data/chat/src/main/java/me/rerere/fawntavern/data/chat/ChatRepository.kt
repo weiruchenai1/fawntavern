@@ -75,6 +75,12 @@ object ChatRepository {
     suspend fun get(context: Context, id: String): ChatSession? =
         dao(context).getSession(id)?.toModel()
 
+    /** Reads only session columns plus the message count. */
+    suspend fun getMetadata(context: Context, id: String): ChatSession? {
+        val snapshot = dao(context).getSessionMetadataSnapshot(id) ?: return null
+        return snapshot.row.toModel(snapshot.messageTimestamps)
+    }
+
     suspend fun save(context: Context, session: ChatSession) {
         dao(context).saveSession(s = session.toEntity(),
             ms = session.messages.map { it.toEntity(session.id) },
@@ -128,7 +134,15 @@ object ChatRepository {
     /** 单会话消息的分页流（Paging 3），供海量消息场景按需加载。
      *  [initialKey] 为初始加载偏移（一般传 count-pageSize 让最新一页先加载、天然停在底部）。 */
     fun messagesPaged(context: Context, sessionId: String, initialKey: Int? = null): Flow<PagingData<ChatMessage>> =
-        Pager(PagingConfig(pageSize = 60, enablePlaceholders = false), initialKey = initialKey) {
+        Pager(
+            config = PagingConfig(
+                pageSize = 60,
+                initialLoadSize = 60,
+                prefetchDistance = 10,
+                enablePlaceholders = false,
+            ),
+            initialKey = initialKey,
+        ) {
             dao(context).messagesPaged(sessionId)
         }.flow.map { paging -> paging.map { it.toModel() } }
 
@@ -349,5 +363,24 @@ object ChatRepository {
         cachedTokens = cachedTokens,
         generationMs = generationMs,
         requestSnapshotsJson = if (requestSnapshots.isEmpty()) "" else json.encodeToString(requestSnapshots),
+    )
+
+    private fun SessionMetadataRow.toModel(messageTimestamps: List<Long>) = ChatSession(
+        id = session.id,
+        charFile = session.charFile,
+        charName = session.charName,
+        messages = emptyList(),
+        totalMessageCount = messageCount,
+        messageTimestamps = messageTimestamps,
+        createdAt = session.createdAt,
+        updatedAt = session.updatedAt,
+        localVariables = if (session.localVariablesJson.isBlank()) emptyMap()
+            else runCatching { json.decodeFromString<Map<String, String>>(session.localVariablesJson) }.getOrDefault(emptyMap()),
+        timedWi = if (session.timedWiJson.isBlank()) emptyMap()
+            else runCatching { json.decodeFromString<Map<String, Int>>(session.timedWiJson) }.getOrDefault(emptyMap()),
+        extState = if (session.extStateJson.isBlank()) emptyMap()
+            else runCatching { json.decodeFromString<Map<String, String>>(session.extStateJson) }.getOrDefault(emptyMap()),
+        title = session.title,
+        pinned = session.pinned,
     )
 }

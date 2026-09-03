@@ -88,6 +88,12 @@ private typealias Screen = ChatDestination
  */
 private const val ImmediateMessageFallbackLimit = 60
 
+private data class MessageMenuTarget(
+    val message: ChatMessage,
+    val messageWindow: List<ChatMessage>,
+    val wasLast: Boolean,
+)
+
 internal fun pagedMessageWindow(
     paged: List<ChatMessage>,
     inMemory: List<ChatMessage>,
@@ -95,8 +101,19 @@ internal fun pagedMessageWindow(
     inMemory.takeIf { it.size <= ImmediateMessageFallbackLimit } ?: emptyList()
 }
 
-internal fun messageIndexesByTimestamp(messages: List<ChatMessage>): Map<Long, Int> =
-    messages.mapIndexed { index, message -> message.ts to index }.toMap()
+internal fun messageIndexesByTimestamp(
+    messages: List<ChatMessage>,
+    offset: Int = 0,
+): Map<Long, Int> = messages.mapIndexed { index, message -> message.ts to (offset + index) }.toMap()
+
+internal fun messageIndexesForWindow(
+    messages: List<ChatMessage>,
+    allTimestamps: List<Long>,
+    fallbackOffset: Int,
+): Map<Long, Int> = messages.mapIndexed { index, message ->
+    val persistedIndex = allTimestamps.binarySearch(message.ts)
+    message.ts to if (persistedIndex >= 0) persistedIndex else fallbackOffset + index
+}.toMap()
 
 private fun Bitmap?.toFrontendDataUrl(): String {
     val bitmap = this ?: return ""
@@ -142,7 +159,7 @@ internal fun ChatContent(
     var showCharPicker by rememberSaveable { mutableStateOf(false) }
     var cameraImageUri by rememberSaveable { mutableStateOf<String?>(null) }
     // ── 消息操作弹窗状态（按消息 ts 定位，与分页/内存窗口无关） ──
-    var menuTargetIdx by rememberSaveable { mutableStateOf<Long?>(null) }
+    var menuTarget by remember { mutableStateOf<MessageMenuTarget?>(null) }
     /** 全屏底部面板内容（消息全文/输入框全文共用），非 null 时显示 */
     var copyPanel by remember { mutableStateOf<CopyPanel?>(null) }
     var deleteSessionId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -241,6 +258,7 @@ internal fun ChatContent(
     val scrollCtrl = rememberChatScrollController()
     // 记录上次因为"开/切会话"钉底的 session id，切换全屏页返回不触发重钉
     var lastPinnedSessionId by remember { mutableStateOf<String?>(null) }
+    var firstPagePinnedSessionId by remember { mutableStateOf<String?>(null) }
 
     // ── TTS 悬浮窗：挂在 App 窗口之上，朗读时悬浮于屏幕任意页面；初始位置在顶栏下方左缘 ──
     val density = LocalDensity.current
@@ -455,6 +473,15 @@ internal fun ChatContent(
                     paged = lazyMessages.itemSnapshotList.items,
                     inMemory = inMemoryVisibleMessages,
                 )
+                val pagedMessageIndexOffset = remember(
+                    conversation.current?.totalMessageCount,
+                    pagedBase.size,
+                    inMemoryMessages.size,
+                ) {
+                    if (inMemoryMessages.isNotEmpty()) 0
+                    else ((conversation.current?.totalMessageCount ?: pagedBase.size) - pagedBase.size)
+                        .coerceAtLeast(0)
+                }
                 // 加载中视为已抵达底部：append 的 endOfPaginationReached 会在 refresh 时暂时重置，
                 // 此时若隐藏新 overlay，刚完成的消息会闪掉一帧再回来。
                 val append = lazyMessages.loadState.append
@@ -465,7 +492,8 @@ internal fun ChatContent(
                 }
                 val waitingForInitialMessagePage =
                     lazyMessages.itemCount == 0 && pagedBase.isEmpty() &&
-                        inMemoryVisibleMessages.size > ImmediateMessageFallbackLimit &&
+                        ((conversation.current?.totalMessageCount ?: 0) > 0 ||
+                            inMemoryVisibleMessages.size > ImmediateMessageFallbackLimit) &&
                         lazyMessages.loadState.refresh !is LoadState.Error
                 // 前端卡只获得当前已加载的分页窗口。完整会话仍可通过 chat.get-messages RPC 按需读取，
                 // 避免每个可见 WebView 都持有并解析整段聊天历史。
@@ -475,8 +503,19 @@ internal fun ChatContent(
                     inMemoryMessages.size,
                     inMemoryMessages.firstOrNull()?.ts,
                     inMemoryMessages.lastOrNull()?.ts,
+                    pagedBase,
+                    pagedMessageIndexOffset,
+                    conversation.current?.messageTimestamps,
                 ) {
-                    messageIndexesByTimestamp(inMemoryMessages)
+                    if (inMemoryMessages.isNotEmpty()) {
+                        messageIndexesByTimestamp(inMemoryMessages)
+                    } else {
+                        messageIndexesForWindow(
+                            messages = pagedBase,
+                            allTimestamps = conversation.current?.messageTimestamps.orEmpty(),
+                            fallbackOffset = pagedMessageIndexOffset,
+                        )
+                    }
                 }
                 val frontendMessageIds = remember(frontendMessages, messageIndexes) {
                     frontendMessages.associate { message ->
@@ -588,6 +627,16 @@ internal fun ChatContent(
                         scrollCtrl.onSessionOpened()
                     }
                 }
+                // The session may be selected before Paging publishes its first page. Re-apply the
+                // pending bottom anchor as soon as items arrive, before normal user scrolling begins.
+                LaunchedEffect(conversation.current?.id, lazyMessages.itemCount) {
+                    val sessionId = conversation.current?.id
+                    if (sessionId != null && lazyMessages.itemCount > 0 &&
+                        firstPagePinnedSessionId != sessionId) {
+                        firstPagePinnedSessionId = sessionId
+                        scrollCtrl.pinToBottom()
+                    }
+                }
                 // 生成结束：仍在跟随且生成目标是末条消息则钉住底部（正文切 Markdown、工具栏出现会改高度）。
                 // 用 snapshotFlow.drop(1) 跳过当前值，避免从全屏页面返回时（正在生成中才离开的罕见场景）误钉底。
                 var lastObservedGenerating by remember { mutableStateOf(generation.running) }
@@ -658,7 +707,9 @@ internal fun ChatContent(
                                                 )
                                             }
                                         },
-                                        onMore = { menuTargetIdx = msg.ts },
+                                        onMore = {
+                                            menuTarget = MessageMenuTarget(msg, msgs, i == msgs.lastIndex)
+                                        },
                                         scale = fontScale,
                                         avatarBitmap = profile.userAvatar,
                                         showAvatar = prefs.showUserAvatar,
@@ -674,7 +725,7 @@ internal fun ChatContent(
                                     fun switchAltAnchored(dir: Int) {
                                         if (msg.alts.size < 2 || (msg.altIdx + dir) !in 0..msg.alts.lastIndex) return
                                         scrollCtrl.switchAnchored(index = i, isLast = i == msgs.lastIndex) {
-                                            onAction(ChatAction.SwitchAlternative(msg.ts, dir))
+                                            onAction(ChatAction.SwitchAlternative(msg, dir))
                                         }
                                     }
                                     AIMsg(
@@ -691,10 +742,12 @@ internal fun ChatContent(
                                                 )
                                             }
                                         },
-                                        onMore = { menuTargetIdx = msg.ts },
+                                        onMore = {
+                                            menuTarget = MessageMenuTarget(msg, msgs, i == msgs.lastIndex)
+                                        },
                                         onPrevAlt = { switchAltAnchored(-1) },
                                         onNextAlt = { switchAltAnchored(+1) },
-                                        onSpeak = { onAction(ChatAction.SpeakMessage(msg.ts)) },
+                                        onSpeak = { onAction(ChatAction.SpeakMessage(msg)) },
                                         speaking = profile.speakingTimestamp == msg.ts,
                                         scale = fontScale,
                                         regexScripts = conversation.displayRegexScripts,
@@ -746,7 +799,7 @@ internal fun ChatContent(
                                                 frontendMessageIds[messageId]
                                             }
                                             target?.let { message ->
-                                                onAction(ChatAction.UpdateMessage(message.ts, value))
+                                                onAction(ChatAction.UpdateMessage(message, value))
                                             }
                                         },
                                         onSelectChatMessageSwipe = { messageId, swipeId ->
@@ -759,7 +812,7 @@ internal fun ChatContent(
                                                 if (swipeId in message.alts.indices) {
                                                     onAction(
                                                         ChatAction.SwitchAlternative(
-                                                            message.ts,
+                                                            message,
                                                             swipeId - message.altIdx,
                                                         ),
                                                     )
@@ -806,16 +859,14 @@ internal fun ChatContent(
     }
 
     // ── 消息操作菜单 ──
-    val menuTs = menuTargetIdx
+    val menuTs = menuTarget?.message?.ts
     // 与渲染一致地取目标：overlay（流式/乐观态）优先，回退到内存会话
-    val menuMsg = menuTs?.let { ts ->
-        conversation.overlays[ts] ?: conversation.current?.messages?.firstOrNull { it.ts == ts }
-    }
+    val menuMsg = menuTarget?.message?.let { conversation.overlays[it.ts] ?: it }
     if (menuTs != null && menuMsg != null) {
         MessageMenu(
-            onDismiss = { menuTargetIdx = null },
+            onDismiss = { menuTarget = null },
             onSelectCopy = {
-                val sessionMessages = conversation.current?.messages.orEmpty()
+                val sessionMessages = menuTarget?.messageWindow.orEmpty()
                 val messageIndex = sessionMessages.indexOfFirst { it.ts == menuMsg.ts }
                 val previewMessages = if (messageIndex >= 0) {
                     sessionMessages.toMutableList().also { it[messageIndex] = menuMsg }
@@ -839,7 +890,7 @@ internal fun ChatContent(
                     ),
                     lineBatchSize = TEXT_PANEL_LINE_BATCH_SIZE,
                 )
-                menuTargetIdx = null
+                menuTarget = null
             },
             onViewRequestBody = {
                 copyPanel = CopyPanel(
@@ -847,29 +898,29 @@ internal fun ChatContent(
                     text = formatRequestSnapshots(menuMsg.requestSnapshots),
                     lineBatchSize = TEXT_PANEL_LINE_BATCH_SIZE,
                 )
-                menuTargetIdx = null
+                menuTarget = null
             },
             onEdit = {
-                onAction(ChatAction.StartEdit(menuTs))
-                menuTargetIdx = null
+                onAction(ChatAction.StartEdit(menuMsg))
+                menuTarget = null
             },
             onDeleteCurrentVersion = {
                 val ts = menuTs
+                val wasLast = menuTarget?.wasLast == true
                 maybeDeleteCurrentVersion {
-                    val wasLast = menuMsg.ts == conversation.current?.messages?.lastOrNull()?.ts
                     onAction(ChatAction.DeleteMessage(ts))
                     if (wasLast) scrollToBottomTrigger++
                 }
-                menuTargetIdx = null
+                menuTarget = null
             },
             onDeleteAllVersions = {
                 val ts = menuTs
+                val wasLast = menuTarget?.wasLast == true
                 maybeDeleteAllVersions {
-                    val wasLast = menuMsg.ts == conversation.current?.messages?.lastOrNull()?.ts
                     onAction(ChatAction.DeleteAllVersions(ts))
                     if (wasLast) scrollToBottomTrigger++
                 }
-                menuTargetIdx = null
+                menuTarget = null
             },
             hasMultipleVersions = menuMsg.alts.size > 1,
             canViewRequestBody = menuMsg.role == "assistant" && menuMsg.requestSnapshots.isNotEmpty(),

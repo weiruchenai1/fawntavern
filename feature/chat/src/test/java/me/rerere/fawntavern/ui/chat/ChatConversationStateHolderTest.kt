@@ -61,6 +61,16 @@ class ChatConversationStateHolderTest {
         assertNull(holder.switchAlternative(timestamp = 404L, direction = 1))
     }
 
+    @Test
+    fun persistedCurrentDropsMessageBodiesButKeepsTheirCount() {
+        val holder = ChatConversationStateHolder()
+
+        holder.replacePersistedCurrent(session("chat", message(1L, "one"), message(2L, "two")))
+
+        assertTrue(holder.current?.messages.orEmpty().isEmpty())
+        assertEquals(2, holder.current?.totalMessageCount)
+    }
+
     private fun session(id: String, vararg messages: ChatMessage) = ChatSession(
         id = id,
         messages = messages.toList(),

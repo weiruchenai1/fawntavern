@@ -75,6 +75,16 @@ internal data class SessionWithMessages(
     val messages: List<MessageEntity>,
 )
 
+internal data class SessionMetadataRow(
+    @Embedded val session: SessionEntity,
+    val messageCount: Int,
+)
+
+internal data class SessionMetadataSnapshot(
+    val row: SessionMetadataRow,
+    val messageTimestamps: List<Long>,
+)
+
 internal data class SessionSummaryRow(
     @Embedded val session: SessionEntity,
     val preview: String?,
@@ -170,6 +180,25 @@ internal interface ChatDao {
     @Transaction
     @Query("SELECT * FROM sessions WHERE id = :id")
     suspend fun getSession(id: String): SessionWithMessages?
+
+    /** Open a chat without materializing its message relation. */
+    @Query("""
+        SELECT sessions.*,
+            (SELECT COUNT(*) FROM messages
+             WHERE messages.sessionId = sessions.id) AS messageCount
+        FROM sessions
+        WHERE sessions.id = :id
+    """)
+    suspend fun getSessionMetadata(id: String): SessionMetadataRow?
+
+    @Query("SELECT ts FROM messages WHERE sessionId = :id ORDER BY ts ASC")
+    suspend fun getMessageTimestamps(id: String): List<Long>
+
+    @Transaction
+    suspend fun getSessionMetadataSnapshot(id: String): SessionMetadataSnapshot? {
+        val row = getSessionMetadata(id) ?: return null
+        return SessionMetadataSnapshot(row, getMessageTimestamps(id))
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSession(s: SessionEntity)

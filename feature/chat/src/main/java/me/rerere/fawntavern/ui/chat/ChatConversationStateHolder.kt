@@ -39,6 +39,17 @@ class ChatConversationStateHolder {
         current = value
     }
 
+    /** Keeps persisted session state lightweight; message bodies are owned by Paging. */
+    fun replacePersistedCurrent(value: ChatSession?) {
+        replaceCurrent(value?.let { session ->
+            if (session.messages.isEmpty()) session else session.copy(
+                messages = emptyList(),
+                totalMessageCount = session.messages.size,
+                messageTimestamps = session.messages.map(ChatMessage::ts),
+            )
+        })
+    }
+
     fun updateCurrent(sessionId: String, transform: (ChatSession) -> ChatSession) {
         val value = current ?: return
         if (value.id == sessionId) current = transform(value)
@@ -48,13 +59,18 @@ class ChatConversationStateHolder {
         overlays = overlays + (message.ts to message)
     }
 
+    fun switchAlternative(message: ChatMessage, direction: Int): ChatMessage? {
+        val source = overlays[message.ts] ?: message
+        val switched = MessageAlternatives.switch(source, direction) ?: return null
+        putOverlay(switched)
+        return switched
+    }
+
     fun switchAlternative(timestamp: Long, direction: Int): ChatMessage? {
         val message = overlays[timestamp]
             ?: current?.messages?.firstOrNull { it.ts == timestamp }
             ?: return null
-        val switched = MessageAlternatives.switch(message, direction) ?: return null
-        putOverlay(switched)
-        return switched
+        return switchAlternative(message, direction)
     }
 
     fun removeOverlay(timestamp: Long) {
@@ -73,9 +89,24 @@ class ChatConversationStateHolder {
     ) {
         if (current?.id != sessionId) return
         val currentOverlay = overlays[timestamp]
-        current = fresh
+        current = fresh.copy(
+            messages = emptyList(),
+            totalMessageCount = fresh.messages.size,
+            messageTimestamps = fresh.messages.map(ChatMessage::ts),
+        )
         if (expectedOverlay != null && currentOverlay != expectedOverlay) return
         val row = fresh.messages.firstOrNull { it.ts == timestamp }
         overlays = if (row != null) overlays + (timestamp to row) else overlays - timestamp
+    }
+
+    fun reconcileMessage(
+        sessionId: String,
+        fresh: ChatMessage,
+        expectedOverlay: ChatMessage? = null,
+    ) {
+        if (current?.id != sessionId) return
+        val currentOverlay = overlays[fresh.ts]
+        if (expectedOverlay != null && currentOverlay != expectedOverlay) return
+        overlays = overlays + (fresh.ts to fresh)
     }
 }

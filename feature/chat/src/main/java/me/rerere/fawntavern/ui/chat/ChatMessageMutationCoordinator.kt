@@ -2,6 +2,7 @@ package me.rerere.fawntavern.ui.chat
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.domain.chat.ChatMessageCoordinator
 
 /** 协调消息的乐观更新、串行持久化和结果对齐。 */
@@ -10,14 +11,13 @@ class ChatMessageMutationCoordinator(
     private val persistence: ChatMessageCoordinator,
     private val conversation: ChatConversationStateHolder,
 ) {
-    fun switchAlternative(timestamp: Long, direction: Int) {
+    fun switchAlternative(message: ChatMessage, direction: Int) {
         val session = conversation.current ?: return
-        val optimistic = conversation.switchAlternative(timestamp, direction) ?: return
+        val optimistic = conversation.switchAlternative(message, direction) ?: return
         scope.launch {
-            persistence.switchAlt(session, timestamp, direction)?.let { fresh ->
+            persistence.switchAlt(session, message.ts, direction)?.let { fresh ->
                 conversation.reconcileMessage(
                     session.id,
-                    timestamp,
                     fresh,
                     expectedOverlay = optimistic,
                 )
@@ -29,8 +29,13 @@ class ChatMessageMutationCoordinator(
         val session = conversation.current ?: return
         conversation.removeOverlay(timestamp)
         scope.launch {
-            persistence.deleteMessage(session, timestamp)?.let { fresh ->
-                conversation.reconcileMessage(session.id, timestamp, fresh)
+            persistence.deleteMessage(session, timestamp)?.let { metadata ->
+                conversation.updateCurrent(session.id) {
+                    it.copy(
+                        totalMessageCount = metadata.totalMessageCount,
+                        messageTimestamps = metadata.messageTimestamps,
+                    )
+                }
             }
         }
     }
@@ -39,20 +44,24 @@ class ChatMessageMutationCoordinator(
         val session = conversation.current ?: return
         conversation.removeOverlay(timestamp)
         scope.launch {
-            persistence.deleteAllVersions(session, timestamp)?.let { fresh ->
-                conversation.reconcileMessage(session.id, timestamp, fresh)
+            persistence.deleteAllVersions(session, timestamp)?.let { metadata ->
+                conversation.updateCurrent(session.id) {
+                    it.copy(
+                        totalMessageCount = metadata.totalMessageCount,
+                        messageTimestamps = metadata.messageTimestamps,
+                    )
+                }
             }
         }
     }
 
-    fun updateMessage(timestamp: Long, content: String) {
+    fun updateMessage(message: ChatMessage, content: String) {
         val session = conversation.current ?: return
-        val current = conversation.overlays[timestamp]
-            ?: session.messages.firstOrNull { it.ts == timestamp }
-        if (current != null) conversation.putOverlay(current.copy(content = content))
+        val current = conversation.overlays[message.ts] ?: message
+        conversation.putOverlay(current.copy(content = content))
         scope.launch {
-            persistence.updateMessage(session, timestamp, content)?.let { fresh ->
-                conversation.reconcileMessage(session.id, timestamp, fresh)
+            persistence.updateMessage(session, message.ts, content)?.let { fresh ->
+                conversation.reconcileMessage(session.id, fresh)
             }
         }
     }

@@ -1092,7 +1092,17 @@ function watchMedia(root){
 new MutationObserver(records=>{records.forEach(record=>{record.addedNodes.forEach(node=>{if(node.nodeType!==1)return;if(node.matches&&node.matches('iframe'))fitFrame(node);if(node.querySelectorAll){activateFrames(node);watchMedia(node)}})})}).observe(content,{subtree:true,childList:true});
 content.addEventListener('click',event=>{const image=event.target&&event.target.closest?event.target.closest('img'):null;if(image){event.preventDefault();window.__fawnOpenImage(image.currentSrc||image.src)}requestAnimationFrame(schedulePageHeight)},true);content.addEventListener('toggle',()=>requestAnimationFrame(schedulePageHeight),true);
 let contentRevision=0;
-window.__fawnUpdate=async function(html,incremental){const revision=++contentRevision,details=[...content.querySelectorAll('details')].map(x=>x.open);content.innerHTML=html;content.querySelectorAll('details').forEach((x,i)=>{if(i<details.length)x.open=details[i]});activateFrames(content);watchMedia(content);if(!incremental)await activateScripts(content);if(revision!==contentRevision)return;activateFrames(content);watchMedia(content);schedulePageHeight()};
+async function renderPromptTemplate(html,incremental){
+  const source=String(html??'');
+  if(incremental||!window.EjsTemplate||!/(?:<|&lt;)%[_=-]?/.test(source))return source;
+  try{return await window.EjsTemplate.evalTemplate(source)}catch(error){console.warn('[FawnTavern] prompt-template render failed; using the original card',error);return source}
+}
+window.__fawnUpdate=async function(html,incremental){
+  const revision=++contentRevision,details=[...content.querySelectorAll('details')].map(x=>x.open);
+  const rendered=await renderPromptTemplate(html,incremental);if(revision!==contentRevision)return;
+  content.innerHTML=rendered;content.querySelectorAll('details').forEach((x,i)=>{if(i<details.length)x.open=details[i]});
+  activateFrames(content);watchMedia(content);if(!incremental)await activateScripts(content);if(revision!==contentRevision)return;activateFrames(content);watchMedia(content);schedulePageHeight()
+};
 </script>${frontendCompatibilityScript(allowContentJavaScript)}</body></html>
 """.trimIndent()
 

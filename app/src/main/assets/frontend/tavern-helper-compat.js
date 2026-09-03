@@ -347,12 +347,159 @@
     }
     return merged;
   }
+
+  function templateOptions(options) {
+    if (typeof options === 'string') return { scope: options };
+    return options && typeof options === 'object' ? options : {};
+  }
+
+  function templateScope(options, fallback) {
+    var raw = String(options.scope || options.outscope || options.type || fallback || 'cache').toLowerCase();
+    if (raw === 'local' || raw === 'chat') return 'chat';
+    if (raw === 'global' || raw === 'message') return raw;
+    return 'cache';
+  }
+
+  function templateMessageOptions(options, scope) {
+    if (scope !== 'message' || options.message_id != null) return options;
+    var messageId = context().messageId;
+    return messageId == null ? options : Object.assign({}, options, { message_id: messageId });
+  }
+
+  function templateEndMessageId(value) {
+    if (value != null) return value;
+    var messageId = context().messageId;
+    return messageId == null ? undefined : Number(messageId);
+  }
+
+  function templateVariableStore(options) {
+    var opts = templateOptions(options);
+    var scope = templateScope(opts);
+    if (scope === 'cache') return allTemplateVariables(templateEndMessageId(opts.message_id));
+    return getVariables(Object.assign({}, templateMessageOptions(opts, scope), { type: scope }));
+  }
+
+  function templateGetVariable(key, options) {
+    var opts = templateOptions(options);
+    var value = key == null ? templateVariableStore(opts) : getPath(templateVariableStore(opts), key);
+    if (opts.index != null && value != null) {
+      var index = Number(opts.index);
+      value = value[Number.isNaN(index) ? opts.index : index];
+    }
+    if (value === undefined) value = opts.defaults;
+    return opts.clone ? clone(value) : value;
+  }
+
+  function persistTemplateVariables(value, options) {
+    var opts = templateOptions(options);
+    var scope = templateScope(opts, 'chat');
+    if (scope === 'cache') scope = 'chat';
+    replaceVariables(value, Object.assign({}, templateMessageOptions(opts, scope), { type: scope })).catch(function (error) {
+      console.warn('[FawnTavern] failed to persist prompt-template variables', error);
+    });
+  }
+
+  function templateSetVariable(key, value, options) {
+    var opts = templateOptions(options);
+    var scope = templateScope(opts, 'chat');
+    if (scope === 'cache') scope = 'chat';
+    var current = templateVariableStore(Object.assign({}, opts, { scope: scope }));
+    var previous = key == null ? clone(current) : getPath(current, key);
+    if (key == null) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        Object.keys(current).forEach(function (name) { delete current[name]; });
+        mergeInto(current, value, false);
+      }
+    } else if (value === undefined) {
+      deletePath(current, key);
+    } else {
+      setPath(current, key, value);
+    }
+    persistTemplateVariables(current, Object.assign({}, opts, { scope: scope }));
+    return opts.results === 'old' ? previous : opts.results === 'fullcache' ? allTemplateVariables() : value;
+  }
+
+  function templateIncreaseVariable(key, amount, options) {
+    var current = Number(templateGetVariable(key, Object.assign({}, templateOptions(options), {
+      scope: templateOptions(options).inscope || templateOptions(options).scope,
+      defaults: 0,
+    })) || 0);
+    var next = current + Number(amount == null ? 1 : amount);
+    var opts = templateOptions(options);
+    if (opts.min != null) next = Math.max(next, Number(opts.min));
+    if (opts.max != null) next = Math.min(next, Number(opts.max));
+    return templateSetVariable(key, next, Object.assign({}, opts, { scope: opts.outscope || opts.scope }));
+  }
+
+  function templateDeleteVariable(key, options) {
+    return templateSetVariable(key, undefined, options);
+  }
+
+  function templateInsertVariable(key, value, index, options) {
+    var current = templateGetVariable(key, options);
+    if (Array.isArray(current)) {
+      var copy = current.slice();
+      var position = index == null ? copy.length : Number(index);
+      if (position < 0) position = copy.length + position;
+      copy.splice(Math.max(0, position), 0, value);
+      return templateSetVariable(key, copy, options);
+    }
+    if (current && typeof current === 'object' && index != null) {
+      var objectCopy = clone(current);
+      objectCopy[String(index)] = value;
+      return templateSetVariable(key, objectCopy, options);
+    }
+    if (typeof current === 'string') {
+      var stringPosition = index == null ? current.length : Number(index);
+      if (stringPosition < 0) stringPosition = current.length + stringPosition;
+      return templateSetVariable(
+        key,
+        current.slice(0, Math.max(0, stringPosition)) + String(value) + current.slice(Math.max(0, stringPosition)),
+        options,
+      );
+    }
+    return undefined;
+  }
+
   async function prepareTemplateContext(additionalContext, endMessageId) {
-    return Object.assign({}, getContext(), allTemplateVariables(endMessageId), additionalContext || {});
+    var effectiveEndMessageId = templateEndMessageId(endMessageId);
+    var ctx = Object.assign({}, getContext(), allTemplateVariables(effectiveEndMessageId), additionalContext || {});
+    Object.defineProperty(ctx, 'variables', {
+      enumerable: true,
+      get: function () { return allTemplateVariables(effectiveEndMessageId); },
+    });
+    return Object.assign(ctx, {
+      getvar: templateGetVariable,
+      getLocalVar: function (key, options) { return templateGetVariable(key, Object.assign({}, templateOptions(options), { scope: 'local' })); },
+      getGlobalVar: function (key, options) { return templateGetVariable(key, Object.assign({}, templateOptions(options), { scope: 'global' })); },
+      getMessageVar: function (key, options) { return templateGetVariable(key, Object.assign({}, templateOptions(options), { scope: 'message' })); },
+      setvar: templateSetVariable,
+      setLocalVar: function (key, value, options) { return templateSetVariable(key, value, Object.assign({}, templateOptions(options), { scope: 'local' })); },
+      setGlobalVar: function (key, value, options) { return templateSetVariable(key, value, Object.assign({}, templateOptions(options), { scope: 'global' })); },
+      setMessageVar: function (key, value, options) { return templateSetVariable(key, value, Object.assign({}, templateOptions(options), { scope: 'message' })); },
+      incvar: templateIncreaseVariable,
+      incLocalVar: function (key, value, options) { return templateIncreaseVariable(key, value, Object.assign({}, templateOptions(options), { outscope: 'local' })); },
+      incGlobalVar: function (key, value, options) { return templateIncreaseVariable(key, value, Object.assign({}, templateOptions(options), { outscope: 'global' })); },
+      incMessageVar: function (key, value, options) { return templateIncreaseVariable(key, value, Object.assign({}, templateOptions(options), { outscope: 'message' })); },
+      decvar: function (key, value, options) { return templateIncreaseVariable(key, -Number(value == null ? 1 : value), options); },
+      decLocalVar: function (key, value, options) { return templateIncreaseVariable(key, -Number(value == null ? 1 : value), Object.assign({}, templateOptions(options), { outscope: 'local' })); },
+      decGlobalVar: function (key, value, options) { return templateIncreaseVariable(key, -Number(value == null ? 1 : value), Object.assign({}, templateOptions(options), { outscope: 'global' })); },
+      decMessageVar: function (key, value, options) { return templateIncreaseVariable(key, -Number(value == null ? 1 : value), Object.assign({}, templateOptions(options), { outscope: 'message' })); },
+      delvar: templateDeleteVariable,
+      delLocalVar: function (key, options) { return templateDeleteVariable(key, Object.assign({}, templateOptions(options), { scope: 'local' })); },
+      delGlobalVar: function (key, options) { return templateDeleteVariable(key, Object.assign({}, templateOptions(options), { scope: 'global' })); },
+      delMessageVar: function (key, options) { return templateDeleteVariable(key, Object.assign({}, templateOptions(options), { scope: 'message' })); },
+      insvar: templateInsertVariable,
+      insertLocalVar: function (key, value, index, options) { return templateInsertVariable(key, value, index, Object.assign({}, templateOptions(options), { scope: 'local' })); },
+      insertGlobalVar: function (key, value, index, options) { return templateInsertVariable(key, value, index, Object.assign({}, templateOptions(options), { scope: 'global' })); },
+      insertMessageVar: function (key, value, index, options) { return templateInsertVariable(key, value, index, Object.assign({}, templateOptions(options), { scope: 'message' })); },
+    });
   }
   async function evalTemplate(template, templateContext) {
     var ctx = templateContext || await prepareTemplateContext();
-    var source = String(template == null ? '' : template);
+    var source = String(template == null ? '' : template)
+      .replace(/&lt;%(?=[_=-]?)/gi, '<%')
+      .replace(/%&gt;/gi, '%>');
     var matcher = /<%([=_-]?)([\s\S]*?)%>/g;
     var cursor = 0;
     var body = "let __out='';\n";

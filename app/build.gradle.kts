@@ -122,6 +122,7 @@ dependencies {
     implementation(project(":data:chat"))
     implementation(project(":data:resources"))
     implementation(project(":data:generation"))
+    implementation(project(":data:search"))
     implementation(project(":data:settings"))
     implementation(project(":feature:chat"))
     implementation(project(":feature:character"))

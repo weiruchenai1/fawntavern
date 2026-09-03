@@ -88,6 +88,15 @@ data class ChatSession(
     val charFile: String = "",    // 角色卡文件名，空 = 无角色的普通聊天
     val charName: String = "",
     val messages: List<ChatMessage> = emptyList(),
+    /**
+     * Persisted message count when [messages] is only a UI window.  It is runtime-only so chat
+     * exports keep their existing format; full snapshots naturally default to [messages].size.
+     */
+    @kotlinx.serialization.Transient
+    val totalMessageCount: Int = messages.size,
+    /** Stable frontend message IDs without retaining message bodies. */
+    @kotlinx.serialization.Transient
+    val messageTimestamps: List<Long> = messages.map(ChatMessage::ts),
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val localVariables: Map<String, String> = emptyMap(),

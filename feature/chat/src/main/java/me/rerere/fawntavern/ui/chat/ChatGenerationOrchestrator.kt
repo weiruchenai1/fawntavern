@@ -110,7 +110,7 @@ internal class ChatGenerationOrchestrator(
                 searchEnabled = context.searchEnabled,
             ),
             onStarted = { base, message ->
-                conversation.replaceCurrent(base)
+                conversation.replacePersistedCurrent(base)
                 generationState.markTarget(message.ts)
                 conversation.putOverlay(message)
                 onFrontendEvent(
@@ -131,7 +131,7 @@ internal class ChatGenerationOrchestrator(
         ) ?: return
 
         result.completedSession?.let { completed ->
-            if (conversation.current?.id == sessionId) conversation.replaceCurrent(completed)
+            if (conversation.current?.id == sessionId) conversation.replacePersistedCurrent(completed)
             runPostGeneration(completed)
             val messageId = completed.messages.lastIndex
             onFrontendEvent("message_received", JSONObject().put("message_id", messageId).toString())
@@ -157,7 +157,7 @@ internal class ChatGenerationOrchestrator(
 
     fun generateTitle(sessionId: String) {
         scope.launch {
-            sessions.open(sessionId)?.let { generateTitle(it, force = true) }
+            sessions.loadFull(sessionId)?.let { generateTitle(it, force = true) }
         }
     }
 

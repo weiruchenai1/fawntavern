@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import me.rerere.fawntavern.extension.QuickReply
+import me.rerere.fawntavern.data.chat.ChatMessage
 
 data class ChatInputState(
     val attachments: List<Attachment>,
@@ -21,6 +22,9 @@ class ChatInputStateHolder {
         private set
 
     var editingTimestamp by mutableStateOf<Long?>(null)
+        private set
+
+    var editingMessage: ChatMessage? = null
         private set
 
     var quickReplies by mutableStateOf<List<QuickReply>>(emptyList())
@@ -58,12 +62,17 @@ class ChatInputStateHolder {
         attachments = sentAttachments.filter { it.uri !in currentUris } + attachments
     }
 
-    fun beginEditing(timestamp: Long, content: String) {
-        editingTimestamp = timestamp
-        text = content
+    fun beginEditing(message: ChatMessage) {
+        editingMessage = message
+        editingTimestamp = message.ts
+        text = message.content
     }
 
+    fun beginEditing(timestamp: Long, content: String) =
+        beginEditing(ChatMessage(role = "user", content = content, ts = timestamp))
+
     fun finishEditing() {
+        editingMessage = null
         editingTimestamp = null
         text = ""
     }

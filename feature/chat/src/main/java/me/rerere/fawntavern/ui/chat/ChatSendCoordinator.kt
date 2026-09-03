@@ -35,7 +35,7 @@ internal class ChatSendCoordinator(
         val editingTimestamp = input.editingTimestamp
         if (editingTimestamp != null) {
             if (text.isBlank()) return ChatSendOutcome.SKIPPED
-            messageMutations.updateMessage(editingTimestamp, text)
+            input.editingMessage?.let { messageMutations.updateMessage(it, text) }
             input.finishEditing()
             return ChatSendOutcome.STARTED
         }
@@ -51,7 +51,7 @@ internal class ChatSendCoordinator(
                 text = text,
                 pendingAttachments = pendingAttachments,
                 onPrepared = { prepared, userMessage ->
-                    conversation.replaceCurrent(prepared)
+                    conversation.replacePersistedCurrent(prepared)
                     conversation.putOverlay(userMessage)
                 },
                 generate = { sessionId ->
@@ -71,7 +71,7 @@ internal class ChatSendCoordinator(
                 }
                 is SendChatMessageResult.Failed -> {
                     result.restoredSession?.let { restored ->
-                        if (conversation.current?.id == restored.id) conversation.replaceCurrent(restored)
+                        if (conversation.current?.id == restored.id) conversation.replacePersistedCurrent(restored)
                     }
                     result.retainedTimestamps?.let(conversation::retainOverlays)
                     input.restoreDraft(text, pendingAttachments)

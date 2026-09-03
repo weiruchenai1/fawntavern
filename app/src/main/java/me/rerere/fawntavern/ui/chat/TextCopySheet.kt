@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -19,6 +22,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -31,6 +35,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,7 +46,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.FileText
@@ -49,6 +54,9 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.domain.RegexEngine
 import me.rerere.fawntavern.ui.components.noRippleClickable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal data class TextCopyPreview(
     val applyDisplayTransforms: Boolean = true,
@@ -57,6 +65,78 @@ internal data class TextCopyPreview(
     val userName: String = "",
     val charName: String = "",
 )
+
+private const val DefaultReadOnlyBatchLines = 100
+private const val AutoBatchThresholdChars = 32_000
+private const val MaxCharsPerBatch = 4_000
+
+private data class RenderedTextWindow(
+    val text: String,
+    val ranges: List<IntRange>,
+)
+
+private data class RenderedTextBlock(
+    val sourceStart: Int,
+    val window: RenderedTextWindow,
+    val range: IntRange,
+)
+
+/** Finds a bounded prefix without materializing lineSequence()/split() lists for a huge string. */
+internal fun textWindowEnd(
+    text: String,
+    maxLines: Int,
+    maxChars: Int,
+    start: Int = 0,
+): Int {
+    val safeStart = start.coerceIn(0, text.length)
+    if (safeStart == text.length || maxLines <= 0 || maxChars <= 0) return safeStart
+    val charEnd = (safeStart.toLong() + maxChars).coerceAtMost(text.length.toLong()).toInt()
+    var lines = 1
+    var index = safeStart
+    while (index < charEnd) {
+        if (text[index] == '\n' && ++lines > maxLines) return index + 1
+        index++
+    }
+    return charEnd
+}
+
+internal fun textWindowRanges(
+    text: String,
+    batchCount: Int,
+    linesPerBatch: Int,
+    charsPerBatch: Int,
+): List<IntRange> = buildList {
+    var start = 0
+    for (batch in 0 until batchCount.coerceAtLeast(0)) {
+        if (start >= text.length) break
+        val end = textWindowEnd(text, linesPerBatch, charsPerBatch, start)
+        if (end <= start) break
+        add(start until end)
+        start = end
+    }
+}
+
+internal fun allTextWindowRanges(
+    text: String,
+    linesPerBatch: Int,
+    charsPerBatch: Int,
+): List<IntRange> = buildList {
+    var start = 0
+    while (start < text.length) {
+        val end = textWindowEnd(text, linesPerBatch, charsPerBatch, start)
+        if (end <= start) break
+        add(start until end)
+        start = end
+    }
+}
+
+internal fun shouldLoadNextTextBatch(
+    lastVisibleIndex: Int,
+    totalItems: Int,
+    hasMoreText: Boolean,
+    loading: Boolean,
+): Boolean = hasMoreText && !loading &&
+    (totalItems == 0 || lastVisibleIndex >= totalItems - 1)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,39 +156,142 @@ internal fun TextCopySheet(
     )
     val editState = if (editable) remember(text) { TextFieldState(text) } else null
     var actualView by rememberSaveable { mutableStateOf(false) }
-    val actualText = remember(text, preview) {
-        preview?.let {
-            if (it.applyDisplayTransforms) {
-                RegexEngine.applyForDisplay(
-                    content = text,
-                    scripts = it.regexScripts,
-                    depth = it.depth,
-                    userName = it.userName,
-                    charName = it.charName,
+    val effectiveBatchSize = lineBatchSize?.takeIf { it > 0 }
+        ?: DefaultReadOnlyBatchLines.takeIf {
+            !editable && (preview != null || text.length > AutoBatchThresholdChars)
+        }
+    var visibleBatchCount by remember(text, actualView, effectiveBatchSize) {
+        mutableIntStateOf(1)
+    }
+    val visibleRanges = remember(text, visibleBatchCount, effectiveBatchSize) {
+        if (effectiveBatchSize == null) emptyList() else textWindowRanges(
+            text = text,
+            batchCount = visibleBatchCount,
+            linesPerBatch = effectiveBatchSize,
+            charsPerBatch = MaxCharsPerBatch,
+        )
+    }
+    val displayedText = remember(text, actualView, preview, effectiveBatchSize) {
+        if (!editable && effectiveBatchSize == null && actualView &&
+            preview?.applyDisplayTransforms == true) {
+            RegexEngine.applyForDisplay(
+                content = text,
+                scripts = preview.regexScripts,
+                depth = preview.depth,
+                userName = preview.userName,
+                charName = preview.charName,
+            )
+        } else {
+            text
+        }
+    }
+    val visibleEnd = visibleRanges.lastOrNull()?.let { it.last + 1 } ?: 0
+    val hasMoreText = visibleEnd < text.length
+    val coroutineScope = rememberCoroutineScope()
+    var resolvingFullText by remember { mutableStateOf(false) }
+    var renderedActualWindows by remember(text, preview) {
+        mutableStateOf<Map<Int, RenderedTextWindow>>(emptyMap())
+    }
+    val transformVisibleChunks = actualView && preview?.applyDisplayTransforms == true
+
+    androidx.compose.runtime.LaunchedEffect(transformVisibleChunks, visibleRanges, preview) {
+        if (!transformVisibleChunks || preview == null) return@LaunchedEffect
+        val missing = visibleRanges.filter { it.first !in renderedActualWindows }
+        if (missing.isEmpty()) return@LaunchedEffect
+        val generated = withContext(Dispatchers.Default) {
+            missing.associate { range ->
+                val source = text.substring(range.first, range.last + 1)
+                val transformed = runCatching {
+                    RegexEngine.applyForDisplay(
+                        content = source,
+                        scripts = preview.regexScripts,
+                        depth = preview.depth,
+                        userName = preview.userName,
+                        charName = preview.charName,
+                    )
+                }.getOrDefault(source)
+                range.first to RenderedTextWindow(
+                    text = transformed,
+                    ranges = allTextWindowRanges(
+                        text = transformed,
+                        linesPerBatch = effectiveBatchSize ?: DefaultReadOnlyBatchLines,
+                        charsPerBatch = MaxCharsPerBatch,
+                    ),
                 )
-            } else {
-                text
+            }
+        }
+        renderedActualWindows = renderedActualWindows + generated
+    }
+    val renderedActualBlocks = remember(visibleRanges, renderedActualWindows) {
+        buildList {
+            visibleRanges.forEach { sourceRange ->
+                val window = renderedActualWindows[sourceRange.first] ?: return@forEach
+                window.ranges.forEach { outputRange ->
+                    add(RenderedTextBlock(sourceRange.first, window, outputRange))
+                }
             }
         }
     }
-    val displayedText = if (actualView && actualText != null) actualText else text
-    val effectiveBatchSize = lineBatchSize?.takeIf { it > 0 }
-    var visibleLineCount by remember(displayedText, actualView, effectiveBatchSize) {
-        mutableIntStateOf(effectiveBatchSize ?: Int.MAX_VALUE)
+    val actualChunksLoading = transformVisibleChunks &&
+        visibleRanges.any { it.first !in renderedActualWindows }
+    val batchListState = rememberLazyListState()
+
+    androidx.compose.runtime.LaunchedEffect(text, actualView) {
+        batchListState.scrollToItem(0)
     }
-    var hasMoreVisualLines by remember(displayedText, actualView, effectiveBatchSize) {
-        mutableStateOf(false)
+
+    androidx.compose.runtime.LaunchedEffect(
+        batchListState,
+        hasMoreText,
+        actualChunksLoading,
+        visibleBatchCount,
+        actualView,
+    ) {
+        if (!hasMoreText || actualChunksLoading) return@LaunchedEffect
+        snapshotFlow {
+            val layout = batchListState.layoutInfo
+            val lastVisible = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
+            lastVisible to layout.totalItemsCount
+        }.collect { (lastVisible, totalItems) ->
+            if (shouldLoadNextTextBatch(
+                    lastVisibleIndex = lastVisible,
+                    totalItems = totalItems,
+                    hasMoreText = hasMoreText,
+                    loading = actualChunksLoading,
+                )) {
+                if (visibleBatchCount < Int.MAX_VALUE) visibleBatchCount++
+            }
+        }
     }
-    val currentText = {
+
+    fun fullText(onReady: (String) -> Unit) {
+        val edited = editState
+        val transform = preview?.takeIf { actualView && it.applyDisplayTransforms }
         when {
-            editState != null -> editState.text.toString()
-            actualView && actualText != null -> actualText
-            else -> text
+            edited != null -> onReady(edited.text.toString())
+            transform == null -> onReady(text)
+            resolvingFullText -> Unit
+            else -> coroutineScope.launch {
+                resolvingFullText = true
+                val result = withContext(Dispatchers.Default) {
+                    runCatching {
+                        RegexEngine.applyForDisplay(
+                            content = text,
+                            scripts = transform.regexScripts,
+                            depth = transform.depth,
+                            userName = transform.userName,
+                            charName = transform.charName,
+                        )
+                    }.getOrDefault(text)
+                }
+                resolvingFullText = false
+                onReady(result)
+            }
         }
     }
 
     ModalBottomSheet(
-        onDismissRequest = { onDismiss(currentText()) },
+        onDismissRequest = { onDismiss(editState?.text?.toString() ?: text) },
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -128,7 +311,10 @@ internal fun TextCopySheet(
                 )
                 Spacer(Modifier.weight(1f))
                 if (onSaveAsTxt != null) {
-                    TextButton(onClick = { onSaveAsTxt(currentText()) }) {
+                    TextButton(
+                        enabled = !resolvingFullText,
+                        onClick = { fullText(onSaveAsTxt) },
+                    ) {
                         Icon(
                             Lucide.FileText,
                             null,
@@ -139,7 +325,10 @@ internal fun TextCopySheet(
                         Text(stringResource(R.string.save_as_txt))
                     }
                 }
-                TextButton(onClick = { onCopyAll(currentText()) }) {
+                TextButton(
+                    enabled = !resolvingFullText,
+                    onClick = { fullText(onCopyAll) },
+                ) {
                     Icon(
                         Lucide.Copy,
                         null,
@@ -167,40 +356,74 @@ internal fun TextCopySheet(
                 )
             } else if (effectiveBatchSize != null) {
                 SelectionContainer(Modifier.fillMaxWidth().weight(1f)) {
-                    Column(
-                        Modifier.fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                            .padding(bottom = 24.dp),
+                    LazyColumn(
+                        Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                        state = batchListState,
                     ) {
-                        Text(
-                            text = displayedText,
-                            style = if (actualView && actualText != null && preview != null) {
-                                MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
-                            } else {
-                                MaterialTheme.typography.bodyMedium
-                            },
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = visibleLineCount,
-                            overflow = TextOverflow.Clip,
-                            onTextLayout = { hasMoreVisualLines = it.hasVisualOverflow },
-                        )
-                        if (hasMoreVisualLines) {
-                            TextButton(
-                                onClick = {
-                                    visibleLineCount += effectiveBatchSize
-                                },
-                                modifier = Modifier.align(Alignment.CenterHorizontally),
-                            ) {
-                                Text(stringResource(R.string.show_more_lines))
+                        if (transformVisibleChunks) {
+                            items(
+                                renderedActualBlocks,
+                                key = { "actual:${it.sourceStart}:${it.range.first}" },
+                            ) { block ->
+                                val displayedChunk = remember(block) {
+                                    block.window.text.substring(block.range.first, block.range.last + 1)
+                                        .let { chunk ->
+                                            if (chunk.endsWith('\n') &&
+                                                block.range.last + 1 < block.window.text.length) {
+                                                chunk.dropLast(1)
+                                            } else {
+                                                chunk
+                                            }
+                                        }
+                                }
+                                Text(
+                                    text = displayedChunk,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        } else {
+                            items(visibleRanges, key = { "source:${it.first}" }) { range ->
+                                val sourceChunk = remember(text, range) {
+                                    text.substring(range.first, range.last + 1).let { chunk ->
+                                        if (chunk.endsWith('\n') && range.last + 1 < text.length) {
+                                            chunk.dropLast(1)
+                                        } else {
+                                            chunk
+                                        }
+                                    }
+                                }
+                                Text(
+                                    text = sourceChunk,
+                                    style = if (actualView && preview != null) {
+                                        MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+                                    } else {
+                                        MaterialTheme.typography.bodyMedium
+                                    },
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                        if (actualChunksLoading) {
+                            item(key = "actual_loading") {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                    CircularProgressIndicator(Modifier.size(24.dp))
+                                }
+                            }
+                        }
+                        if (hasMoreText && !actualChunksLoading) {
+                            item(key = "load_more_sentinel:$visibleBatchCount") {
+                                Spacer(Modifier.size(1.dp))
                             }
                         }
                     }
                 }
-            } else if (actualView && actualText != null && preview != null) {
+            } else if (actualView && preview != null) {
                 SelectionContainer(Modifier.fillMaxWidth().weight(1f)) {
                     Text(
-                        text = actualText,
+                        text = displayedText,
                         style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.fillMaxWidth()

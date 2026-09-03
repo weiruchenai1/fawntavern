@@ -2,6 +2,7 @@ package me.rerere.fawntavern.ui.chat
 
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.data.api.ReasoningLevel
+import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.extension.QuickReply
 
 sealed interface ChatAction {
@@ -33,14 +34,14 @@ sealed interface ChatAction {
     data class RemoveAttachment(val value: Attachment) : ChatAction
     data class SetInputText(val text: String) : ChatAction
     data object CancelEdit : ChatAction
-    data class StartEdit(val timestamp: Long) : ChatAction
-    data class SwitchAlternative(val timestamp: Long, val direction: Int) : ChatAction
+    data class StartEdit(val message: ChatMessage) : ChatAction
+    data class SwitchAlternative(val message: ChatMessage, val direction: Int) : ChatAction
     data class DeleteMessage(val timestamp: Long) : ChatAction
     data class DeleteAllVersions(val timestamp: Long) : ChatAction
-    data class UpdateMessage(val timestamp: Long, val content: String) : ChatAction
+    data class UpdateMessage(val message: ChatMessage, val content: String) : ChatAction
     data class ReplaceFrontendVariables(val scope: String, val values: Map<String, String>) : ChatAction
     data class ClearOverlay(val timestamp: Long) : ChatAction
-    data class SpeakMessage(val timestamp: Long) : ChatAction
+    data class SpeakMessage(val message: ChatMessage) : ChatAction
     data object StopSpeaking : ChatAction
     data object PauseSpeaking : ChatAction
     data object ResumeSpeaking : ChatAction

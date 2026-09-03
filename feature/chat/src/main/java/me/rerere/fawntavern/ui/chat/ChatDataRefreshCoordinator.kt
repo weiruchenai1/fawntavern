@@ -21,7 +21,7 @@ internal class ChatDataRefreshCoordinator(
             )
             conversation.replaceSessions(result.summaries)
             if (result.replaceCard) promptState.replaceCard(result.resolvedCard)
-            if (result.replaceCurrent) conversation.replaceCurrent(result.currentSession)
+            if (result.replaceCurrent) conversation.replacePersistedCurrent(result.currentSession)
             promptContext.refresh(
                 revision = revision,
                 includeGlobalRegex = true,

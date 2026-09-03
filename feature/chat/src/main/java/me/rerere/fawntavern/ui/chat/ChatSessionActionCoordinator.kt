@@ -23,8 +23,11 @@ internal class ChatSessionActionCoordinator(
 
     fun createNew() {
         val current = conversation.current
-        if (current != null && current.messages.none { it.role == "user" }) return
         scope.launch {
+            if (current != null) {
+                val latest = sessions.loadFull(current.id) ?: current
+                if (latest.messages.none { it.role == "user" }) return@launch
+            }
             conversation.replaceCurrent(
                 sessions.create(
                     card = promptContext.card,

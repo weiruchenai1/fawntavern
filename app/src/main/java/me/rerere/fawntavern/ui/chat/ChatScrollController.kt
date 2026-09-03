@@ -247,7 +247,9 @@ internal class ChatScrollController(
     fun onSessionOpened() {
         navAnchorIndex = null
         autoFollow = true
-        if (inputs.hasMessages) pinToBottom()
+        // Register the bottom request even while the first Paging load is still empty.  Otherwise
+        // LazyColumn composes index 0 first and that access eagerly starts a prepend load.
+        pinToBottom()
     }
 
     /** 生成结束：仍在跟随则钉住底部（正文切 Markdown、工具栏出现会改高度）。 */
