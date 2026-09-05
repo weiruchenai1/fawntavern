@@ -63,8 +63,8 @@ private data class HtmlFragmentKey(
     val allowContentJavaScript: Boolean,
 )
 
-private const val MinHtmlWebViewHeightDp = 120
-private const val MaxHtmlWebViewHeightDp = 600
+internal const val MinHtmlWebViewHeightDp = 120
+internal const val MaxHtmlWebViewHeightDp = 600
 internal const val FrontendAssetOrigin = "https://appassets.androidplatform.net/frontend/"
 private const val FrontendRpcTimeoutMs = 15_000L
 private const val FrontendRpcMaxPayloadBytes = 256 * 1024

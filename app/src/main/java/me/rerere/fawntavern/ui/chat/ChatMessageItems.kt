@@ -24,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -304,7 +305,7 @@ internal fun AIMsg(
                         val canPrev = msg.altIdx > 0
                         val canNext = msg.altIdx < msg.alts.lastIndex
                         Icon(Lucide.ChevronLeft, null,
-                            Modifier.noRippleClickable(enabled = canPrev) { onPrevAlt() }
+                            Modifier.testTag("previous_alternative_${msg.ts}").noRippleClickable(enabled = canPrev) { onPrevAlt() }
                                 .padding(horizontal = s8, vertical = s8).size(iconSz),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (canPrev) 1f else 0.35f))
                         Text("${msg.altIdx + 1}/${msg.alts.size}",
@@ -312,7 +313,7 @@ internal fun AIMsg(
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         // 末位插槽不带 end padding，让图形与右缘对齐
                         Icon(Lucide.ChevronRight, null,
-                            Modifier.noRippleClickable(enabled = canNext) { onNextAlt() }
+                            Modifier.testTag("next_alternative_${msg.ts}").noRippleClickable(enabled = canNext) { onNextAlt() }
                                 .padding(start = s8, top = s8, bottom = s8).size(iconSz),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (canNext) 1f else 0.35f))
                     }

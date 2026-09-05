@@ -66,7 +66,7 @@ internal class AndroidRegexLibraryDataSource(
     override fun serialize(script: RegexScript): ByteArray =
         PresetParser.serializeRegexScript(script).toString(2).toByteArray()
 
-    override fun defaultPresetName(): String = PresetRepository.defaultPresetName(context)
+    override fun defaultPresetName(): String = PresetRepository.defaultPresetName(context).orEmpty()
 
     override suspend fun create(source: RegexSource, name: String) {
         when (source.scope) {

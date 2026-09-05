@@ -13,6 +13,31 @@ import org.junit.Test
 
 class ChatGenerationCoordinatorTest {
     @Test
+    fun stoppingAnActiveGenerationReleasesItsTargetAndAllowsTheNextSend() = runBlocking {
+        val scope = CoroutineScope(coroutineContext + Job())
+        val started = CompletableDeferred<Unit>()
+        val stopped = CompletableDeferred<Unit>()
+        val coordinator = ChatGenerationCoordinator(scope, { stopped.complete(Unit) })
+        try {
+            assertTrue(coordinator.launch {
+                coordinator.markTarget(42)
+                started.complete(Unit)
+                stopped.await()
+            })
+            started.await()
+            assertEquals(42L, coordinator.targetTimestamp)
+            assertFalse(coordinator.launch { error("Concurrent send must be rejected") })
+            coordinator.stop()
+            while (coordinator.isRunning) yield()
+            assertEquals(null, coordinator.targetTimestamp)
+            assertTrue(coordinator.launch { })
+            while (coordinator.isRunning) yield()
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun rejectsConcurrentTaskAndReleasesAfterCompletion() = runBlocking {
         val scope = CoroutineScope(coroutineContext + Job())
         val release = CompletableDeferred<Unit>()

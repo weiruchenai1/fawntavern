@@ -25,9 +25,10 @@ fun ImeLazyListAutoScroller(
     lazyListState: LazyListState,
     shouldFollow: () -> Boolean,
     onFollow: () -> Unit,
+    imeInsets: WindowInsets = WindowInsets.ime,
 ) {
-    val ime = WindowInsets.ime
     val localDensity = LocalDensity.current
+    val ime by rememberUpdatedState(imeInsets)
     val follow by rememberUpdatedState(shouldFollow)
     val doFollow by rememberUpdatedState(onFollow)
     LaunchedEffect(Unit) {

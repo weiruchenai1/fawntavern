@@ -1,12 +1,6 @@
 package me.rerere.fawntavern.ui.chat
 
-import android.content.ClipData
-import android.graphics.Bitmap
-import android.net.Uri
-import android.util.Base64
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,8 +19,6 @@ import androidx.compose.foundation.text.input.TextFieldState
 import me.rerere.fawntavern.ui.components.FloatingWindow
 import me.rerere.fawntavern.ui.components.rememberInteractiveDrawerState
 import me.rerere.fawntavern.ui.components.InteractiveDrawer
-import me.rerere.fawntavern.ui.components.ModelSelectorSheet
-import me.rerere.fawntavern.ui.components.RenameDialog
 import me.rerere.fawntavern.ui.components.rememberModelSelectorState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -40,16 +32,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalDensity
@@ -61,20 +51,13 @@ import androidx.paging.PagingData
 import androidx.paging.compose.collectAsLazyPagingItems
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
-import org.json.JSONArray
-import org.json.JSONObject
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.data.api.ApiRequestSnapshot
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.domain.chat.mergeMessageWindow
 import me.rerere.fawntavern.domain.chat.settledOverlayTimestamps
 import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.ThemeMode
-import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space16
@@ -87,12 +70,6 @@ private typealias Screen = ChatDestination
  * 组合数百个消息项（以及其中的 WebView），使 Paging 失去意义。
  */
 private const val ImmediateMessageFallbackLimit = 60
-
-private data class MessageMenuTarget(
-    val message: ChatMessage,
-    val messageWindow: List<ChatMessage>,
-    val wasLast: Boolean,
-)
 
 internal fun pagedMessageWindow(
     paged: List<ChatMessage>,
@@ -114,15 +91,6 @@ internal fun messageIndexesForWindow(
     val persistedIndex = allTimestamps.binarySearch(message.ts)
     message.ts to if (persistedIndex >= 0) persistedIndex else fallbackOffset + index
 }.toMap()
-
-private fun Bitmap?.toFrontendDataUrl(): String {
-    val bitmap = this ?: return ""
-    return runCatching {
-        val bytes = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes)
-        "data:image/png;base64," + Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP)
-    }.getOrDefault("")
-}
 
 @Composable
 internal fun ChatContent(
@@ -150,43 +118,15 @@ internal fun ChatContent(
     // ── 页面返回栈（纯 UI 状态） ──
     val nav = rememberChatNavigationStack(startAtSettings)
     fun navBack() { nav.removeLastOrNull() }
-    // ── 弹层标志 ──
-    var showAttachment by rememberSaveable { mutableStateOf(false) }
+    val overlayState = rememberChatOverlayState()
     val modelSelector = rememberModelSelectorState(model.displaySpec ?: "", model.apiConfig.providers)
-    var showReasoningPicker by rememberSaveable { mutableStateOf(false) }
-    var showImageGenerationSettings by rememberSaveable { mutableStateOf(false) }
-    var showSearch by rememberSaveable { mutableStateOf(false) }
-    var showCharPicker by rememberSaveable { mutableStateOf(false) }
-    var cameraImageUri by rememberSaveable { mutableStateOf<String?>(null) }
-    // ── 消息操作弹窗状态（按消息 ts 定位，与分页/内存窗口无关） ──
-    var menuTarget by remember { mutableStateOf<MessageMenuTarget?>(null) }
-    /** 全屏底部面板内容（消息全文/输入框全文共用），非 null 时显示 */
-    var copyPanel by remember { mutableStateOf<CopyPanel?>(null) }
-    var deleteSessionId by rememberSaveable { mutableStateOf<String?>(null) }
-    var renameSession by remember { mutableStateOf<Pair<String, String>?>(null) }
     var scrollToBottomTrigger by remember { mutableIntStateOf(0) }
-    // 重新生成前确认：偏好开启时把待执行的重答存这里，弹框确认后执行
-    var pendingRegenerate by remember { mutableStateOf<(() -> Unit)?>(null) }
-    // 删除前确认：偏好开启时把待执行的删除存这里，弹框确认后执行
-    var pendingDeleteCurrentVersion by remember { mutableStateOf<(() -> Unit)?>(null) }
-    var pendingDeleteAllVersions by remember { mutableStateOf<(() -> Unit)?>(null) }
-    var txtSaveContent by remember { mutableStateOf<String?>(null) }
 
     val ctx = LocalContext.current
-    val mediaInput = remember(ctx) { ChatMediaInput(ctx) }
+    val media = rememberChatMediaActions(onAction)
     val resources = LocalResources.current
-    val clipboard = LocalClipboard.current
-    LaunchedEffect(frontendEvents) {
-        frontendEvents.collect(::dispatchFrontendEvent)
-    }
+    ChatFrontendEvents(frontendEvents)
     val keyboardController = LocalSoftwareKeyboardController.current
-
-    fun copyText(text: String) {
-        scope.launch {
-            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("text", text)))
-        }
-        Toast.makeText(ctx, resources.getString(R.string.copied), Toast.LENGTH_SHORT).show()
-    }
 
     // One-shot UI work is emitted by the ViewModel and consumed only at this route boundary.
     LaunchedEffect(effects) {
@@ -203,43 +143,6 @@ internal fun ChatContent(
             }
         }
     }
-    // ── 附件选取 launcher（相册/文件均可多选；文件里选到图片按 MIME 归为图片）──
-    val saveTxtLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/plain"),
-    ) { uri ->
-        val text = txtSaveContent
-        txtSaveContent = null
-        if (uri != null && text != null) {
-            scope.launch {
-                val saved = withContext(Dispatchers.IO) {
-                    runCatching {
-                        ctx.contentResolver.openOutputStream(uri)?.use { output ->
-                            output.write(text.toByteArray(Charsets.UTF_8))
-                        } ?: error("Unable to open TXT output stream")
-                    }.isSuccess
-                }
-                Toast.makeText(
-                    ctx,
-                    resources.getString(if (saved) R.string.file_saved else R.string.file_save_failed),
-                    Toast.LENGTH_SHORT,
-                ).show()
-            }
-        }
-    }
-    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        onAction(ChatAction.AddAttachments(uris.map { Attachment(it, isImage = true) }))
-    }
-    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        onAction(ChatAction.AddAttachments(uris.map { Attachment(it, isImage = mediaInput.isImage(it)) }))
-    }
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        cameraImageUri?.let(Uri::parse)?.let { uri ->
-            if (ok) onAction(ChatAction.AddAttachments(listOf(Attachment(uri, isImage = true))))
-            else mediaInput.discardCameraFile(uri)
-        }
-        cameraImageUri = null
-    }
-
     // 抽屉里可能改了用户名/头像，关抽屉时刷新
     LaunchedEffect(drawerState.isOpen) {
         if (!drawerState.isOpen) onAction(ChatAction.ReloadUserProfile)
@@ -346,18 +249,6 @@ internal fun ChatContent(
         autoCollapseCode = prefs.autoCollapseCode,
         codeCollapseLines = prefs.codeCollapseLines,
     )
-    // 重新生成前弹出确认：偏好开启时先弹确认框，确认后再执行真正的重答
-    fun maybeRegenerate(action: () -> Unit) {
-        if (prefs.confirmRegenerate) pendingRegenerate = action else action()
-    }
-    // 删除当前版本前弹出确认：偏好开启时先弹确认框
-    fun maybeDeleteCurrentVersion(action: () -> Unit) {
-        if (prefs.confirmDeleteCurrentVersion) pendingDeleteCurrentVersion = action else action()
-    }
-    // 删除全部版本前弹出确认：偏好开启时先弹确认框
-    fun maybeDeleteAllVersions(action: () -> Unit) {
-        if (prefs.confirmDeleteAllVersions) pendingDeleteAllVersions = action else action()
-    }
     // 侧边栏触觉反馈：抽屉打开时给一次短震动（走 Vibrator，独立于长按触觉闸门）
     LaunchedEffect(drawerState.isOpen) {
         if (prefs.sidebarHaptic && drawerState.isOpen) {
@@ -376,7 +267,7 @@ internal fun ChatContent(
                     onSettings = { nav.add(Screen.Settings) },
                     onTranslator = { nav.add(Screen.Translator) },
                     onStatistics = { nav.add(Screen.Statistics) },
-                    onCharSelect = { showCharPicker = true },
+                    onCharSelect = { overlayState.showCharPicker = true },
                     onCharList = { nav.add(Screen.Characters) },
                     onSearch = { nav.add(Screen.Search) },
                     charName = conversation.current?.charName ?: "",
@@ -388,10 +279,10 @@ internal fun ChatContent(
                         scope.launch { drawerState.close() }
                         onAction(ChatAction.OpenSession(id))
                     },
-                    onRenameSession = { id, title -> renameSession = id to title },
+                    onRenameSession = { id, title -> overlayState.renameSession = id to title },
                     onPinSession = { id, pinned -> onAction(ChatAction.SetSessionPinned(id, pinned)) },
                     onRegenerateTitle = { onAction(ChatAction.RegenerateTitle(it)) },
-                    onDeleteSession = { id -> deleteSessionId = id },
+                    onDeleteSession = { id -> overlayState.deleteSessionId = id },
                     showChatListDate = prefs.showChatListDate,
                     longPressHaptic = prefs.longPressHaptic,
                     onUserProfileChanged = { name, description ->
@@ -417,14 +308,14 @@ internal fun ChatContent(
                         state = inputState,
                         attachments = input.attachments,
                         onRemoveAttachment = { onAction(ChatAction.RemoveAttachment(it)) },
-                        showAttachment = showAttachment,
-                        onToggleAttachment = { showAttachment = !showAttachment },
+                        showAttachment = overlayState.showAttachment,
+                        onToggleAttachment = { overlayState.showAttachment = !overlayState.showAttachment },
                         editing = input.editingTimestamp != null,
                         onCancelEdit = { onAction(ChatAction.CancelEdit) },
                         onExpand = {
                             val text = inputState.text.toString()
                             if (text.isNotBlank()) {
-                                copyPanel = CopyPanel(resources.getString(R.string.input_content), text, editable = true)
+                                overlayState.copyPanel = CopyPanel(resources.getString(R.string.input_content), text, editable = true)
                             }
                         },
                         currentModelId = displayModelId,
@@ -440,16 +331,12 @@ internal fun ChatContent(
                             // 编辑是原地更新，不滚动到底部
                         },
                         onSelectModel = { modelSelector.open() },
-                        onSelectReasoning = { showReasoningPicker = true },
-                        onOpenImageGenerationSettings = { showImageGenerationSettings = true },
-                        onOpenSearch = { showSearch = true },
-                        onCamera = {
-                            val uri = mediaInput.createCameraUri()
-                            cameraImageUri = uri.toString()
-                            cameraLauncher.launch(uri)
-                        },
-                        onGallery = { galleryLauncher.launch("image/*") },
-                        onFile = { fileLauncher.launch("*/*") },
+                        onSelectReasoning = { overlayState.showReasoningPicker = true },
+                        onOpenImageGenerationSettings = { overlayState.showImageGenerationSettings = true },
+                        onOpenSearch = { overlayState.showSearch = true },
+                        onCamera = media.takePhoto,
+                        onGallery = media.pickImages,
+                        onFile = media.pickFiles,
                         quickReplies = input.quickReplies,
                         onQuickReply = { qr ->
                             onAction(ChatAction.UseQuickReply(qr))
@@ -517,70 +404,7 @@ internal fun ChatContent(
                         )
                     }
                 }
-                val frontendMessageIds = remember(frontendMessages, messageIndexes) {
-                    frontendMessages.associate { message ->
-                        val id = messageIndexes[message.ts]
-                            ?: (inMemoryMessages.size + frontendMessages.indexOf(message))
-                        id to message
-                    }
-                }
-                val webViewMessages = remember(
-                    frontendMessages,
-                    profile.userName,
-                    conversation.current?.charName,
-                    renderPrefs.javascript,
-                ) {
-                    if (!renderPrefs.javascript) return@remember "[]"
-                    JSONArray().apply {
-                        frontendMessages.forEachIndexed { index, message ->
-                            val messageId = messageIndexes[message.ts] ?: (inMemoryMessages.size + index)
-                            put(JSONObject().apply {
-                                put("message_id", messageId)
-                                put("name", if (message.role == "user") profile.userName else conversation.current?.charName.orEmpty())
-                                put("role", message.role)
-                                put("is_hidden", message.isHidden)
-                                put("message", message.content)
-                                put("swipe_id", message.altIdx)
-                                put("swipes", JSONArray().apply {
-                                    val alternatives = message.alts.ifEmpty {
-                                        listOf(me.rerere.fawntavern.data.chat.MsgAlt(
-                                            content = message.content,
-                                            dataJson = message.dataJson,
-                                        ))
-                                    }
-                                    alternatives.forEach { put(it.content) }
-                                })
-                                put("swipes_data", JSONArray().apply {
-                                    val alternatives = message.alts.ifEmpty {
-                                        listOf(me.rerere.fawntavern.data.chat.MsgAlt(
-                                            content = message.content,
-                                            dataJson = message.dataJson,
-                                        ))
-                                    }
-                                    alternatives.forEach { alternative ->
-                                        put(runCatching { JSONObject(alternative.dataJson) }.getOrElse { JSONObject() })
-                                    }
-                                })
-                                put("swipes_info", JSONArray().apply {
-                                    val count = message.alts.size.coerceAtLeast(1)
-                                    repeat(count) { put(JSONObject()) }
-                                })
-                                put("data", runCatching { JSONObject(message.dataJson) }.getOrElse { JSONObject() })
-                                put("extra", JSONObject())
-                            })
-                        }
-                    }.toString()
-                }
-                val frontendLocalVariables = remember(conversation.current?.localVariables) {
-                    encodeFrontendVariables(conversation.current?.localVariables.orEmpty())
-                }
-                val frontendGlobalVariables = remember(state.globalVariables) {
-                    encodeFrontendVariables(state.globalVariables)
-                }
-                val frontendUserAvatar = remember(profile.userAvatar) { profile.userAvatar.toFrontendDataUrl() }
-                val frontendCharacterAvatar = remember(conversation.characterImage) {
-                    conversation.characterImage.toFrontendDataUrl()
-                }
+                val frontend = rememberChatFrontendBindings(state, frontendMessages, messageIndexes, onAction)
                 // rememberUpdatedState：快照 Flow 的 collect lambda 里引用 msgs，需要始终读到最新值
                 val msgsNow by rememberUpdatedState(msgs)
                 // overlay 收敛：分页已把该 ts 的最终内容补齐、且该行不在生成中时撤下 overlay
@@ -671,6 +495,7 @@ internal fun ChatContent(
                             // 重要：只把 top padding 放在 modifier 上避免约束变化导致滚动位置重置。
                             // bottom padding 通过 contentPadding 处理。
                             modifier = Modifier
+                                .testTag("chat_messages")
                                 .fillMaxSize()
                                 .padding(top = padding.calculateTopPadding())
                                 .padding(horizontal = Space16),
@@ -694,10 +519,10 @@ internal fun ChatContent(
                                         text = msg.content,
                                         images = msg.images,
                                         files = msg.files,
-                                        onCopy = { copyText(msg.content) },
+                                        onCopy = { media.copyText(msg.content) },
                                         onRegenerate = {
                                             // 其后紧跟的 AI 回复在中间时原地重答，不滚到底部
-                                            maybeRegenerate {
+                                            overlayState.confirmRegenerate(prefs.confirmRegenerate) {
                                                 val midRegen = i + 1 < msgs.lastIndex && msgs[i + 1].role == "assistant"
                                                 onAction(
                                                     ChatAction.RegenerateAfterUser(
@@ -708,7 +533,7 @@ internal fun ChatContent(
                                             }
                                         },
                                         onMore = {
-                                            menuTarget = MessageMenuTarget(msg, msgs, i == msgs.lastIndex)
+                                            overlayState.menuTarget = MessageMenuTarget(msg, msgs, i == msgs.lastIndex)
                                         },
                                         scale = fontScale,
                                         avatarBitmap = profile.userAvatar,
@@ -731,9 +556,9 @@ internal fun ChatContent(
                                     AIMsg(
                                         msg = msg,
                                         isStreaming = generation.running && msg.ts == genTs,
-                                        onCopy = { copyText(msg.content) },
+                                        onCopy = { media.copyText(msg.content) },
                                         onRegenerate = {
-                                            maybeRegenerate {
+                                            overlayState.confirmRegenerate(prefs.confirmRegenerate) {
                                                 onAction(
                                                     ChatAction.RegenerateAssistant(
                                                         timestamp = msg.ts,
@@ -743,7 +568,7 @@ internal fun ChatContent(
                                             }
                                         },
                                         onMore = {
-                                            menuTarget = MessageMenuTarget(msg, msgs, i == msgs.lastIndex)
+                                            overlayState.menuTarget = MessageMenuTarget(msg, msgs, i == msgs.lastIndex)
                                         },
                                         onPrevAlt = { switchAltAnchored(-1) },
                                         onNextAlt = { switchAltAnchored(+1) },
@@ -763,62 +588,13 @@ internal fun ChatContent(
                                         autoCollapseThinking = prefs.autoCollapseThinking,
                                         thinkingMarkdown = prefs.thinkingMarkdown,
                                         renderPrefs = renderPrefs,
-                                        chatMessagesJson = webViewMessages,
-                                        frontendContextJson = JSONObject().apply {
-                                            val messageId = messageIndexes[msg.ts] ?: -1
-                                            put("chatId", conversation.current?.id.orEmpty())
-                                            put("characterId", conversation.current?.charFile.orEmpty())
-                                            put("characterFile", conversation.current?.charFile.orEmpty())
-                                            put("presetId", conversation.card?.linkedPresetId.orEmpty())
-                                            put("characterName", conversation.card?.name ?: conversation.current?.charName.orEmpty())
-                                            conversation.card?.let { card ->
-                                                put("character", JSONObject().apply {
-                                                    put("name", card.name)
-                                                    put("description", card.description)
-                                                    put("personality", card.personality)
-                                                    put("scenario", card.scenario)
-                                                    put("first_mes", card.firstMes)
-                                                    put("mes_example", card.mesExample)
-                                                    put("creator_notes", card.creatorNotes)
-                                                })
-                                            }
-                                            put("userName", profile.userName)
-                                            put("userAvatarPath", frontendUserAvatar)
-                                            put("charAvatarPath", frontendCharacterAvatar)
-                                            put("messageId", messageId)
-                                            put("lastMessageId", frontendMessages.lastOrNull()
-                                                ?.let { messageIndexes[it.ts] } ?: -1)
-                                        }.toString(),
-                                        localVariablesJson = frontendLocalVariables,
-                                        globalVariablesJson = frontendGlobalVariables,
+                                        chatMessagesJson = frontend.messagesJson,
+                                        frontendContextJson = frontend.contextJson(msg),
+                                        localVariablesJson = frontend.localVariablesJson,
+                                        globalVariablesJson = frontend.globalVariablesJson,
                                         onSetInputText = { onAction(ChatAction.SetInputText(it)) },
-                                        onSetChatMessage = { messageId, value ->
-                                            val target = if (messageId < 0) {
-                                                frontendMessages.getOrNull(frontendMessages.size + messageId)
-                                            } else {
-                                                frontendMessageIds[messageId]
-                                            }
-                                            target?.let { message ->
-                                                onAction(ChatAction.UpdateMessage(message, value))
-                                            }
-                                        },
-                                        onSelectChatMessageSwipe = { messageId, swipeId ->
-                                            val target = if (messageId < 0) {
-                                                frontendMessages.getOrNull(frontendMessages.size + messageId)
-                                            } else {
-                                                frontendMessageIds[messageId]
-                                            }
-                                            target?.let { message ->
-                                                if (swipeId in message.alts.indices) {
-                                                    onAction(
-                                                        ChatAction.SwitchAlternative(
-                                                            message,
-                                                            swipeId - message.altIdx,
-                                                        ),
-                                                    )
-                                                }
-                                            }
-                                        },
+                                        onSetChatMessage = frontend::updateMessage,
+                                        onSelectChatMessageSwipe = frontend::selectAlternative,
                                         onReplaceVariables = { scopeName, values ->
                                             onAction(ChatAction.ReplaceFrontendVariables(scopeName, values))
                                         },
@@ -858,143 +634,13 @@ internal fun ChatContent(
         )
     }
 
-    // ── 消息操作菜单 ──
-    val menuTs = menuTarget?.message?.ts
-    // 与渲染一致地取目标：overlay（流式/乐观态）优先，回退到内存会话
-    val menuMsg = menuTarget?.message?.let { conversation.overlays[it.ts] ?: it }
-    if (menuTs != null && menuMsg != null) {
-        MessageMenu(
-            onDismiss = { menuTarget = null },
-            onSelectCopy = {
-                val sessionMessages = menuTarget?.messageWindow.orEmpty()
-                val messageIndex = sessionMessages.indexOfFirst { it.ts == menuMsg.ts }
-                val previewMessages = if (messageIndex >= 0) {
-                    sessionMessages.toMutableList().also { it[messageIndex] = menuMsg }
-                } else {
-                    sessionMessages + menuMsg
-                }
-                val previewIndex = previewMessages.indexOfFirst { it.ts == menuMsg.ts }
-                copyPanel = CopyPanel(
-                    title = resources.getString(R.string.select_copy),
-                    text = menuMsg.content,
-                    preview = TextCopyPreview(
-                        applyDisplayTransforms = menuMsg.role == "assistant",
-                        regexScripts = if (menuMsg.role == "assistant") {
-                            conversation.displayRegexScripts
-                        } else {
-                            emptyList()
-                        },
-                        depth = previewMessages.lastIndex - previewIndex,
-                        userName = profile.userName,
-                        charName = conversation.card?.name ?: conversation.current?.charName.orEmpty(),
-                    ),
-                    lineBatchSize = TEXT_PANEL_LINE_BATCH_SIZE,
-                )
-                menuTarget = null
-            },
-            onViewRequestBody = {
-                copyPanel = CopyPanel(
-                    title = resources.getString(R.string.request_body),
-                    text = formatRequestSnapshots(menuMsg.requestSnapshots),
-                    lineBatchSize = TEXT_PANEL_LINE_BATCH_SIZE,
-                )
-                menuTarget = null
-            },
-            onEdit = {
-                onAction(ChatAction.StartEdit(menuMsg))
-                menuTarget = null
-            },
-            onDeleteCurrentVersion = {
-                val ts = menuTs
-                val wasLast = menuTarget?.wasLast == true
-                maybeDeleteCurrentVersion {
-                    onAction(ChatAction.DeleteMessage(ts))
-                    if (wasLast) scrollToBottomTrigger++
-                }
-                menuTarget = null
-            },
-            onDeleteAllVersions = {
-                val ts = menuTs
-                val wasLast = menuTarget?.wasLast == true
-                maybeDeleteAllVersions {
-                    onAction(ChatAction.DeleteAllVersions(ts))
-                    if (wasLast) scrollToBottomTrigger++
-                }
-                menuTarget = null
-            },
-            hasMultipleVersions = menuMsg.alts.size > 1,
-            canViewRequestBody = menuMsg.role == "assistant" && menuMsg.requestSnapshots.isNotEmpty(),
-        )
-    }
-
-    // ── 全屏底部面板：消息全文（只读）/ 输入框全文（可编辑，与输入框共用同一 TextFieldState）──
-    copyPanel?.let { panel ->
-        TextCopySheet(
-            title = panel.title,
-            text = if (panel.editable) inputState.text.toString() else panel.text,
-            onCopyAll = { currentText ->
-                if (panel.editable) onAction(ChatAction.SetInputText(currentText))
-                copyText(currentText)
-                copyPanel = null
-            },
-            onSaveAsTxt = if (panel.preview != null) { currentText ->
-                txtSaveContent = currentText
-                saveTxtLauncher.launch("FawnTavern-content.txt")
-                copyPanel = null
-            } else null,
-            onDismiss = { currentText ->
-                if (panel.editable) onAction(ChatAction.SetInputText(currentText))
-                copyPanel = null
-            },
-            editable = panel.editable,
-            preview = panel.preview,
-            lineBatchSize = panel.lineBatchSize,
-        )
-    }
-
-    renameSession?.let { (id, title) ->
-        RenameDialog(
-            initialName = title,
-            label = stringResource(R.string.chat_title_label),
-            onConfirm = { newTitle ->
-                if (newTitle.isNotBlank()) {
-                    onAction(ChatAction.RenameSession(id, newTitle))
-                    renameSession = null
-                }
-            },
-            onDismiss = { renameSession = null },
-        )
-    }
-
-    ChatConfirmationDialogs(
-        showDeleteSession = deleteSessionId != null,
-        deleteSessionEnabled = GenerationActionGuard.allowsMutation(generation.running),
-        onDeleteSession = {
-            deleteSessionId?.let { onAction(ChatAction.DeleteSession(it)) }
-            deleteSessionId = null
-        },
-        onDismissDeleteSession = { deleteSessionId = null },
-        showRegenerate = pendingRegenerate != null,
-        onRegenerate = {
-            val action = pendingRegenerate
-            pendingRegenerate = null
-            action?.invoke()
-        },
-        onDismissRegenerate = { pendingRegenerate = null },
-        showDeleteCurrentVersion = pendingDeleteCurrentVersion != null,
-        onDeleteCurrentVersion = {
-            val action = pendingDeleteCurrentVersion
-            pendingDeleteCurrentVersion = null
-            action?.invoke()
-        },
-        onDismissDeleteCurrentVersion = { pendingDeleteCurrentVersion = null },
-        showDeleteAllVersions = pendingDeleteAllVersions != null,
-        onDeleteAllVersions = {
-            val action = pendingDeleteAllVersions
-            pendingDeleteAllVersions = null
-            action?.invoke()
-        },
-        onDismissDeleteAllVersions = { pendingDeleteAllVersions = null },
+    ChatMessageOverlays(
+        overlays = overlayState,
+        state = state,
+        inputState = inputState,
+        media = media,
+        onAction = onAction,
+        onScrollToBottom = { scrollToBottomTrigger++ },
     )
 
     ChatPickerOverlays(
@@ -1002,57 +648,18 @@ internal fun ChatContent(
         modelSelector = modelSelector,
         displayProvider = displayProv,
         displayModelId = displayModelId,
-        showReasoning = showReasoningPicker,
-        showImageGeneration = showImageGenerationSettings,
-        showCharacter = showCharPicker,
-        showSearch = showSearch,
-        onDismissReasoning = { showReasoningPicker = false },
-        onDismissImageGeneration = { showImageGenerationSettings = false },
-        onDismissCharacter = { showCharPicker = false },
-        onDismissSearch = { showSearch = false },
+        showReasoning = overlayState.showReasoningPicker,
+        showImageGeneration = overlayState.showImageGenerationSettings,
+        showCharacter = overlayState.showCharPicker,
+        showSearch = overlayState.showSearch,
+        onDismissReasoning = { overlayState.showReasoningPicker = false },
+        onDismissImageGeneration = { overlayState.showImageGenerationSettings = false },
+        onDismissCharacter = { overlayState.showCharPicker = false },
+        onDismissSearch = { overlayState.showSearch = false },
         onOpenSearchConfig = {
-            showSearch = false
+            overlayState.showSearch = false
             nav.add(Screen.WebSearch)
         },
         onAction = onAction,
     )
 }
-
-/** 全屏底部面板的内容（消息全文 / 输入框全文共用同一面板）；editable = 输入框展开，正文可直接编辑 */
-private data class CopyPanel(
-    val title: String,
-    val text: String,
-    val editable: Boolean = false,
-    val preview: TextCopyPreview? = null,
-    val lineBatchSize: Int? = null,
-)
-
-private const val TEXT_PANEL_LINE_BATCH_SIZE = 100
-
-internal fun formatRequestSnapshots(snapshots: List<ApiRequestSnapshot>): String {
-    fun parsedBody(body: String): Any = runCatching {
-        when (body.trimStart().firstOrNull()) {
-            '{' -> JSONObject(body)
-            '[' -> JSONArray(body)
-            else -> body
-        }
-    }.getOrDefault(body)
-
-    fun detail(index: Int, snapshot: ApiRequestSnapshot) = JSONObject().apply {
-        if (snapshots.size > 1) put("round", index + 1)
-        put("endpoint", snapshot.endpoint)
-        put("body", parsedBody(snapshot.body))
-    }
-
-    val formatted = if (snapshots.size == 1) {
-        detail(0, snapshots.single()).toString(2)
-    } else {
-        JSONArray().apply {
-            snapshots.forEachIndexed { index, snapshot -> put(detail(index, snapshot)) }
-        }.toString(2)
-    }
-    // Android JSONObject 会把 URL 的斜杠写成 `\/`；详情页只做显示还原，不改变存储内容。
-    return formatted.replace("\\/", "/")
-}
-
-/** 状态栏高度（px），用于把悬浮窗初始位置放到顶栏之下 */
