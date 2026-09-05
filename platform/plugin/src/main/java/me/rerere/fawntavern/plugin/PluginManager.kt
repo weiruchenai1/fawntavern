@@ -17,6 +17,7 @@ import me.rerere.fawntavern.platform.plugin.BuildConfig
 import me.rerere.fawntavern.extension.BuiltinExtensions
 import me.rerere.fawntavern.extension.ExtensionHost
 import me.rerere.fawntavern.extension.ExtensionStore
+import me.rerere.fawntavern.extension.PluginHostCapabilities
 import me.rerere.fawntavern.plugin.runtime.PluginWorkerClient
 
 /** Single owner for installed plugin state and runtime lifecycle. */
@@ -39,14 +40,14 @@ object PluginManager {
     @Volatile private var appContext: Context? = null
     @Volatile private var initialized = false
 
-    suspend fun initialize(context: Context) {
+    suspend fun initialize(context: Context, hostCapabilities: PluginHostCapabilities) {
         initLock.withLock {
             if (initialized) return
             val app = context.applicationContext
             appContext = app
             PluginInstaller.recoverInterruptedInstalls(app)
             BuiltinExtensions.registerAll()
-            PluginWorkerClient.initialize(app)
+            PluginWorkerClient.initialize(app, hostCapabilities)
             PluginRepository.list(app).forEach { register(app, it) }
             initialized = true
         }

@@ -19,7 +19,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import me.rerere.fawntavern.core.diagnostics.SafeLog
-import me.rerere.fawntavern.data.chat.ChatRepository
+import me.rerere.fawntavern.extension.PluginHostCapabilities
 import me.rerere.fawntavern.plugin.PluginRepository
 import me.rerere.fawntavern.plugin.ipc.IPluginWorker
 import me.rerere.fawntavern.plugin.ipc.IPluginWorkerCallback
@@ -35,12 +35,14 @@ object PluginWorkerClient {
     private val loaded = ConcurrentHashMap<String, String>()
 
     @Volatile private var appContext: Context? = null
+    @Volatile private var hostCapabilities: PluginHostCapabilities? = null
     @Volatile private var worker: IPluginWorker? = null
     private var connectionWaiter: CompletableDeferred<IPluginWorker>? = null
     private var bound = false
 
-    fun initialize(context: Context) {
+    fun initialize(context: Context, host: PluginHostCapabilities) {
         appContext = context.applicationContext
+        hostCapabilities = host
     }
 
     suspend fun invoke(
@@ -249,11 +251,8 @@ object PluginWorkerClient {
             val state = if (value == null || value === JSONObject.NULL) "" else value.toString()
             require(state.toByteArray(Charsets.UTF_8).size <= MAX_STATE_BYTES) { "插件状态超过 128KB" }
             stateLocks.getOrPut(sessionId) { Mutex() }.withLock {
-                val context = checkNotNull(appContext)
-                val latest = ChatRepository.get(context, sessionId) ?: error("会话不存在")
-                val next = latest.extState.toMutableMap()
-                if (state.isBlank()) next.remove(pluginId) else next[pluginId] = state
-                ChatRepository.save(context, latest.copy(extState = next, updatedAt = System.currentTimeMillis()))
+                checkNotNull(hostCapabilities) { "插件宿主能力尚未初始化" }
+                    .savePluginState(sessionId, pluginId, state)
             }
             "null"
         }

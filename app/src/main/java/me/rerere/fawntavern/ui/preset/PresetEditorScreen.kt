@@ -80,6 +80,7 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.CancellationException
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.api.roundedSamplingValue
 import me.rerere.fawntavern.data.preset.PromptItem
 import me.rerere.fawntavern.data.preset.RegexScript
@@ -87,6 +88,11 @@ import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.AppTextArea
+import me.rerere.fawntavern.ui.components.DropdownField
+import me.rerere.fawntavern.ui.components.NumberField
+import me.rerere.fawntavern.ui.components.SectionHeader
+import me.rerere.fawntavern.ui.components.SliderField
+import me.rerere.fawntavern.ui.components.SwitchField
 import me.rerere.fawntavern.ui.components.draggableLiftScale
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
 import me.rerere.fawntavern.ui.components.EmptyState
@@ -112,7 +118,7 @@ fun PresetEditorScreen(
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    val controller = remember(context) { PresetDataController(AndroidPresetDataSource(context)) }
+    val controller = LocalAppContainer.current.features.presets
     // 编辑器打开期间固定使用本地草稿；父级打开另一预设时会创建新的编辑器实例。
     var state by remember { mutableStateOf(PresetEditorState(preset)) }
     var saving by remember { mutableStateOf(false) }
@@ -853,116 +859,5 @@ private fun PromptEditDialog(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    Text(title, style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 8.dp))
-}
-
-@Composable
-private fun SliderField(
-    label: String, value: Float, min: Float, max: Float,
-    help: String = "",
-    onChange: (Float) -> Unit,
-) {
-    val normalizedValue = value.roundedSamplingValue()
-    Column {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("%.2f".format(normalizedValue), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Slider(
-            value = normalizedValue,
-            onValueChange = { onChange(it.roundedSamplingValue()) },
-            valueRange = min..max,
-        )
-        if (help.isNotBlank()) {
-            Text(help, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-        }
-    }
-}
-
-@Composable
-private fun NumberField(
-    label: String, value: Float, help: String = "", onChange: (Float) -> Unit,
-) {
-    var text by remember(value) { mutableStateOf(value.toLong().toString()) }
-    Column {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(
-                value = text, onValueChange = { v ->
-                    text = v; v.toFloatOrNull()?.let { onChange(it) }
-                },
-                singleLine = true, modifier = Modifier.width(120.dp),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            )
-        }
-        if (help.isNotBlank()) {
-            Text(help, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-        }
-    }
-}
-
-@Composable
-private fun DropdownField(
-    label: String, current: String, options: List<String>,
-    help: String = "", onChange: (String) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Column {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Box {
-                Row(
-                    Modifier.clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainer)
-                        .clickable { expanded = true }
-                        .padding(horizontal = Space12, vertical = Space8),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Space4)
-                ) {
-                    Text(current, style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface)
-                    Icon(Lucide.ChevronDown, null, Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    options.forEach { opt ->
-                        DropdownMenuItem(
-                            text = { Text(opt) },
-                            onClick = { onChange(opt); expanded = false },
-                        )
-                    }
-                }
-            }
-        }
-        if (help.isNotBlank()) {
-            Text(help, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-        }
-    }
-}
-
-@Composable
-private fun SwitchField(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = Space4),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Switch(checked = checked, onCheckedChange = onChange)
     }
 }

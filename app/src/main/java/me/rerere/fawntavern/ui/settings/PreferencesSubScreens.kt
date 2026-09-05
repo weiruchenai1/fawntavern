@@ -48,6 +48,7 @@ import com.composables.icons.lucide.Type
 import com.composables.icons.lucide.UserPlus
 import com.composables.icons.lucide.Vibrate
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.settings.Preferences
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 
@@ -88,7 +89,7 @@ internal fun ThemeSettingsScreen(
 @Composable
 internal fun ChatItemDisplayScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.settings
     var prefs by remember(controller) { mutableStateOf(controller.preferences()) }
     fun save(next: Preferences) {
         prefs = controller.savePreferences(next)
@@ -116,7 +117,7 @@ internal fun ChatItemDisplayScreen(onBack: () -> Unit) {
 @Composable
 internal fun RenderingSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.settings
     var prefs by remember(controller) { mutableStateOf(controller.preferences()) }
     var showJavascriptWarning by rememberSaveable { mutableStateOf(false) }
     fun save(next: Preferences) {
@@ -183,7 +184,7 @@ internal fun RenderingSettingsScreen(onBack: () -> Unit) {
 @Composable
 internal fun BehaviorStartupScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.settings
     var prefs by remember(controller) { mutableStateOf(controller.preferences()) }
     fun save(next: Preferences) {
         prefs = controller.savePreferences(next)
@@ -221,7 +222,7 @@ internal fun BehaviorStartupScreen(onBack: () -> Unit) {
 @Composable
 internal fun HapticsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.settings
     var prefs by remember(controller) { mutableStateOf(controller.preferences()) }
     fun save(next: Preferences) {
         prefs = controller.savePreferences(next)

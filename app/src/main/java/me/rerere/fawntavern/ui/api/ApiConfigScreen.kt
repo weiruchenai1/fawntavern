@@ -20,6 +20,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ModelType
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -31,7 +32,7 @@ import sh.calvin.reorderable.ReorderableItem
 fun ApiConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val controller = remember(context) { ApiConfigController(AndroidApiConfigDataSource(context)) }
+    val controller = LocalAppContainer.current.features.apiConfig
     val initial = remember(controller) { controller.load() }
     var config by remember(controller) { mutableStateOf(initial.config) }
     val configWasRecovered = initial.recovered

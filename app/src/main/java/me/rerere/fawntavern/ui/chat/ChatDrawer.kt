@@ -49,6 +49,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import com.composables.icons.lucide.Bolt
 import com.composables.icons.lucide.ChartColumnBig
 import com.composables.icons.lucide.ImagePlus
@@ -123,9 +124,7 @@ fun ChatDrawerContent(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val profileController = remember(context) {
-        ChatUserProfileController(AndroidChatUserProfileDataSource(context))
-    }
+    val profileController = LocalAppContainer.current.features.chatUserProfile
     val initialProfile = remember(profileController) { profileController.load() }
 
     var userName by remember { mutableStateOf(initialProfile.name) }

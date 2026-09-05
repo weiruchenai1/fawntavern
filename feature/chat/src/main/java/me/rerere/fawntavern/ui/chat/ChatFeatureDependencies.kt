@@ -19,22 +19,34 @@ interface ChatTextProvider {
 }
 
 class ChatFeatureDependencies(
+    val session: ChatSessionDependencies,
+    val generation: ChatGenerationDependencies,
+    val platform: ChatPlatformDependencies,
+)
+
+class ChatSessionDependencies(
     val chatRepository: ChatDataRepository,
+    val promptContextDataSource: ChatPromptContextDataSource,
+    val userProfileDataSource: ChatUserProfileDataSource,
+    val attachmentDataSource: ChatAttachmentDataSource,
+    val frontendVariableDataSource: ChatFrontendVariableDataSource = EmptyChatFrontendVariableDataSource,
+)
+
+class ChatGenerationDependencies(
     val apiConfigRepository: ApiConfigRepository,
     val generationGateway: GenerationGateway,
     val extensionGateway: ExtensionGateway,
-    val modelDataSource: ChatModelDataSource,
-    val uiSettingsDataSource: ChatUiSettingsDataSource,
-    val promptContextDataSource: ChatPromptContextDataSource,
-    val userProfileDataSource: ChatUserProfileDataSource,
-    val searchSettingsDataSource: ChatWebSearchSettingsDataSource,
-    val attachmentDataSource: ChatAttachmentDataSource,
     val promptEnvironment: ChatPromptEnvironment,
     val generationResources: ChatGenerationResources,
     val searchToolDataSource: ChatSearchToolDataSource,
     val titleSettingsDataSource: ChatTitleSettingsDataSource,
+)
+
+class ChatPlatformDependencies(
+    val modelDataSource: ChatModelDataSource,
+    val uiSettingsDataSource: ChatUiSettingsDataSource,
+    val searchSettingsDataSource: ChatWebSearchSettingsDataSource,
     val ttsControllerFactory: () -> ChatTtsController,
     val texts: ChatTextProvider,
-    val frontendVariableDataSource: ChatFrontendVariableDataSource = EmptyChatFrontendVariableDataSource,
     val initialize: () -> Unit = {},
 )

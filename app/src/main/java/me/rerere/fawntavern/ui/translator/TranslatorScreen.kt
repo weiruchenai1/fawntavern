@@ -75,6 +75,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.api.ApiConfig
 import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.AppIconButton
@@ -112,7 +113,7 @@ fun TranslatorScreen(
     val resources = LocalResources.current
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
-    val controller = remember(context) { TranslatorController(AndroidTranslatorDataSource(context)) }
+    val controller = LocalAppContainer.current.features.translator
     val defaults = remember(controller, fallbackModelSpec) { controller.defaults(fallbackModelSpec) }
     var selectedModelSpec by rememberSaveable {
         mutableStateOf(defaults.modelSpec)

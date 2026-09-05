@@ -23,4 +23,13 @@ interface ExtensionServices {
     fun getExtState(session: ChatSession, extId: String): String
 
     suspend fun saveExtState(sessionId: String, extId: String, state: String)
+
+    fun preferredModel(purpose: ExtensionModelPurpose): String? = null
+}
+
+enum class ExtensionModelPurpose { SUMMARY }
+
+/** 隔离插件进程可回调的最小宿主能力，不向 platform 暴露数据库实现。 */
+fun interface PluginHostCapabilities {
+    suspend fun savePluginState(sessionId: String, pluginId: String, state: String)
 }

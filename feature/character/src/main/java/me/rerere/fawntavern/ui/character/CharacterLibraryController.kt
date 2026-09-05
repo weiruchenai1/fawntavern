@@ -3,6 +3,10 @@ package me.rerere.fawntavern.ui.character
 import android.net.Uri
 import android.graphics.Bitmap
 import me.rerere.fawntavern.core.diagnostics.SafeLog
+import me.rerere.fawntavern.core.resource.NamedResourceCreator
+import me.rerere.fawntavern.core.resource.NamedResourceReader
+import me.rerere.fawntavern.core.resource.ResourceDeleter
+import me.rerere.fawntavern.core.resource.ResourceImporter
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -16,13 +20,12 @@ data class CharacterLibraryState(
     val cards: Map<String, CharacterCard>,
 )
 
-interface CharacterLibraryDataSource {
+interface CharacterLibraryDataSource :
+    NamedResourceReader<CharacterCard>,
+    NamedResourceCreator<CharacterCard>,
+    ResourceImporter<CharacterCard, Uri>,
+    ResourceDeleter<String> {
     fun defaultCardName(): String?
-    suspend fun names(): List<String>
-    suspend fun load(name: String): CharacterCard
-    suspend fun create(name: String): CharacterCard
-    suspend fun import(uri: Uri): CharacterCard
-    suspend fun delete(name: String)
     suspend fun chatCount(name: String): Int = 0
     suspend fun delete(name: String, deleteChats: Boolean, deleteAssociations: Boolean) = delete(name)
     suspend fun saveOrder(names: List<String>)

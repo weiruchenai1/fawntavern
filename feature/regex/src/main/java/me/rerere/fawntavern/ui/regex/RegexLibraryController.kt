@@ -1,6 +1,8 @@
 package me.rerere.fawntavern.ui.regex
 
 import android.net.Uri
+import me.rerere.fawntavern.core.resource.ResourceDeleter
+import me.rerere.fawntavern.core.resource.ResourceRenamer
 import me.rerere.fawntavern.data.preset.RegexScript
 
 enum class RegexScope { GLOBAL, PRESET, LOCAL }
@@ -19,7 +21,7 @@ data class RegexCatalog(
     val local: List<RegexGroup>,
 )
 
-interface RegexLibraryDataSource {
+interface RegexLibraryDataSource : ResourceRenamer<RegexSource>, ResourceDeleter<RegexSource> {
     suspend fun load(): RegexCatalog
     suspend fun append(source: RegexSource, additions: List<RegexScript>)
     suspend fun update(source: RegexSource, index: Int, script: RegexScript, scripts: List<RegexScript>)
@@ -28,8 +30,6 @@ interface RegexLibraryDataSource {
     fun serialize(script: RegexScript): ByteArray
     fun defaultPresetName(): String
     suspend fun create(source: RegexSource, name: String)
-    suspend fun rename(source: RegexSource, name: String): Boolean
-    suspend fun delete(source: RegexSource)
 }
 
 class RegexLibraryController(

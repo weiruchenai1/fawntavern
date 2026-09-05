@@ -33,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.ui.chat.AIMsg
 import me.rerere.fawntavern.ui.chat.UserMsg
@@ -59,7 +60,7 @@ private fun snapToPreset(value: Float): Float {
 @Composable
 fun FontSizeScreen(onBack: () -> Unit, currentScale: Float = 1.0f) {
     val context = LocalContext.current
-    val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.settings
     val preview = remember(controller) { controller.fontPreview() }
     var selectedScale by remember { mutableFloatStateOf(currentScale) }
 

@@ -1,5 +1,7 @@
 package me.rerere.fawntavern.data.update
 
+import me.rerere.fawntavern.core.version.SemanticVersion
+
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer

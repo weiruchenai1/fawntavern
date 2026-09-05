@@ -102,7 +102,9 @@ class FawnTavernApplication : Application() {
     private fun initializePlugins() {
         if (pluginInitializationJob?.isActive == true) return
         pluginInitializationJob = applicationScope.launch {
-            runCatching { PluginManager.initialize(this@FawnTavernApplication) }
+            runCatching {
+                PluginManager.initialize(this@FawnTavernApplication, container.pluginHostCapabilities)
+            }
         }
     }
 

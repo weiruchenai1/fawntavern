@@ -70,6 +70,7 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Volume2
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.speech.TTSProviderSetting
 import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -89,7 +90,7 @@ import sh.calvin.reorderable.ReorderableItem
 @Composable
 fun TtsConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { TtsConfigController(AndroidTtsConfigDataSource(context)) }
+    val controller = LocalAppContainer.current.features.tts
     var config by remember(controller) { mutableStateOf(controller.load()) }
     val services = config.services
     val selectedId = config.selectedId

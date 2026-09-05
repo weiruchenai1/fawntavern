@@ -51,13 +51,14 @@ import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.ui.components.AppTopBar
 
 @Composable
 fun StatisticsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var state by remember { mutableStateOf(StatisticsUiState()) }
-    val controller = remember(context) { StatisticsController(AndroidStatisticsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.statistics
 
     LaunchedEffect(Unit) {
         state = controller.load()

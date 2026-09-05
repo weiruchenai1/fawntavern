@@ -9,7 +9,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.platform.plugin.BuildConfig
-import me.rerere.fawntavern.data.update.SemanticVersion
+import me.rerere.fawntavern.core.version.SemanticVersion
 
 /**
  * 插件安装 / 更新 / 卸载。

@@ -1,6 +1,6 @@
 package me.rerere.fawntavern.plugin
 
-import me.rerere.fawntavern.data.update.SemanticVersion
+import me.rerere.fawntavern.core.version.SemanticVersion
 import org.json.JSONObject
 
 /** 已接线的能力白名单（与 `extension/` 的能力接口一一对应）。 */

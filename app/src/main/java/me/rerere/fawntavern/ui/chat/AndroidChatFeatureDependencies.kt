@@ -13,27 +13,33 @@ internal fun createChatFeatureDependencies(
 ): ChatFeatureDependencies {
     val appContext = context.applicationContext
     return ChatFeatureDependencies(
-        chatRepository = container.chatRepository,
-        apiConfigRepository = container.apiConfigRepository,
-        generationGateway = container.generationGateway,
-        extensionGateway = container.extensionGateway,
-        modelDataSource = AndroidChatModelDataSource(appContext),
-        uiSettingsDataSource = AndroidChatUiSettingsDataSource(appContext),
-        promptContextDataSource = AndroidChatPromptContextDataSource(appContext),
-        userProfileDataSource = AndroidChatUserProfileDataSource(appContext),
-        searchSettingsDataSource = AndroidChatWebSearchSettingsDataSource(appContext),
-        attachmentDataSource = AndroidChatAttachmentDataSource(appContext, container.chatRepository),
-        promptEnvironment = AndroidChatPromptEnvironment(appContext, container.extensionGateway),
-        generationResources = AndroidChatGenerationResources(appContext),
-        searchToolDataSource = AndroidChatSearchToolDataSource(appContext),
-        titleSettingsDataSource = AndroidChatTitleSettingsDataSource(appContext),
-        ttsControllerFactory = { AndroidChatTtsController(appContext) },
-        texts = AndroidChatTextProvider(appContext),
-        frontendVariableDataSource = AndroidChatFrontendVariableDataSource(appContext),
-        initialize = {
-            BuiltinExtensions.registerAll()
-            PromptLog.enabled = PromptLogStore.isEnabled(appContext)
-        },
+        session = ChatSessionDependencies(
+            chatRepository = container.chatRepository,
+            promptContextDataSource = AndroidChatPromptContextDataSource(appContext),
+            userProfileDataSource = AndroidChatUserProfileDataSource(appContext),
+            attachmentDataSource = AndroidChatAttachmentDataSource(appContext, container.chatRepository),
+            frontendVariableDataSource = AndroidChatFrontendVariableDataSource(appContext),
+        ),
+        generation = ChatGenerationDependencies(
+            apiConfigRepository = container.apiConfigRepository,
+            generationGateway = container.generationGateway,
+            extensionGateway = container.extensionGateway,
+            promptEnvironment = AndroidChatPromptEnvironment(appContext, container.extensionGateway),
+            generationResources = AndroidChatGenerationResources(appContext),
+            searchToolDataSource = AndroidChatSearchToolDataSource(appContext),
+            titleSettingsDataSource = AndroidChatTitleSettingsDataSource(appContext),
+        ),
+        platform = ChatPlatformDependencies(
+            modelDataSource = AndroidChatModelDataSource(appContext),
+            uiSettingsDataSource = AndroidChatUiSettingsDataSource(appContext),
+            searchSettingsDataSource = AndroidChatWebSearchSettingsDataSource(appContext),
+            ttsControllerFactory = { AndroidChatTtsController(appContext) },
+            texts = AndroidChatTextProvider(appContext),
+            initialize = {
+                BuiltinExtensions.registerAll()
+                PromptLog.enabled = PromptLogStore.isEnabled(appContext)
+            },
+        ),
     )
 }
 

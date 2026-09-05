@@ -56,6 +56,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.core.resource.ImportableResourceController
 
 private const val IMPORTABLE_LIST_TAG = "ImportableList"
 
@@ -112,11 +113,7 @@ fun <T : Any> ImportableListScreen(
     renameLabelRes: Int,
     deleteTitleRes: Int,
     deleteMsgFmtRes: Int,
-    listNames: suspend () -> List<String>,
-    loadItem: suspend (String) -> T,
-    importItem: suspend (Uri) -> String,
-    renameItem: suspend (oldName: String, newName: String) -> Boolean,
-    deleteItem: suspend (String) -> Unit,
+    controller: ImportableResourceController<T, Uri>,
     exportItem: (suspend (String) -> ByteArray)? = null,
     onOpen: (T) -> Unit,
     itemCard: @Composable (name: String, item: T, onClick: () -> Unit, onLongPress: () -> Unit) -> Unit,
@@ -125,6 +122,11 @@ fun <T : Any> ImportableListScreen(
     createItem: CreateItemSpec? = null,
     actions: (@Composable () -> Unit)? = null,
 ) {
+    val listNames = controller::names
+    val loadItem = controller::load
+    val importItem = controller::import
+    val renameItem = controller::rename
+    val deleteItem = controller::delete
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()

@@ -62,6 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.preset.RegexScript
 import me.rerere.fawntavern.ui.components.AddItemSheet
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -80,7 +81,7 @@ fun RegexListScreen(onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val resources = LocalResources.current
     val coroutineScope = rememberCoroutineScope()
-    val controller = remember(context) { RegexLibraryController(AndroidRegexLibraryDataSource(context)) }
+    val controller = LocalAppContainer.current.features.regex
     val pagerState = rememberPagerState(pageCount = { 3 })
     var globalGroups by remember { mutableStateOf<List<RegexGroup>>(emptyList()) }
     var presetGroups by remember { mutableStateOf<List<RegexGroup>>(emptyList()) }

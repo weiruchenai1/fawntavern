@@ -44,6 +44,7 @@ import com.composables.icons.lucide.Rocket
 import com.composables.icons.lucide.Sigma
 import com.composables.icons.lucide.Vibrate
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.Preferences
 import me.rerere.fawntavern.ui.components.SettingsSubPage
@@ -145,7 +146,7 @@ internal fun PrefToggle(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
-    val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.settings
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

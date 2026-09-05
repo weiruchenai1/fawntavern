@@ -69,6 +69,7 @@ import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Trash2
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.search.SearchServiceOptions
 import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.AppTopBar
@@ -89,7 +90,7 @@ import sh.calvin.reorderable.ReorderableItem
 @Composable
 fun WebSearchConfigScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { WebSearchConfigController(AndroidWebSearchConfigDataSource(context)) }
+    val controller = LocalAppContainer.current.features.webSearch
     var config by remember(controller) { mutableStateOf(controller.load()) }
     val services = config.services
     val configWasRecovered = config.recovered
@@ -476,7 +477,7 @@ private fun SearchTesterCard(options: SearchServiceOptions, resultSize: Int) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    val controller = remember(context) { WebSearchConfigController(AndroidWebSearchConfigDataSource(context)) }
+    val controller = LocalAppContainer.current.features.webSearch
     var query by remember(options.id) { mutableStateOf("") }
     var running by remember { mutableStateOf(false) }
     var output by remember { mutableStateOf<String?>(null) }

@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.android.library)
+    id("fawntavern.android.library")
 }
 
 val appVersionName = providers.gradleProperty("versionName")
@@ -9,16 +9,8 @@ val appVersionName = providers.gradleProperty("versionName")
 
 android {
     namespace = "me.rerere.fawntavern.platform.plugin"
-    compileSdk = 37
-
     defaultConfig {
-        minSdk = 26
         buildConfigField("String", "APP_VERSION", "\"${appVersionName.replace("\"", "\\\"")}\"")
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildFeatures {
@@ -33,15 +25,11 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:network"))
     implementation(project(":domain:generation"))
-    implementation(project(":data:chat"))
-    implementation(project(":data:settings"))
-    implementation(project(":data:update"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.json)
     implementation(libs.quickjs.kt)
 
-    testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)

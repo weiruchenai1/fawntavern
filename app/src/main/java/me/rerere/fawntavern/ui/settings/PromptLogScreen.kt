@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Lucide
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.domain.LoggedMessage
 import me.rerere.fawntavern.domain.PromptLog
 import me.rerere.fawntavern.domain.PromptLogEntry
@@ -60,7 +61,7 @@ import me.rerere.fawntavern.ui.components.Space16
 @Composable
 fun PromptLogScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
-    val controller = remember(ctx) { SettingsDataController(AndroidSettingsDataSource(ctx)) }
+    val controller = LocalAppContainer.current.features.settings
     BackHandler(onBack = onBack)
 
     var enabled by remember(controller) { mutableStateOf(controller.promptLogEnabled()) }

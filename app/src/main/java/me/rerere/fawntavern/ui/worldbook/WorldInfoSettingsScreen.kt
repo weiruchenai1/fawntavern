@@ -23,23 +23,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.worldbook.WorldInfoSettings
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
+import me.rerere.fawntavern.ui.components.FormIntegerField as NumberRow
+import me.rerere.fawntavern.ui.components.SwitchField as SwitchRow
 
 /** 全局世界书激活设置（对齐 SillyTavern #wiActivationSettings，无插入策略/全局书概念）。改动即时落盘。 */
 @Composable
 fun WorldInfoSettingsScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val controller = remember(context) {
-        WorldInfoSettingsController(AndroidWorldInfoSettingsDataSource(context))
-    }
+    val controller = LocalAppContainer.current.features.worldInfoSettings
     var s by remember(controller) { mutableStateOf(controller.load()) }
     fun save(next: WorldInfoSettings) {
         s = controller.update(next)
@@ -78,39 +77,5 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
                 .padding(Space12),
             verticalArrangement = Arrangement.spacedBy(Space8),
         ) { content() }
-    }
-}
-
-/** 数值行：左标签(+副标)，右侧紧凑数字输入。空串按 0 处理。 */
-@Composable
-private fun NumberRow(label: String, value: Int, hint: String? = null, onChange: (Int) -> Unit) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium)
-            if (hint != null) Text(hint, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.width(Space12))
-        OutlinedTextField(
-            value = text,
-            onValueChange = { t ->
-                text = t.filter { it.isDigit() }
-                onChange(text.toIntOrNull() ?: 0)
-            },
-            singleLine = true,
-            modifier = Modifier.width(96.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        )
-    }
-}
-
-@Composable
-private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Switch(checked, onChange)
     }
 }

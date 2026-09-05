@@ -47,6 +47,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquareText
 import com.composables.icons.lucide.RotateCcw
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.ui.api.ProviderIcon
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
@@ -68,7 +69,7 @@ import me.rerere.fawntavern.ui.components.Space8
 @Composable
 fun DefaultModelPage(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { DefaultModelController(AndroidDefaultModelDataSource(context)) }
+    val controller = LocalAppContainer.current.features.defaultModels
     var state by remember(controller) { mutableStateOf(controller.load()) }
     val apiConfig = state.apiConfig
 

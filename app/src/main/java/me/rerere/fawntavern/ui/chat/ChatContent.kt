@@ -997,69 +997,25 @@ internal fun ChatContent(
         onDismissDeleteAllVersions = { pendingDeleteAllVersions = null },
     )
 
-    // ── 模型选择面板 ──
-    ModelSelectorSheet(
-        state = modelSelector,
-        onSelect = { providerId, modelId ->
-            onAction(ChatAction.SelectModel(providerId, modelId))
+    ChatPickerOverlays(
+        state = state,
+        modelSelector = modelSelector,
+        displayProvider = displayProv,
+        displayModelId = displayModelId,
+        showReasoning = showReasoningPicker,
+        showImageGeneration = showImageGenerationSettings,
+        showCharacter = showCharPicker,
+        showSearch = showSearch,
+        onDismissReasoning = { showReasoningPicker = false },
+        onDismissImageGeneration = { showImageGenerationSettings = false },
+        onDismissCharacter = { showCharPicker = false },
+        onDismissSearch = { showSearch = false },
+        onOpenSearchConfig = {
+            showSearch = false
+            nav.add(Screen.WebSearch)
         },
+        onAction = onAction,
     )
-
-    // ── 思考预算面板 ──
-    if (showReasoningPicker) {
-        ReasoningPickerSheet(
-            current = model.reasoning,
-            onSelect = {
-                onAction(ChatAction.UpdateReasoning(it))
-                showReasoningPicker = false
-            },
-            onDismiss = { showReasoningPicker = false },
-        )
-    }
-
-    if (showImageGenerationSettings) {
-        ImageGenerationSettingsSheet(
-            current = model.imageGeneration,
-            useOpenAiSizes = displayProv?.type.equals("openai", ignoreCase = true) &&
-                displayModelId.startsWith("gpt-image", ignoreCase = true),
-            useGradioControls = displayProv?.type.equals("gradio", ignoreCase = true),
-            onChange = { onAction(ChatAction.UpdateImageGeneration(it)) },
-            onDismiss = { showImageGenerationSettings = false },
-        )
-    }
-
-    // ── 角色选择面板 ──
-    if (showCharPicker) {
-        CharacterPickerSheet(
-            currentFileName = conversation.current?.charFile ?: "",
-            onSelect = { fileName, displayName ->
-                onAction(ChatAction.OpenCharacter(fileName, displayName))
-                showCharPicker = false
-            },
-            onDismiss = { showCharPicker = false },
-        )
-    }
-
-    // ── 联网搜索面板 ──
-    if (showSearch) {
-        val searchServices = search.services
-        SearchPickerSheet(
-            searchEnabled = search.enabled,
-            builtInSearchAvailable = search.builtInAvailable,
-            builtInSearchEnabled = search.builtInEnabled,
-            services = searchServices,
-            // 用 VM 的响应式下标做高亮；配置页删过提供商后可能越界，收敛回有效范围
-            selectedIndex = search.providerIndex.coerceIn(0, searchServices.lastIndex.coerceAtLeast(0)),
-            onToggleSearch = { onAction(ChatAction.ToggleSearch) },
-            onToggleBuiltInSearch = { onAction(ChatAction.ToggleBuiltInSearch) },
-            onSelectProvider = { onAction(ChatAction.SelectSearchProvider(it)) },
-            onOpenConfig = {
-                showSearch = false
-                nav.add(Screen.WebSearch)
-            },
-            onDismiss = { showSearch = false },
-        )
-    }
 }
 
 /** 全屏底部面板的内容（消息全文 / 输入框全文共用同一面板）；editable = 输入框展开，正文可直接编辑 */

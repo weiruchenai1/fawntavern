@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Lucide
@@ -110,7 +111,7 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    val controller = remember(context) { WorldBookDataController(AndroidWorldBookDataSource(context)) }
+    val controller = LocalAppContainer.current.features.worldBooks
     val saveCoordinator = remember(book.name, controller) {
         WorldBookSaveCoordinator { entries -> controller.saveEntries(book.name, entries) }
     }

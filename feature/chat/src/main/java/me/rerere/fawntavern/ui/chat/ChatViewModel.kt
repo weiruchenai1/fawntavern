@@ -48,6 +48,10 @@ class ChatViewModel(
     private val dependencies: ChatFeatureDependencies,
 ) : ViewModel() {
 
+    private val sessionDependencies = dependencies.session
+    private val generationDependencies = dependencies.generation
+    private val platformDependencies = dependencies.platform
+
     private val effectChannel = Channel<ChatEffect>(Channel.BUFFERED)
     val effects: Flow<ChatEffect> = effectChannel.receiveAsFlow()
     private val frontendEventSequence = AtomicLong()
@@ -59,12 +63,12 @@ class ChatViewModel(
 
     // ── 状态（写入只经由本类方法） ──
     private val model = ChatModelStateHolder(
-        ChatModelController(dependencies.modelDataSource),
-        dependencies.apiConfigRepository,
+        ChatModelController(platformDependencies.modelDataSource),
+        generationDependencies.apiConfigRepository,
     )
     private val apiConfig get() = model.apiConfig
     private val uiSettings = ChatUiSettingsStateHolder(
-        ChatUiSettingsController(dependencies.uiSettingsDataSource),
+        ChatUiSettingsController(platformDependencies.uiSettingsDataSource),
     )
     /** 当前模型的思考预算档位（按模型记忆，随选模型切换）；AUTO = 不下发任何思考字段 */
     private val reasoning get() = model.reasoning
@@ -74,7 +78,7 @@ class ChatViewModel(
     private val sessions get() = conversation.sessions
     private val session get() = conversation.current
     private val promptContext = ChatPromptContextStateHolder()
-    private val promptContextDataSource = dependencies.promptContextDataSource
+    private val promptContextDataSource = sessionDependencies.promptContextDataSource
     private val promptContextCoordinator by lazy {
         ChatPromptContextCoordinator(
             dataSource = promptContextDataSource,
@@ -83,7 +87,7 @@ class ChatViewModel(
             onLoadFailures = { failures ->
                 val names = failures.map { it.name }.distinct().joinToString()
                 showMessage(
-                    dependencies.texts.promptContextLoadFailed(names),
+                    platformDependencies.texts.promptContextLoadFailed(names),
                     long = true,
                 )
             },
@@ -98,7 +102,7 @@ class ChatViewModel(
      */
     private val overlays get() = conversation.overlays
     private val profile = ChatProfileStateHolder(
-        ChatUserProfileController(dependencies.userProfileDataSource),
+        ChatUserProfileController(sessionDependencies.userProfileDataSource),
     )
     private val profileCoordinator by lazy {
         ChatProfileCoordinator(viewModelScope, profile, promptContextCoordinator)
@@ -106,12 +110,12 @@ class ChatViewModel(
     private val userName get() = profile.name
     private val input = ChatInputStateHolder()
     private val quickReplies by lazy {
-        ChatQuickReplyCoordinator(dependencies.extensionGateway, input)
+        ChatQuickReplyCoordinator(generationDependencies.extensionGateway, input)
     }
     val inputState get() = input.textFieldState
 
     private val search = ChatSearchStateHolder(
-        ChatWebSearchSettingsController(dependencies.searchSettingsDataSource),
+        ChatWebSearchSettingsController(platformDependencies.searchSettingsDataSource),
     )
     private val searchEnabled: Boolean
         get() = search.enabled
@@ -123,12 +127,12 @@ class ChatViewModel(
         get() = search.providerName
     private val modelCapabilities: ChatModelCapabilities
         get() = model.capabilities(currentCard?.name)
-    private val tts = ChatTtsStateHolder(dependencies.ttsControllerFactory, viewModelScope)
+    private val tts = ChatTtsStateHolder(platformDependencies.ttsControllerFactory, viewModelScope)
 
     private val displayRegexScripts: List<CharRegex>
         get() = promptContext.displayRegex
 
-    private val chatRepository = dependencies.chatRepository
+    private val chatRepository = sessionDependencies.chatRepository
     private val frontendVariablesRevision = mutableIntStateOf(0)
     private val frontendRpcController by lazy {
         ChatFrontendRpcController(
@@ -137,12 +141,12 @@ class ChatViewModel(
             replaceCurrent = { updated ->
                 if (session?.id == updated.id) conversation.replacePersistedCurrent(updated)
             },
-            loadGlobalVariables = dependencies.promptEnvironment::globalVariables,
+            loadGlobalVariables = generationDependencies.promptEnvironment::globalVariables,
             saveGlobalVariables = { values ->
-                dependencies.generationResources.saveGlobalVariables(values)
+                generationDependencies.generationResources.saveGlobalVariables(values)
                 frontendVariablesRevision.intValue++
             },
-            scopedVariables = dependencies.frontendVariableDataSource,
+            scopedVariables = sessionDependencies.frontendVariableDataSource,
             scopeOwner = { scope, params ->
                 when (scope) {
                     "character" -> session?.charFile.orEmpty()
@@ -159,18 +163,18 @@ class ChatViewModel(
     private val frontendGeneration by lazy {
         ChatFrontendGenerationController(
             config = { apiConfig },
-            gateway = dependencies.generationGateway,
+            gateway = generationDependencies.generationGateway,
             emitEvent = ::emitFrontendEvent,
         )
     }
-    private val generation = GenerationEngine(dependencies.generationGateway)
+    private val generation = GenerationEngine(generationDependencies.generationGateway)
     private val generationCoordinator by lazy {
         ChatGenerationCoordinator(
             scope = viewModelScope,
             stopCurrent = generation::stop,
             onFailure = { error ->
                 SafeLog.error(CHAT_VIEW_MODEL_TAG, "generation_failed", error)
-                showMessage(dependencies.texts.generationFailed(error.message.orEmpty()))
+                showMessage(platformDependencies.texts.generationFailed(error.message.orEmpty()))
             },
         )
     }
@@ -181,7 +185,7 @@ class ChatViewModel(
         ChatMessageMutationCoordinator(viewModelScope, messageCoordinator, conversation)
     }
     private val attachmentCoordinator by lazy {
-        ChatAttachmentCoordinator(dependencies.attachmentDataSource)
+        ChatAttachmentCoordinator(sessionDependencies.attachmentDataSource)
     }
     private val sendChatMessage by lazy {
         SendChatMessageUseCase(chatRepository, attachmentCoordinator)
@@ -229,25 +233,25 @@ class ChatViewModel(
         )
     }
     private val generationRunner by lazy {
-        val promptAssembler = ChatPromptAssembler(dependencies.promptEnvironment)
+        val promptAssembler = ChatPromptAssembler(generationDependencies.promptEnvironment)
         ChatGenerationRunner(
             chatRepository = chatRepository,
             generation = generation,
-            resources = dependencies.generationResources,
+            resources = generationDependencies.generationResources,
             prepare = PrepareChatGenerationUseCase(chatRepository, promptAssembler),
             commit = CommitChatGenerationUseCase(chatRepository),
-            searchTool = ChatSearchTool(dependencies.searchToolDataSource),
+            searchTool = ChatSearchTool(generationDependencies.searchToolDataSource),
         )
     }
     private val postGenerationCoordinator by lazy {
         ChatPostGenerationCoordinator(
             scope = viewModelScope,
             chatRepository = chatRepository,
-            extensions = dependencies.extensionGateway,
+            extensions = generationDependencies.extensionGateway,
             titleGenerator = ChatTitleGenerator(
                 chatRepository = chatRepository,
-                extensions = dependencies.extensionGateway,
-                settings = dependencies.titleSettingsDataSource,
+                extensions = generationDependencies.extensionGateway,
+                settings = generationDependencies.titleSettingsDataSource,
             ),
         )
     }
@@ -275,13 +279,13 @@ class ChatViewModel(
     ).cachedIn(viewModelScope)
 
     init {
-        dependencies.initialize()
+        platformDependencies.initialize()
         quickReplies.refresh()
         // 会话列表来自 Repository 的 Flow：任何 save/delete/clear 后自动刷新
         viewModelScope.launch {
             startupCoordinator.observe(
-                defaultPresetName = dependencies.texts.defaultPresetName,
-                defaultCharacterName = dependencies.texts.defaultCharacterName,
+                defaultPresetName = platformDependencies.texts.defaultPresetName,
+                defaultCharacterName = platformDependencies.texts.defaultCharacterName,
                 newChatOnLaunch = { uiSettings.value.newChatOnLaunch },
                 currentSession = { session },
                 onSessions = conversation::replaceSessions,
@@ -341,7 +345,7 @@ class ChatViewModel(
                     builtInEnabled = modelCapabilities.builtInSearchEnabled,
                 ),
                 settings = uiSettings.value,
-                globalVariables = dependencies.promptEnvironment.globalVariables(),
+                globalVariables = generationDependencies.promptEnvironment.globalVariables(),
             )
         }
 
@@ -422,22 +426,22 @@ class ChatViewModel(
                 if (scrollToBottom) effectChannel.trySend(ChatEffect.ScrollToBottom)
             }
             ChatSendOutcome.NO_MODEL -> {
-                showMessage(dependencies.texts.selectModelFirst)
+                showMessage(platformDependencies.texts.selectModelFirst)
                 effectChannel.trySend(ChatEffect.OpenModelSelector)
             }
-            ChatSendOutcome.FILE_TOO_LARGE -> showMessage(dependencies.texts.fileTooLarge)
+            ChatSendOutcome.FILE_TOO_LARGE -> showMessage(platformDependencies.texts.fileTooLarge)
             ChatSendOutcome.SKIPPED -> Unit
         }
     }
 
     private fun handleSendFailure(failure: ChatSendFailure) {
         when (failure) {
-            ChatSendFailure.Attachment -> showMessage(dependencies.texts.attachmentFailed)
+            ChatSendFailure.Attachment -> showMessage(platformDependencies.texts.attachmentFailed)
             is ChatSendFailure.Send -> {
                 val message = if (failure.rollbackFailed) {
-                    dependencies.texts.rollbackFailed(failure.error.message.orEmpty())
+                    platformDependencies.texts.rollbackFailed(failure.error.message.orEmpty())
                 } else {
-                    dependencies.texts.sendFailed(failure.error.message.orEmpty())
+                    platformDependencies.texts.sendFailed(failure.error.message.orEmpty())
                 }
                 showMessage(message)
             }
@@ -546,8 +550,8 @@ class ChatViewModel(
         search.reload()
         profileCoordinator.reload()
         dataRefresh.refresh(
-            defaultPresetName = dependencies.texts.defaultPresetName,
-            defaultCharacterName = dependencies.texts.defaultCharacterName,
+            defaultPresetName = platformDependencies.texts.defaultPresetName,
+            defaultCharacterName = platformDependencies.texts.defaultCharacterName,
         )
     }
 
@@ -716,7 +720,7 @@ class ChatViewModel(
     private fun replaceFrontendVariables(scope: String, values: Map<String, String>) {
         if (scope == "global") {
             viewModelScope.launch {
-                runCatching { dependencies.generationResources.saveGlobalVariables(values) }
+                runCatching { generationDependencies.generationResources.saveGlobalVariables(values) }
                     .onSuccess { frontendVariablesRevision.intValue++ }
                     .onFailure { SafeLog.warn(CHAT_VIEW_MODEL_TAG, "frontend_global_variables_save_failed", it) }
             }

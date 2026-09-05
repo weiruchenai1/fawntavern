@@ -50,6 +50,7 @@ import com.composables.icons.lucide.Smile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
 import me.rerere.fawntavern.ui.components.PickerRow
@@ -415,7 +416,7 @@ internal fun CharacterPickerSheet(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val controller = remember(context) { CharacterLibraryController(AndroidCharacterLibraryDataSource(context)) }
+    val controller = LocalAppContainer.current.features.characterLibrary
     var charNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var thumbs by remember { mutableStateOf<Map<String, android.graphics.Bitmap>>(emptyMap()) }
     LaunchedEffect(Unit) {

@@ -49,6 +49,7 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.extension.Extension
 import me.rerere.fawntavern.extension.ExtensionHost
 import me.rerere.fawntavern.extension.QuickReply
@@ -251,7 +252,7 @@ private fun ExtensionCard(
     onUninstall: () -> Unit,
 ) {
     val context = LocalContext.current
-    val controller = remember(context) { ExtensionSettingsController(AndroidExtensionSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.extensions
     var enabled by remember(ext.info.id, plugin?.state) {
         mutableStateOf(controller.isEnabled(ext.info.id))
     }
@@ -356,7 +357,7 @@ private fun PluginSettings(pluginId: String, onBack: () -> Unit) {
         SettingsSubPage(title = stringResource(R.string.extensions), onBack = onBack) {}
         return
     }
-    val controller = remember(context) { ExtensionSettingsController(AndroidExtensionSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.extensions
     val fields = remember(record.plugin.manifest.configSchema) {
         PluginConfigSchema.parse(record.plugin.manifest.configSchema)
     }
@@ -458,7 +459,7 @@ private fun Int.coerceTo(minimum: Int?, maximum: Int?): Int {
 @Composable
 private fun SummarizeSettings(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { ExtensionSettingsController(AndroidExtensionSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.extensions
     var cfg by remember {
         mutableStateOf(SummarizeExtension.parseConfig(controller.config(SummarizeExtension.ID)))
     }
@@ -481,7 +482,7 @@ private fun SummarizeSettings(onBack: () -> Unit) {
 @Composable
 private fun QuickReplySettings(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { ExtensionSettingsController(AndroidExtensionSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.extensions
     var items by remember {
         mutableStateOf(QuickReplyExtension.parseConfig(controller.config(QuickReplyExtension.ID)))
     }

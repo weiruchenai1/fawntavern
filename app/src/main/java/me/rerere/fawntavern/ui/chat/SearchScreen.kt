@@ -32,7 +32,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,7 +42,7 @@ import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.delay
 import me.rerere.fawntavern.R
-import me.rerere.fawntavern.FawnTavernApplication
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.ui.components.AppTopBar
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.Space8
@@ -55,11 +54,7 @@ fun SearchScreen(
     onBack: () -> Unit,
     onOpenSession: (String) -> Unit = {},
 ) {
-    val context = LocalContext.current
-    val application = context.applicationContext as FawnTavernApplication
-    val controller = remember(context) {
-        ChatSearchController(AndroidChatSearchDataSource(context, application.container.chatRepository))
-    }
+    val controller = LocalAppContainer.current.features.chatSearch
     var query by remember { mutableStateOf("") }
     var history by remember(controller) { mutableStateOf(controller.history()) }
     val focusRequester = remember { FocusRequester() }

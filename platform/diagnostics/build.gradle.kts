@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.android.library)
+    id("fawntavern.android.library")
 }
 
 val appVersionName = providers.gradleProperty("versionName")
@@ -16,10 +16,7 @@ fun buildConfigString(value: String): String =
 
 android {
     namespace = "me.rerere.fawntavern.platform.diagnostics"
-    compileSdk = 37
-
     defaultConfig {
-        minSdk = 26
         buildConfigField("String", "VERSION_NAME", buildConfigString(appVersionName))
         buildConfigField("String", "BUGLY_APP_ID", buildConfigString(buglyAppId))
     }
@@ -33,11 +30,6 @@ android {
             buildConfigField("boolean", "FIREBASE_ENABLED", "true")
             buildConfigField("boolean", "BUGLY_ENABLED", "true")
         }
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
     }
 
     buildFeatures {
@@ -56,5 +48,4 @@ dependencies {
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.crashlytics)
 
-    testImplementation(libs.junit)
 }

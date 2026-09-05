@@ -62,6 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.backup.BackupDefaults
 import me.rerere.fawntavern.data.backup.BackupSection
 import me.rerere.fawntavern.ui.components.SettingsSubPage
@@ -105,9 +106,7 @@ fun DataManagementScreen(
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    val controller = remember(context) {
-        DataManagementController(AndroidDataManagementDataSource(context))
-    }
+    val controller = LocalAppContainer.current.features.dataManagement
     val backupImportedMessage: (Int, Int) -> String = { files, sessions ->
         resources.getQuantityString(R.plurals.backup_files, files, files) +
             resources.getQuantityString(R.plurals.backup_sessions_suffix, sessions, sessions)

@@ -39,6 +39,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.Trash2
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
@@ -46,7 +47,7 @@ import me.rerere.fawntavern.ui.components.Space12
 @Composable
 fun CrashReportScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val controller = remember(context) { DiagnosticsController(AndroidDiagnosticsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.diagnostics
     val initialState = remember(controller) { controller.load() }
     val reportSubject = stringResource(R.string.crash_feedback_subject)
     val shareLabel = stringResource(R.string.crash_feedback_share)

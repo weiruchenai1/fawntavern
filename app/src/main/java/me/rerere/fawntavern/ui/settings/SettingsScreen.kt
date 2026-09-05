@@ -28,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ALargeSmall
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.CircleHelp
@@ -82,7 +83,7 @@ fun SettingsScreen(
     onNavigateToAbout: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val controller = remember(context) { SettingsDataController(AndroidSettingsDataSource(context)) }
+    val controller = LocalAppContainer.current.features.settings
     var currentLang by remember(controller) { mutableStateOf(controller.language()) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showLangDialog by remember { mutableStateOf(false) }

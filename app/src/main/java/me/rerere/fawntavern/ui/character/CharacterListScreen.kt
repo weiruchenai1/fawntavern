@@ -68,6 +68,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import me.rerere.fawntavern.R
+import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.character.CharacterCard
 import sh.calvin.reorderable.ReorderableItem
 import me.rerere.fawntavern.ui.components.rememberReorderableList
@@ -87,9 +88,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    val controller = remember(context) {
-        CharacterLibraryController(AndroidCharacterLibraryDataSource(context))
-    }
+    val controller = LocalAppContainer.current.features.characterLibrary
     val orderSaveCoordinator = remember(controller, scope) {
         CharacterOrderSaveCoordinator(
             scope = scope,
