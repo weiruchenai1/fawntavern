@@ -24,6 +24,7 @@ junit = "4.13.2"
 json = "20260719"
 androidxTestCore = "1.7.0"
 robolectric = "4.16.1"
+buglyCrashreport = "4.1.9.3"
 firebaseBom = "34.17.0"
 googleServices = "4.5.0"
 firebaseCrashlyticsPlugin = "3.0.7"
@@ -78,10 +79,9 @@ coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp"
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
-androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
-androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+bugly-crashreport = { group = "com.tencent.bugly", name = "crashreport", version.ref = "buglyCrashreport" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }

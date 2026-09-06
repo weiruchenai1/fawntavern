@@ -61,7 +61,7 @@ internal fun extractFencedHtmlMessage(source: String): String? {
                 block.language == "css" -> wrapFencedResource(block.body, "style")
                 block.language == "javascript" || block.language == "js" ->
                     wrapFencedResource(block.body, "script")
-                block.isHtmlResource() -> block.body
+                block.isHtmlResource() -> stripNestedFenceLines(block.body)
                 else -> block.source
             }
             append(replacement)
@@ -70,6 +70,12 @@ internal fun extractFencedHtmlMessage(source: String): String? {
         }
     }
 }
+
+private val nestedFenceLine = Regex("(?:`{3,}|~{3,})(?:[A-Za-z0-9_+-]+)?")
+
+private fun stripNestedFenceLines(source: String): String = source.lineSequence()
+    .filterNot { line -> nestedFenceLine.matches(line.trim()) }
+    .joinToString("\n")
 
 internal fun encodeFrontendVariables(values: Map<String, String>): String = JSONObject().apply {
     values.forEach { (key, raw) ->

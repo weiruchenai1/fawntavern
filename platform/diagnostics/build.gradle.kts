@@ -39,7 +39,7 @@ android {
 
 dependencies {
     implementation(project(":core:diagnostics"))
-    implementation(files("libs/crashreport-4.1.9.3.aar"))
+    implementation(libs.bugly.crashreport)
     implementation(libs.androidx.core.ktx)
     implementation(libs.okhttp)
 

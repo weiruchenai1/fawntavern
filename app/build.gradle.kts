@@ -35,7 +35,6 @@ android {
         targetSdk = 37
         versionCode = appVersionCode
         versionName = appVersionName
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     splits {
@@ -144,7 +143,6 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
 
     // AppCompat (locale switching)
     implementation(libs.androidx.appcompat)
@@ -183,8 +181,6 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.okhttp.mockwebserver)
 
-    androidTestImplementation(composeBom)
-    androidTestImplementation(libs.androidx.ui.test.junit4)
 }
 
 googleServices {

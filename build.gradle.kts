@@ -10,6 +10,7 @@ plugins {
 
 tasks.register("checkArchitecture") {
     group = "verification"
+    notCompatibleWithConfigurationCache("The task inspects the live Gradle project and source tree at execution time")
     description = "检查模块源码是否违反单向依赖边界"
 
     inputs.files(
