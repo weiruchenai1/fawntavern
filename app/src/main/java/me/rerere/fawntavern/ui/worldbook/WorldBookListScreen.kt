@@ -19,6 +19,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveable
+import me.rerere.fawntavern.ui.components.ResourceEditorRoute
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,16 +48,16 @@ import me.rerere.fawntavern.ui.components.appClickable
 fun WorldBookListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val controller = LocalAppContainer.current.features.worldBooks
-    var selectedBook by remember { mutableStateOf<WorldBook?>(null) }
-    var showWiSettings by remember { mutableStateOf(false) }
+    var selectedName by rememberSaveable { mutableStateOf<String?>(null) }
+    var showWiSettings by rememberSaveable { mutableStateOf(false) }
     // SaveableStateHolder：进入编辑器/设置时列表离开组合，其 LazyListState 被暂存；
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
     val stateHolder = rememberSaveableStateHolder()
 
-    if (selectedBook != null) {
-        stateHolder.SaveableStateProvider("editor") {
-            BackHandler { selectedBook = null }
-            WorldBookViewScreen(book = selectedBook!!, onBack = { selectedBook = null })
+    val selected = selectedName
+    if (selected != null) {
+        ResourceEditorRoute(selected, controller::load, onBack = { selectedName = null }) { book ->
+            WorldBookViewScreen(book = book, onBack = { selectedName = null })
         }
         return
     }
@@ -83,7 +85,7 @@ fun WorldBookListScreen(onBack: () -> Unit) {
         deleteMsgFmtRes = R.string.delete_worldbook_msg_fmt,
         controller = controller,
         exportItem = controller::exportJson,
-        onOpen = { selectedBook = it },
+        onOpen = { selectedName = it.name },
         createItem = CreateItemSpec(
             titleRes = R.string.add_worldbook,
             nameLabelRes = R.string.worldbook_name_label,

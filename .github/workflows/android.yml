@@ -48,7 +48,7 @@ jobs:
       - name: Check module architecture
         run: ./gradlew --no-daemon --no-configuration-cache checkArchitecture
 
-      - name: Run unit tests, lint, and Debug build
+      - name: Run JVM and Compose regression tests, lint, and Debug build
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug :app:assembleDebug
 
       - name: Verify committed Room schemas

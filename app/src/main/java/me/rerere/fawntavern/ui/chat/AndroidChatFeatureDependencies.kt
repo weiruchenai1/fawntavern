@@ -68,4 +68,7 @@ private class AndroidChatTextProvider(
 
     override fun sendFailed(message: String): String =
         context.getString(R.string.chat_send_failed_fmt, message)
+
+    override fun operationFailed(message: String): String =
+        context.getString(R.string.chat_operation_failed_fmt, message)
 }

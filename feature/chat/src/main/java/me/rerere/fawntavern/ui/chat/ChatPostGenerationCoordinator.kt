@@ -1,5 +1,6 @@
 package me.rerere.fawntavern.ui.chat
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import me.rerere.fawntavern.core.diagnostics.SafeLog
@@ -42,6 +43,8 @@ class ChatPostGenerationCoordinator(
                         ),
                         services,
                     )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (error: Exception) {
                     SafeLog.warn(TAG, "extension_generation_hook_failed", error)
                 }
@@ -72,6 +75,8 @@ class ChatPostGenerationCoordinator(
                     userName = userName,
                     charName = characterName,
                 )?.let(onTitle)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 SafeLog.warn(TAG, "session_title_generation_failed", error)
             }

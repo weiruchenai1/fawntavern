@@ -1,6 +1,5 @@
 package me.rerere.fawntavern.ui.preset
 
-import me.rerere.fawntavern.core.diagnostics.SafeLog
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -50,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -86,6 +87,8 @@ import me.rerere.fawntavern.data.preset.PromptItem
 import me.rerere.fawntavern.data.preset.RegexScript
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.LoadingState
+import me.rerere.fawntavern.ui.components.rememberEditorDraft
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.AppTextArea
 import me.rerere.fawntavern.ui.components.DropdownField
@@ -108,7 +111,6 @@ val SOURCES = listOf("openai", "claude", "makersuite", "custom", "openrouter", "
 val ROLES = listOf("system", "user", "assistant")
 val POSITIONS = listOf("Before Chat" to 0, "After Chat" to 1)
 
-private const val PRESET_EDITOR_TAG = "PresetEditor"
 
 @Composable
 fun PresetEditorScreen(
@@ -119,34 +121,25 @@ fun PresetEditorScreen(
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val controller = LocalAppContainer.current.features.presets
-    // 编辑器打开期间固定使用本地草稿；父级打开另一预设时会创建新的编辑器实例。
-    var state by remember { mutableStateOf(PresetEditorState(preset)) }
-    var saving by remember { mutableStateOf(false) }
+    val editor = rememberEditorDraft(
+        kind = "preset",
+        resource = preset.name,
+        initial = PresetEditorState(preset),
+        serializer = PresetEditorState.serializer(),
+        onSaved = onBack,
+    )
+    val state = editor?.value
+    if (state == null) {
+        LoadingState()
+        return
+    }
     fun dispatch(action: PresetEditorAction) {
-        state = reducePresetEditor(state, action)
+        editor.update(reducePresetEditor(editor.value ?: state, action))
     }
 
     // 退出即落盘：保存当前编辑结果后再执行返回导航。
     fun saveAndBack() {
-        if (saving) return
-        saving = true
-        scope.launch {
-            try {
-                controller.save(state.draft)
-                onBack()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                SafeLog.error(PRESET_EDITOR_TAG, "preset_save_failed", error)
-                Toast.makeText(
-                    context,
-                    resources.getString(R.string.preset_save_failed_fmt, error.message.orEmpty()),
-                    Toast.LENGTH_SHORT,
-                ).show()
-            } finally {
-                saving = false
-            }
-        }
+        editor.save { controller.save(it.draft) }
     }
 
     // 系统返回键：编辑弹窗打开时不拦截（交给弹窗自身），否则保存并返回
@@ -259,7 +252,8 @@ fun PresetEditorScreen(
 
     state.editingPrompt?.let { item ->
         PromptEditDialog(
-            item = item,
+            item = state.editingPromptDraft ?: item,
+            onDraftChange = { dispatch(PresetEditorAction.UpdatePromptDraft(it)) },
             onDismiss = { dispatch(PresetEditorAction.DismissPromptEditor) },
             onSave = { dispatch(PresetEditorAction.SavePrompt(it)) },
         )
@@ -277,7 +271,8 @@ fun PresetEditorScreen(
 
     state.editingRegex?.let { script ->
         RegexEditDialog(
-            script = script,
+            script = state.editingRegexDraft ?: script,
+            onDraftChange = { dispatch(PresetEditorAction.UpdateRegexDraft(it)) },
             onDismiss = { dispatch(PresetEditorAction.DismissRegexEditor) },
             onSave = { dispatch(PresetEditorAction.SaveRegex(it)) },
         )
@@ -630,10 +625,13 @@ internal fun RegexEditDialog(
     script: RegexScript,
     onDismiss: () -> Unit,
     onSave: (RegexScript) -> Unit,
+    onDraftChange: ((RegexScript) -> Unit)? = null,
 ) {
     var name by remember { mutableStateOf(script.scriptName) }
-    val find = rememberTextFieldState(script.findRegex)
-    val replace = rememberTextFieldState(script.replaceString)
+    val find = if (onDraftChange == null) rememberTextFieldState(script.findRegex)
+        else remember { TextFieldState(script.findRegex) }
+    val replace = if (onDraftChange == null) rememberTextFieldState(script.replaceString)
+        else remember { TextFieldState(script.replaceString) }
     var onUser by remember { mutableStateOf(1 in script.placement) }
     var onAi by remember { mutableStateOf(2 in script.placement || script.placement.isEmpty()) }
     var markdownOnly by remember { mutableStateOf(script.markdownOnly) }
@@ -641,6 +639,20 @@ internal fun RegexEditDialog(
     var minDepth by remember { mutableStateOf(script.minDepth?.toString() ?: "") }
     var maxDepth by remember { mutableStateOf(script.maxDepth?.toString() ?: "") }
     var advancedOpen by remember { mutableStateOf(false) }
+
+    fun snapshot() = script.copy(
+        scriptName = name,
+        findRegex = find.text.toString(),
+        replaceString = replace.text.toString(),
+        placement = buildList { if (onUser) add(1); if (onAi) add(2) },
+        markdownOnly = markdownOnly,
+        promptOnly = promptOnly,
+        minDepth = minDepth.toIntOrNull()?.takeIf { it >= 0 },
+        maxDepth = maxDepth.toIntOrNull()?.takeIf { it >= 0 },
+    )
+    LaunchedEffect(script.id) {
+        snapshotFlow { snapshot() }.collect { onDraftChange?.invoke(it) }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -675,20 +687,7 @@ internal fun RegexEditDialog(
                         horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
                     ) {
                         TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                        Button(onClick = {
-                            val placement = buildList {
-                                if (onUser) add(1)
-                                if (onAi) add(2)
-                            }
-                            onSave(script.copy(
-                                scriptName = name, findRegex = find.text.toString(),
-                                replaceString = replace.text.toString(),
-                                placement = placement,
-                                markdownOnly = markdownOnly, promptOnly = promptOnly,
-                                minDepth = minDepth.toIntOrNull()?.takeIf { it >= 0 },
-                                maxDepth = maxDepth.toIntOrNull()?.takeIf { it >= 0 },
-                            ))
-                        }) { Text(stringResource(R.string.save)) }
+                        Button(onClick = { onSave(snapshot()) }) { Text(stringResource(R.string.save)) }
                     }
                 }
             ) { padding ->
@@ -761,14 +760,28 @@ private fun PromptEditDialog(
     item: PromptItem,
     onDismiss: () -> Unit,
     onSave: (PromptItem) -> Unit,
+    onDraftChange: (PromptItem) -> Unit,
 ) {
     var name by remember { mutableStateOf(item.name) }
     var role by remember { mutableStateOf(item.role) }
-    val content = rememberTextFieldState(item.content)
+    val content = remember { TextFieldState(item.content) }
     var injectionPos by remember { mutableIntStateOf(item.injectionPosition) }
     var injectionDepth by remember { mutableStateOf(item.injectionDepth.toString()) }
     var forbidOverrides by remember { mutableStateOf(item.forbidOverrides) }
     var systemPrompt by remember { mutableStateOf(item.systemPrompt) }
+
+    fun snapshot() = item.copy(
+        name = name,
+        role = role,
+        content = content.text.toString(),
+        injectionPosition = injectionPos,
+        injectionDepth = injectionDepth.toIntOrNull() ?: item.injectionDepth,
+        forbidOverrides = forbidOverrides,
+        systemPrompt = systemPrompt,
+    )
+    LaunchedEffect(item.identifier) {
+        snapshotFlow { snapshot() }.collect(onDraftChange)
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -803,14 +816,7 @@ private fun PromptEditDialog(
                         horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
                     ) {
                         TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                        Button(onClick = {
-                            onSave(item.copy(
-                                name = name, role = role, content = content.text.toString(),
-                                injectionPosition = injectionPos,
-                                injectionDepth = injectionDepth.toIntOrNull() ?: item.injectionDepth,
-                                forbidOverrides = forbidOverrides, systemPrompt = systemPrompt,
-                            ))
-                        }) { Text(stringResource(R.string.save)) }
+                        Button(onClick = { onSave(snapshot()) }) { Text(stringResource(R.string.save)) }
                     }
                 }
             ) { padding ->

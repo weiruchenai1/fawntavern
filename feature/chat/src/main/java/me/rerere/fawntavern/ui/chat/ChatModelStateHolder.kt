@@ -27,24 +27,24 @@ class ChatModelStateHolder(
     var apiConfig by mutableStateOf(repository.load())
         private set
 
-    var reasoning by mutableStateOf(controller.reasoning(apiConfig.currentModel))
+    private var characterName: String? = null
+
+    var selectedModelSpec by mutableStateOf(controller.effectiveModelSpec(null, apiConfig))
         private set
 
-    var imageGeneration by mutableStateOf(controller.imageGeneration(apiConfig.currentModel))
+    var reasoning by mutableStateOf(controller.reasoning(selectedModelSpec.orEmpty()))
+        private set
+
+    var imageGeneration by mutableStateOf(controller.imageGeneration(selectedModelSpec.orEmpty()))
         private set
 
     var revision by mutableIntStateOf(0)
         private set
 
-    fun effectiveModelSpec(characterName: String?): String? =
-        controller.effectiveModelSpec(characterName, apiConfig)
+    fun resolveProvider() = controller.providerFor(selectedModelSpec, apiConfig)
 
-    fun resolveProvider(characterName: String?) =
-        controller.resolveProvider(characterName, apiConfig)
-
-    fun capabilities(characterName: String?): ChatModelCapabilities {
-        revision
-        val (provider, modelId) = resolveProvider(characterName)
+    fun capabilities(): ChatModelCapabilities {
+        val (provider, modelId) = resolveProvider()
             ?: return ChatModelCapabilities(false, false, false)
         val selected = provider.model(modelId)
             ?: return ChatModelCapabilities(false, false, false)
@@ -56,8 +56,8 @@ class ChatModelStateHolder(
         )
     }
 
-    fun toggleBuiltInSearch(characterName: String?) {
-        val (provider, modelId) = resolveProvider(characterName) ?: return
+    fun toggleBuiltInSearch() {
+        val (provider, modelId) = resolveProvider() ?: return
         val modelIndex = provider.models.indexOfFirst { it.id == modelId }
         if (modelIndex < 0) return
         val selected = provider.models[modelIndex]
@@ -79,37 +79,37 @@ class ChatModelStateHolder(
 
     fun reload(characterName: String?) {
         apiConfig = repository.load()
-        val spec = effectiveModelSpec(characterName) ?: apiConfig.currentModel
-        reasoning = controller.reasoning(spec)
-        imageGeneration = controller.imageGeneration(spec)
+        refreshCharacter(characterName)
     }
 
     fun select(characterName: String?, providerId: String, modelId: String) {
         val spec = "$providerId::$modelId"
-        reasoning = controller.select(characterName, spec)
-        imageGeneration = controller.imageGeneration(spec)
-        revision++
+        controller.select(characterName, spec)
+        refreshCharacter(characterName)
     }
 
-    fun updateReasoning(characterName: String?, level: ReasoningLevel) {
+    fun updateReasoning(level: ReasoningLevel) {
+        controller.saveReasoning(selectedModelSpec.orEmpty(), level)
         reasoning = level
-        controller.saveReasoning(effectiveModelSpec(characterName) ?: apiConfig.currentModel, level)
     }
 
-    fun updateImageGeneration(characterName: String?, settings: ImageGenerationSettings) {
+    fun updateImageGeneration(settings: ImageGenerationSettings) {
+        controller.saveImageGeneration(selectedModelSpec.orEmpty(), settings)
         imageGeneration = settings
-        controller.saveImageGeneration(effectiveModelSpec(characterName) ?: apiConfig.currentModel, settings)
     }
 
     fun updateApiConfig(config: ApiConfig) {
-        apiConfig = config
         repository.save(config)
-        revision++
+        apiConfig = config
+        refreshCharacter(characterName)
     }
 
     fun refreshCharacter(characterName: String?) {
-        val spec = effectiveModelSpec(characterName).orEmpty()
+        this.characterName = characterName
+        selectedModelSpec = controller.effectiveModelSpec(characterName, apiConfig)
+        val spec = selectedModelSpec.orEmpty()
         reasoning = controller.reasoning(spec)
         imageGeneration = controller.imageGeneration(spec)
+        revision++
     }
 }

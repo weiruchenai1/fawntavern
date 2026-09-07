@@ -90,6 +90,10 @@ android {
         buildConfig = true
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
@@ -115,8 +119,6 @@ dependencies {
     implementation(project(":feature:chat"))
     implementation(project(":feature:api"))
     implementation(project(":feature:character"))
-    implementation(project(":feature:extension"))
-    implementation(project(":feature:diagnostics"))
     implementation(project(":feature:preset"))
     implementation(project(":feature:regex"))
     implementation(project(":feature:settings"))
@@ -180,6 +182,9 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
     testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.ui.test.junit4)
+    debugImplementation(libs.androidx.ui.test.manifest)
 
 }
 

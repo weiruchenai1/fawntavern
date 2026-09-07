@@ -40,6 +40,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,10 +70,13 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.data.worldbook.WorldBookEntry
 import me.rerere.fawntavern.data.worldbook.WorldBookPos
 import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.LoadingState
+import me.rerere.fawntavern.ui.components.rememberEditorDraft
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.AppTextArea
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
@@ -108,25 +113,56 @@ private enum class WiStatus { CONSTANT, KEYWORD, VECTORIZED }
 
 @Composable
 fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
-    val context = LocalContext.current
-    val resources = LocalResources.current
-    val scope = rememberCoroutineScope()
     val controller = LocalAppContainer.current.features.worldBooks
     val saveCoordinator = remember(book.name, controller) {
         WorldBookSaveCoordinator { entries -> controller.saveEntries(book.name, entries) }
     }
+    val editor = rememberEditorDraft("worldbook", book.name, WorldBookEditorState(book), WorldBookEditorState.serializer(), onBack)
+    val draft = editor?.value
+    if (draft == null) {
+        LoadingState()
+        return
+    }
+    WorldBookEditorContent(
+        draft = draft,
+        saveCoordinator = saveCoordinator,
+        onDraftChange = editor::update,
+        onSave = { snapshot ->
+            editor.update(snapshot)
+            editor.save { saveCoordinator.saveLatest(saveCoordinator.request(it.book.entries.values.toList())) }
+        },
+    )
+}
+
+@Composable
+private fun WorldBookEditorContent(
+    draft: WorldBookEditorState,
+    saveCoordinator: WorldBookSaveCoordinator,
+    onDraftChange: (WorldBookEditorState) -> Unit,
+    onSave: (WorldBookEditorState) -> Unit,
+) {
+    val book = draft.book
+    val context = LocalContext.current
+    val resources = LocalResources.current
+    val scope = rememberCoroutineScope()
     var expandedId by remember { mutableStateOf<Int?>(null) }
-    var editingEntry by remember { mutableStateOf<WorldBookEntry?>(null) }
+    var editingEntry by remember { mutableStateOf(draft.editingEntry) }
     var deletingEntry by remember { mutableStateOf<WorldBookEntry?>(null) }
     // 按文件/解析顺序展示（= ST 的 display_index 顺序）；insertion_order 是注入顺序，不用于列表排序
     var entries by remember { mutableStateOf(book.entries.values.toList()) }
-    var leaving by remember { mutableStateOf(false) }
+    LaunchedEffect(book.name) {
+        snapshotFlow {
+            WorldBookEditorState(book.copy(entries = entries.associateBy { it.id }), editingEntry)
+        }.collect(onDraftChange)
+    }
 
     fun saveBook() {
         val request = saveCoordinator.request(entries)
         scope.launch {
             try {
                 saveCoordinator.saveLatest(request)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 Toast.makeText(
                     context,
@@ -138,22 +174,7 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
     }
 
     fun leaveAfterSave() {
-        if (leaving) return
-        leaving = true
-        val request = saveCoordinator.request(entries)
-        scope.launch {
-            try {
-                saveCoordinator.saveLatest(request)
-                onBack()
-            } catch (error: Exception) {
-                leaving = false
-                Toast.makeText(
-                    context,
-                    resources.getString(R.string.worldbook_save_failed_fmt, error.message.orEmpty()),
-                    Toast.LENGTH_SHORT,
-                ).show()
-            }
-        }
+        onSave(WorldBookEditorState(book.copy(entries = entries.associateBy { it.id }), editingEntry))
     }
 
     // 新条目 id 取现有最大值 +1：saveEntries 按 id patch 原文件，撞号会覆盖别的条目
@@ -167,6 +188,7 @@ fun WorldBookViewScreen(book: WorldBook, onBack: () -> Unit) {
     editingEntry?.let { entry ->
         EntryEditDialog(
             entry = entry,
+            onDraftChange = { editingEntry = it },
             // 列表里没有这个 id = 从「添加条目」进来的新条目，保存时才真正入列
             isNew = entries.none { it.id == entry.id },
             onDismiss = { editingEntry = null },
@@ -301,37 +323,63 @@ private fun EntryEditDialog(
     isNew: Boolean,
     onDismiss: () -> Unit,
     onSave: (WorldBookEntry) -> Unit,
+    onDraftChange: (WorldBookEntry) -> Unit,
 ) {
-    var eComment by remember(entry) { mutableStateOf(entry.comment) }
-    val eContent = remember(entry) { TextFieldState(entry.content) }
-    var eKeys by remember(entry) { mutableStateOf(entry.keys.joinToString(", ")) }
-    var eSecondary by remember(entry) { mutableStateOf(entry.keySecondary.joinToString(", ")) }
-    var eEnabled by remember(entry) { mutableStateOf(entry.enabled) }
-    var eStatus by remember(entry) {
+    var eComment by remember(entry.id) { mutableStateOf(entry.comment) }
+    val eContent = remember(entry.id) { TextFieldState(entry.content) }
+    var eKeys by remember(entry.id) { mutableStateOf(entry.keys.joinToString(", ")) }
+    var eSecondary by remember(entry.id) { mutableStateOf(entry.keySecondary.joinToString(", ")) }
+    var eEnabled by remember(entry.id) { mutableStateOf(entry.enabled) }
+    var eStatus by remember(entry.id) {
         mutableStateOf(when { entry.constant -> WiStatus.CONSTANT; entry.vectorized -> WiStatus.VECTORIZED; else -> WiStatus.KEYWORD })
     }
-    var ePosition by remember(entry) { mutableStateOf(entry.position) }
-    var eRole by remember(entry) { mutableIntStateOf(entry.role) }
-    var eOrder by remember(entry) { mutableStateOf(entry.insertionOrder.toString()) }
-    var eDepth by remember(entry) { mutableStateOf(entry.depth.toString()) }
-    var eOutlet by remember(entry) { mutableStateOf(entry.outletName) }
-    var eLogic by remember(entry) { mutableIntStateOf(entry.selectiveLogic) }
-    var eProbability by remember(entry) { mutableIntStateOf(entry.probability) }
+    var ePosition by remember(entry.id) { mutableStateOf(entry.position) }
+    var eRole by remember(entry.id) { mutableIntStateOf(entry.role) }
+    var eOrder by remember(entry.id) { mutableStateOf(entry.insertionOrder.toString()) }
+    var eDepth by remember(entry.id) { mutableStateOf(entry.depth.toString()) }
+    var eOutlet by remember(entry.id) { mutableStateOf(entry.outletName) }
+    var eLogic by remember(entry.id) { mutableIntStateOf(entry.selectiveLogic) }
+    var eProbability by remember(entry.id) { mutableIntStateOf(entry.probability) }
     // 高级
-    var showAdvanced by remember(entry) { mutableStateOf(false) }
-    var eScanDepth by remember(entry) { mutableStateOf(entry.scanDepth?.toString() ?: "") }
-    var eCase by remember(entry) { mutableStateOf(entry.caseSensitive) }
-    var eWholeWords by remember(entry) { mutableStateOf(entry.matchWholeWords) }
-    var eExcludeRec by remember(entry) { mutableStateOf(entry.excludeRecursion) }
-    var ePreventRec by remember(entry) { mutableStateOf(entry.preventRecursion) }
-    var eDelayRec by remember(entry) { mutableStateOf(entry.delayUntilRecursion) }
-    var eGroup by remember(entry) { mutableStateOf(entry.group) }
-    var eGroupWeight by remember(entry) { mutableStateOf(entry.groupWeight.toString()) }
-    var eGroupOverride by remember(entry) { mutableStateOf(entry.groupOverride) }
-    var eGroupScoring by remember(entry) { mutableStateOf(entry.useGroupScoring) }
-    var eSticky by remember(entry) { mutableStateOf(entry.sticky.toString()) }
-    var eCooldown by remember(entry) { mutableStateOf(entry.cooldown.toString()) }
-    var eDelay by remember(entry) { mutableStateOf(entry.delay.toString()) }
+    var showAdvanced by remember(entry.id) { mutableStateOf(false) }
+    var eScanDepth by remember(entry.id) { mutableStateOf(entry.scanDepth?.toString() ?: "") }
+    var eCase by remember(entry.id) { mutableStateOf(entry.caseSensitive) }
+    var eWholeWords by remember(entry.id) { mutableStateOf(entry.matchWholeWords) }
+    var eExcludeRec by remember(entry.id) { mutableStateOf(entry.excludeRecursion) }
+    var ePreventRec by remember(entry.id) { mutableStateOf(entry.preventRecursion) }
+    var eDelayRec by remember(entry.id) { mutableStateOf(entry.delayUntilRecursion) }
+    var eGroup by remember(entry.id) { mutableStateOf(entry.group) }
+    var eGroupWeight by remember(entry.id) { mutableStateOf(entry.groupWeight.toString()) }
+    var eGroupOverride by remember(entry.id) { mutableStateOf(entry.groupOverride) }
+    var eGroupScoring by remember(entry.id) { mutableStateOf(entry.useGroupScoring) }
+    var eSticky by remember(entry.id) { mutableStateOf(entry.sticky.toString()) }
+    var eCooldown by remember(entry.id) { mutableStateOf(entry.cooldown.toString()) }
+    var eDelay by remember(entry.id) { mutableStateOf(entry.delay.toString()) }
+
+    fun snapshot() = entry.copy(
+        comment = eComment, content = eContent.text.toString(),
+        keys = eKeys.split(",").map { it.trim() }.filter { it.isNotBlank() },
+        keySecondary = eSecondary.split(",").map { it.trim() }.filter { it.isNotBlank() },
+        enabled = eEnabled,
+        constant = eStatus == WiStatus.CONSTANT,
+        vectorized = eStatus == WiStatus.VECTORIZED,
+        position = ePosition, role = eRole,
+        insertionOrder = eOrder.toIntOrNull() ?: entry.insertionOrder,
+        depth = eDepth.toIntOrNull() ?: entry.depth,
+        outletName = eOutlet.trim(),
+        selectiveLogic = eLogic, probability = eProbability,
+        scanDepth = eScanDepth.toIntOrNull()?.takeIf { it > 0 },
+        caseSensitive = eCase, matchWholeWords = eWholeWords,
+        excludeRecursion = eExcludeRec, preventRecursion = ePreventRec, delayUntilRecursion = eDelayRec,
+        group = eGroup.trim(), groupWeight = eGroupWeight.toIntOrNull() ?: entry.groupWeight,
+        groupOverride = eGroupOverride, useGroupScoring = eGroupScoring,
+        sticky = eSticky.toIntOrNull() ?: 0,
+        cooldown = eCooldown.toIntOrNull() ?: 0,
+        delay = eDelay.toIntOrNull() ?: 0,
+    )
+    LaunchedEffect(entry.id) {
+        snapshotFlow { snapshot() }.collect(onDraftChange)
+    }
 
     val isAtDepth = ePosition == WorldBookPos.AT_DEPTH
     val isOutlet = ePosition == WorldBookPos.OUTLET
@@ -370,29 +418,7 @@ private fun EntryEditDialog(
                         horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
                     ) {
                         TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                        Button(onClick = {
-                            onSave(entry.copy(
-                                comment = eComment, content = eContent.text.toString(),
-                                keys = eKeys.split(",").map { it.trim() }.filter { it.isNotBlank() },
-                                keySecondary = eSecondary.split(",").map { it.trim() }.filter { it.isNotBlank() },
-                                enabled = eEnabled,
-                                constant = eStatus == WiStatus.CONSTANT,
-                                vectorized = eStatus == WiStatus.VECTORIZED,
-                                position = ePosition, role = eRole,
-                                insertionOrder = eOrder.toIntOrNull() ?: entry.insertionOrder,
-                                depth = eDepth.toIntOrNull() ?: entry.depth,
-                                outletName = eOutlet.trim(),
-                                selectiveLogic = eLogic, probability = eProbability,
-                                scanDepth = eScanDepth.toIntOrNull()?.takeIf { it > 0 },
-                                caseSensitive = eCase, matchWholeWords = eWholeWords,
-                                excludeRecursion = eExcludeRec, preventRecursion = ePreventRec, delayUntilRecursion = eDelayRec,
-                                group = eGroup.trim(), groupWeight = eGroupWeight.toIntOrNull() ?: entry.groupWeight,
-                                groupOverride = eGroupOverride, useGroupScoring = eGroupScoring,
-                                sticky = eSticky.toIntOrNull() ?: 0,
-                                cooldown = eCooldown.toIntOrNull() ?: 0,
-                                delay = eDelay.toIntOrNull() ?: 0,
-                            ))
-                        }) { Text(stringResource(R.string.save)) }
+                        Button(onClick = { onSave(snapshot()) }) { Text(stringResource(R.string.save)) }
                     }
                 }
             ) { padding ->

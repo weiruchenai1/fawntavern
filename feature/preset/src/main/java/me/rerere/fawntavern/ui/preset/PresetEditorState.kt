@@ -1,15 +1,19 @@
 package me.rerere.fawntavern.ui.preset
 
+import kotlinx.serialization.Serializable
 import me.rerere.fawntavern.data.preset.PromptItem
 import me.rerere.fawntavern.data.preset.RegexScript
 import me.rerere.fawntavern.data.preset.StPreset
 
 /** 预设编辑器的不可变业务状态；弹窗显示由编辑目标推导。 */
+@Serializable
 data class PresetEditorState(
     val draft: StPreset,
     val selectedTab: Int = 0,
     val editingPrompt: PromptItem? = null,
     val editingRegex: RegexScript? = null,
+    val editingPromptDraft: PromptItem? = null,
+    val editingRegexDraft: RegexScript? = null,
     val deletePromptIdentifier: String? = null,
     val deleteRegex: RegexScript? = null,
 ) {
@@ -23,6 +27,7 @@ sealed interface PresetEditorAction {
     data class UpdateDraft(val preset: StPreset) : PresetEditorAction
 
     data class EditPrompt(val prompt: PromptItem) : PresetEditorAction
+    data class UpdatePromptDraft(val prompt: PromptItem) : PresetEditorAction
     data class SavePrompt(val prompt: PromptItem) : PresetEditorAction
     data object DismissPromptEditor : PresetEditorAction
     data class TogglePrompt(val identifier: String) : PresetEditorAction
@@ -32,6 +37,7 @@ sealed interface PresetEditorAction {
     data object DismissPromptDelete : PresetEditorAction
 
     data class EditRegex(val regex: RegexScript) : PresetEditorAction
+    data class UpdateRegexDraft(val regex: RegexScript) : PresetEditorAction
     data class CreateRegex(val regex: RegexScript) : PresetEditorAction
     data class SaveRegex(val regex: RegexScript) : PresetEditorAction
     data object DismissRegexEditor : PresetEditorAction
@@ -51,16 +57,20 @@ fun reducePresetEditor(
 
     is PresetEditorAction.EditPrompt -> state.copy(
         editingPrompt = action.prompt,
+        editingPromptDraft = null,
+        editingRegexDraft = null,
         editingRegex = null,
         deletePromptIdentifier = null,
         deleteRegex = null,
     )
-    PresetEditorAction.DismissPromptEditor -> state.copy(editingPrompt = null)
+    is PresetEditorAction.UpdatePromptDraft -> if (state.editingPrompt == null) state
+        else state.copy(editingPromptDraft = action.prompt)
+    PresetEditorAction.DismissPromptEditor -> state.copy(editingPrompt = null, editingPromptDraft = null)
     is PresetEditorAction.SavePrompt -> {
         val prompts = state.draft.prompts.toMutableList()
         val index = prompts.indexOfFirst { it.identifier == action.prompt.identifier }
         if (index >= 0) prompts[index] = action.prompt else prompts += action.prompt
-        state.copy(draft = state.draft.copy(prompts = prompts), editingPrompt = null)
+        state.copy(draft = state.draft.copy(prompts = prompts), editingPrompt = null, editingPromptDraft = null)
     }
     is PresetEditorAction.TogglePrompt -> state.updatePrompt(action.identifier) {
         it.copy(enabled = !it.enabled)
@@ -70,7 +80,9 @@ fun reducePresetEditor(
     )
     is PresetEditorAction.RequestPromptDelete -> state.copy(
         editingPrompt = null,
+        editingPromptDraft = null,
         editingRegex = null,
+        editingRegexDraft = null,
         deleteRegex = null,
         deletePromptIdentifier = action.identifier.takeIf { id ->
             state.draft.prompts.any { it.identifier == id }
@@ -80,18 +92,24 @@ fun reducePresetEditor(
     PresetEditorAction.DismissPromptDelete -> state.copy(deletePromptIdentifier = null)
 
     is PresetEditorAction.EditRegex -> state.copy(
+        editingRegexDraft = null,
+        editingPromptDraft = null,
         editingPrompt = null,
         editingRegex = state.draft.regexScripts.firstOrNull { it.matchesRegex(action.regex) },
         deletePromptIdentifier = null,
         deleteRegex = null,
     )
     is PresetEditorAction.CreateRegex -> state.copy(
+        editingRegexDraft = null,
+        editingPromptDraft = null,
         editingPrompt = null,
         editingRegex = action.regex,
         deletePromptIdentifier = null,
         deleteRegex = null,
     )
-    PresetEditorAction.DismissRegexEditor -> state.copy(editingRegex = null)
+    is PresetEditorAction.UpdateRegexDraft -> if (state.editingRegex == null) state
+        else state.copy(editingRegexDraft = action.regex)
+    PresetEditorAction.DismissRegexEditor -> state.copy(editingRegex = null, editingRegexDraft = null)
     is PresetEditorAction.SaveRegex -> state.saveRegex(action.regex)
     is PresetEditorAction.ToggleRegex -> state.updateRegex(action.regex) {
         it.copy(disabled = !it.disabled)
@@ -101,7 +119,9 @@ fun reducePresetEditor(
     )
     is PresetEditorAction.RequestRegexDelete -> state.copy(
         editingPrompt = null,
+        editingPromptDraft = null,
         editingRegex = null,
+        editingRegexDraft = null,
         deletePromptIdentifier = null,
         deleteRegex = state.draft.regexScripts.firstOrNull { it.matchesRegex(action.regex) },
     )
@@ -135,7 +155,7 @@ private fun PresetEditorState.saveRegex(regex: RegexScript): PresetEditorState {
     val scripts = draft.regexScripts.toMutableList().also {
         if (index >= 0) it[index] = regex else it += regex
     }
-    return copy(draft = draft.copy(regexScripts = scripts), editingRegex = null)
+    return copy(draft = draft.copy(regexScripts = scripts), editingRegex = null, editingRegexDraft = null)
 }
 
 private fun PresetEditorState.deletePrompt(): PresetEditorState {

@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.ui.chat
 
 import me.rerere.fawntavern.data.api.ApiConfig
+import me.rerere.fawntavern.data.api.ApiConfigRepository
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ModelInfo
 import me.rerere.fawntavern.data.api.ImageGenerationSettings
@@ -10,6 +11,43 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ChatModelControllerTest {
+    @Test
+    fun renderingModelStateDoesNotReadPreferencesAgain() {
+        val source = FakeChatModelDataSource()
+        val config = ApiConfig(listOf(provider("api", "model")), "api::model")
+        val state = ChatModelStateHolder(ChatModelController(source), object : ApiConfigRepository {
+            override fun load() = config
+            override fun save(config: ApiConfig) = Unit
+        })
+        state.refreshCharacter("Character")
+        val reads = source.reads
+        repeat(100) {
+            assertEquals("api::model", state.selectedModelSpec)
+            state.resolveProvider()
+            state.capabilities()
+        }
+        assertEquals(reads, source.reads)
+    }
+
+    @Test
+    fun explicitReloadRefreshesTheCachedModelAndItsSettings() {
+        val source = FakeChatModelDataSource()
+        var config = ApiConfig(listOf(provider("api", "model"), provider("new", "model")), "api::model")
+        val state = ChatModelStateHolder(ChatModelController(source), object : ApiConfigRepository {
+            override fun load() = config
+            override fun save(config: ApiConfig) = Unit
+        })
+        source.defaultModel = "new::model"
+        source.reasoningByModel["new::model"] = ReasoningLevel.HIGH
+        assertEquals("api::model", state.selectedModelSpec)
+        state.reload(null)
+        assertEquals("new::model", state.selectedModelSpec)
+        assertEquals(ReasoningLevel.HIGH, state.reasoning)
+        config = config.copy(providers = listOf(provider("api", "model")))
+        state.reload(null)
+        assertEquals("api::model", state.selectedModelSpec)
+    }
+
     @Test
     fun effectiveModelUsesCharacterThenDefaultThenApiFallback() {
         val source = FakeChatModelDataSource()
@@ -61,16 +99,20 @@ class ChatModelControllerTest {
     }
 
     private class FakeChatModelDataSource : ChatModelDataSource {
+        var reads = 0
         val characterModels = mutableMapOf<String, String>()
         var defaultModel = ""
         val reasoningByModel = mutableMapOf<String, ReasoningLevel>()
         val imageGenerationByModel = mutableMapOf<String, ImageGenerationSettings>()
 
-        override fun characterModel(characterName: String): String = characterModels[characterName].orEmpty()
+        override fun characterModel(characterName: String): String {
+            reads++
+            return characterModels[characterName].orEmpty()
+        }
         override fun saveCharacterModel(characterName: String, modelSpec: String) {
             characterModels[characterName] = modelSpec
         }
-        override fun defaultChatModel(): String = defaultModel
+        override fun defaultChatModel(): String { reads++; return defaultModel }
         override fun saveDefaultChatModel(modelSpec: String) { defaultModel = modelSpec }
         override fun reasoning(modelSpec: String): ReasoningLevel =
             reasoningByModel[modelSpec] ?: ReasoningLevel.AUTO

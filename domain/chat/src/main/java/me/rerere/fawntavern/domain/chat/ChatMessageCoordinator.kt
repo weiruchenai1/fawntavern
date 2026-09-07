@@ -6,11 +6,16 @@ import kotlinx.coroutines.sync.withLock
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
 
-/** Serializes per-session message mutations and reconciles the persisted session. */
+/** 按会话串行修改消息，并返回持久化结果供界面校准。 */
 class ChatMessageCoordinator(
     private val repository: ChatDataRepository,
 ) {
     private val mutationMutexes = ConcurrentHashMap<String, Mutex>()
+
+    suspend fun latestMessage(sessionId: String, timestamp: Long): ChatMessage? =
+        mutationMutexes.getOrPut(sessionId) { Mutex() }.withLock {
+            repository.getMessage(sessionId, timestamp)
+        }
 
     suspend fun switchAlt(session: ChatSession, ts: Long, dir: Int): ChatMessage? = mutate(session, ts) {
         repository.switchAlternative(session.id, ts, dir)

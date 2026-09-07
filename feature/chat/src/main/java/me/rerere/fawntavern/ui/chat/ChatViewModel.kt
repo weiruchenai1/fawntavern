@@ -2,11 +2,14 @@ package me.rerere.fawntavern.ui.chat
 
 import me.rerere.fawntavern.core.diagnostics.SafeLog
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
@@ -16,14 +19,13 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.channels.BufferOverflow
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.rerere.fawntavern.data.api.ApiProvider
-import me.rerere.fawntavern.data.api.ImageGenerationSettings
-import me.rerere.fawntavern.data.api.ReasoningLevel
 import me.rerere.fawntavern.data.character.CharRegex
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
 import me.rerere.fawntavern.domain.GenerationEngine
-import me.rerere.fawntavern.domain.ChatGenerationMode
 import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.domain.PromptBuilder
 import me.rerere.fawntavern.domain.ChatRegenerationPlan
@@ -31,7 +33,6 @@ import me.rerere.fawntavern.domain.ChatRegenerationPlanner
 import me.rerere.fawntavern.domain.chat.ChatMessageCoordinator
 import me.rerere.fawntavern.domain.chat.CommitChatGenerationUseCase
 import me.rerere.fawntavern.domain.chat.ChatSessionCoordinator
-import me.rerere.fawntavern.domain.chat.RepositoryChatSessionDataSource
 import me.rerere.fawntavern.extension.QuickReply
 import org.json.JSONObject
 
@@ -126,14 +127,15 @@ class ChatViewModel(
     private val searchProviderName: String
         get() = search.providerName
     private val modelCapabilities: ChatModelCapabilities
-        get() = model.capabilities(currentCard?.name)
+        get() = model.capabilities()
     private val tts = ChatTtsStateHolder(platformDependencies.ttsControllerFactory, viewModelScope)
 
     private val displayRegexScripts: List<CharRegex>
         get() = promptContext.displayRegex
 
     private val chatRepository = sessionDependencies.chatRepository
-    private val frontendVariablesRevision = mutableIntStateOf(0)
+    private var globalVariables by mutableStateOf(generationDependencies.promptEnvironment.globalVariables())
+    private val variableWriteMutex = Mutex()
     private val frontendRpcController by lazy {
         ChatFrontendRpcController(
             repository = chatRepository,
@@ -144,7 +146,7 @@ class ChatViewModel(
             loadGlobalVariables = generationDependencies.promptEnvironment::globalVariables,
             saveGlobalVariables = { values ->
                 generationDependencies.generationResources.saveGlobalVariables(values)
-                frontendVariablesRevision.intValue++
+                globalVariables = values
             },
             scopedVariables = sessionDependencies.frontendVariableDataSource,
             scopeOwner = { scope, params ->
@@ -182,7 +184,15 @@ class ChatViewModel(
         get() = generationOrchestrator.isRunning
     private val messageCoordinator by lazy { ChatMessageCoordinator(chatRepository) }
     private val messageMutations by lazy {
-        ChatMessageMutationCoordinator(viewModelScope, messageCoordinator, conversation)
+        ChatMessageMutationCoordinator(
+            scope = viewModelScope,
+            persistence = messageCoordinator,
+            conversation = conversation,
+            onFailure = ::handleOperationFailure,
+            onCommitted = { event, timestamp ->
+                emitFrontendEvent(event, JSONObject().put("message_ts", timestamp).toString())
+            },
+        )
     }
     private val attachmentCoordinator by lazy {
         ChatAttachmentCoordinator(sessionDependencies.attachmentDataSource)
@@ -201,6 +211,7 @@ class ChatViewModel(
             generation = generationOrchestrator,
             resolveModel = ::currentProviderAndModel,
             onFailure = ::handleSendFailure,
+            canSend = { !sessionActions.isSelecting },
         )
     }
     private val refreshChatData by lazy {
@@ -216,7 +227,7 @@ class ChatViewModel(
         )
     }
     private val sessionCoordinator by lazy {
-        ChatSessionCoordinator(RepositoryChatSessionDataSource(chatRepository))
+        ChatSessionCoordinator(chatRepository)
     }
     private val startupCoordinator by lazy {
         ChatStartupCoordinator(sessionCoordinator, promptContextDataSource)
@@ -230,6 +241,11 @@ class ChatViewModel(
             promptContext = promptContext,
             newChatOnCharacterSwitch = { uiSettings.value.newChatOnCharSwitch },
             newChatOnDelete = { uiSettings.value.newChatOnDeleteTopic },
+            canSelect = { !generating },
+            onFailure = ::handleOperationFailure,
+            onSelected = { id ->
+                emitFrontendEvent("chat_id_changed", JSONObject().put("chat_id", id).toString())
+            },
         )
     }
     private val generationRunner by lazy {
@@ -280,6 +296,9 @@ class ChatViewModel(
 
     init {
         platformDependencies.initialize()
+        viewModelScope.launch {
+            generationDependencies.promptEnvironment.observeGlobalVariables().collect { globalVariables = it }
+        }
         quickReplies.refresh()
         // 会话列表来自 Repository 的 Flow：任何 save/delete/clear 后自动刷新
         viewModelScope.launch {
@@ -310,7 +329,6 @@ class ChatViewModel(
 
     val uiState: ChatUiState
         get() {
-            frontendVariablesRevision.intValue
             return ChatUiState(
                 conversation = ChatConversationState(
                     sessions = sessions,
@@ -345,7 +363,7 @@ class ChatViewModel(
                     builtInEnabled = modelCapabilities.builtInSearchEnabled,
                 ),
                 settings = uiSettings.value,
-                globalVariables = generationDependencies.promptEnvironment.globalVariables(),
+                globalVariables = globalVariables,
             )
         }
 
@@ -371,21 +389,21 @@ class ChatViewModel(
             ChatAction.NewChat -> newChat()
             is ChatAction.OpenSession -> openSession(action.id)
             is ChatAction.DeleteSession -> deleteSession(action.id)
-            is ChatAction.RenameSession -> renameSession(action.id, action.title)
-            is ChatAction.SetSessionPinned -> setSessionPinned(action.id, action.pinned)
-            is ChatAction.RegenerateTitle -> regenerateTitle(action.id)
+            is ChatAction.RenameSession -> sessionActions.rename(action.id, action.title)
+            is ChatAction.SetSessionPinned -> sessionActions.setPinned(action.id, action.pinned)
+            is ChatAction.RegenerateTitle -> generationOrchestrator.generateTitle(action.id)
             is ChatAction.OpenCharacter -> openCharacter(action.fileName, action.displayName)
-            is ChatAction.SelectModel -> selectModel(action.providerId, action.modelId)
-            is ChatAction.UpdateReasoning -> updateReasoning(action.level)
-            is ChatAction.UpdateImageGeneration -> updateImageGeneration(action.settings)
-            ChatAction.StopGeneration -> stopGenerate()
-            ChatAction.ToggleSearch -> toggleSearch()
-            ChatAction.ToggleBuiltInSearch -> toggleBuiltInSearch()
-            is ChatAction.SelectSearchProvider -> selectSearchProvider(action.index)
+            is ChatAction.SelectModel -> model.select(currentCard?.name, action.providerId, action.modelId)
+            is ChatAction.UpdateReasoning -> model.updateReasoning(action.level)
+            is ChatAction.UpdateImageGeneration -> model.updateImageGeneration(action.settings)
+            ChatAction.StopGeneration -> generationOrchestrator.stop()
+            ChatAction.ToggleSearch -> search.toggle()
+            ChatAction.ToggleBuiltInSearch -> model.toggleBuiltInSearch()
+            is ChatAction.SelectSearchProvider -> search.selectProvider(action.index)
             is ChatAction.AddAttachments -> input.addAttachments(action.values)
             is ChatAction.RemoveAttachment -> input.removeAttachment(action.value)
             is ChatAction.SetInputText -> input.text = action.text
-            ChatAction.CancelEdit -> cancelEdit()
+            ChatAction.CancelEdit -> input.cancelEditing()
             is ChatAction.StartEdit -> startEdit(action.message)
             is ChatAction.SwitchAlternative -> switchAlt(action.message, action.direction)
             is ChatAction.DeleteMessage -> deleteMessage(action.timestamp)
@@ -393,22 +411,22 @@ class ChatViewModel(
             is ChatAction.UpdateMessage -> updateMessage(action.message, action.content)
             is ChatAction.ReplaceFrontendVariables ->
                 replaceFrontendVariables(action.scope, action.values)
-            is ChatAction.ClearOverlay -> clearOverlay(action.timestamp)
+            is ChatAction.ClearOverlay -> conversation.removeOverlay(action.timestamp)
             is ChatAction.SpeakMessage -> speakMessage(action.message)
-            ChatAction.StopSpeaking -> stopSpeaking()
-            ChatAction.PauseSpeaking -> pauseTts()
-            ChatAction.ResumeSpeaking -> resumeTts()
-            ChatAction.FastForwardSpeaking -> fastForwardTts()
-            ChatAction.CycleSpeakingSpeed -> cycleTtsSpeed()
-            ChatAction.ReloadUserProfile -> reloadUserProfile()
-            is ChatAction.UpdateUserProfile -> updateUserProfile(action.name, action.description)
-            ChatAction.ReloadUiSettings -> reloadUiSettings()
+            ChatAction.StopSpeaking -> tts.stop()
+            ChatAction.PauseSpeaking -> tts.pause()
+            ChatAction.ResumeSpeaking -> tts.resume()
+            ChatAction.FastForwardSpeaking -> tts.fastForward()
+            ChatAction.CycleSpeakingSpeed -> tts.cycleSpeed()
+            ChatAction.ReloadUserProfile -> profileCoordinator.reload()
+            is ChatAction.UpdateUserProfile -> profileCoordinator.update(action.name, action.description)
+            ChatAction.ReloadUiSettings -> uiSettings.reload()
             ChatAction.RefreshAfterDataManagement -> refreshAfterDataManagement()
-            ChatAction.ReloadApiConfig -> reloadApiConfig()
+            ChatAction.ReloadApiConfig -> model.reload(currentCard?.name)
             ChatAction.ReloadPromptData -> reloadPromptData()
             ChatAction.RefreshCurrentCard -> refreshCurrentCard()
-            ChatAction.RefreshExtensionSlots -> refreshExtensionSlots()
-            ChatAction.ReloadSearchConfig -> reloadSearchConfig()
+            ChatAction.RefreshExtensionSlots -> quickReplies.refresh()
+            ChatAction.ReloadSearchConfig -> search.reload()
         }
     }
 
@@ -452,37 +470,15 @@ class ChatViewModel(
         effectChannel.trySend(ChatEffect.ShowMessage(text, long))
     }
 
+    private fun handleOperationFailure(error: Exception) {
+        SafeLog.error(CHAT_VIEW_MODEL_TAG, "chat_operation_failed", error)
+        showMessage(platformDependencies.texts.operationFailed(error.message.orEmpty()))
+    }
+
     // ── 配置 / 用户资料 ──
 
     /** 当前页面的模型：角色记忆 > ROLE_CHAT > apiConfig.currentModel 回退，全空时返回 null */
-    private fun displayModelSpec(): String? = model.effectiveModelSpec(currentCard?.name)
-
-    /** 从 API 配置页返回时刷新：若模型仍在则保持，若模型被删除/禁用则切到全局配置的 currentModel 兜底 */
-    private fun reloadApiConfig() {
-        model.reload(currentCard?.name)
-    }
-
-    /** 从偏好或字号页面返回时刷新聊天页使用的设置快照。 */
-    private fun reloadUiSettings() {
-        uiSettings.reload()
-    }
-
-    private fun selectModel(providerId: String, modelId: String) {
-        model.select(currentCard?.name, providerId, modelId)
-    }
-
-    private fun updateReasoning(level: ReasoningLevel) {
-        model.updateReasoning(currentCard?.name, level)
-    }
-
-    private fun updateImageGeneration(settings: ImageGenerationSettings) {
-        model.updateImageGeneration(currentCard?.name, settings)
-    }
-
-    /** 抽屉里可能改了用户名/头像，关抽屉时刷新 */
-    private fun reloadUserProfile() {
-        profileCoordinator.reload()
-    }
+    private fun displayModelSpec(): String? = model.selectedModelSpec
 
     /** 从角色列表/编辑器返回时刷新当前卡：字段或图片可能已被编辑 */
     private fun refreshCurrentCard() {
@@ -501,14 +497,13 @@ class ChatViewModel(
     }
 
     private fun currentProviderAndModel(): Pair<ApiProvider, String>? =
-        model.resolveProvider(currentCard?.name)
+        model.resolveProvider()
 
     // ── 会话管理 ──
 
     private fun openSession(id: String) {
         if (generating) return
         sessionActions.open(id)
-        emitFrontendEvent("chat_id_changed", JSONObject().put("chat_id", id).toString())
     }
 
     /** 顶栏"新聊天"：当前已是无用户消息的新聊天则不重复创建 */
@@ -529,21 +524,9 @@ class ChatViewModel(
         sessionActions.delete(id)
     }
 
-    private fun renameSession(id: String, title: String) {
-        sessionActions.rename(id, title)
-    }
-
-    private fun setSessionPinned(id: String, pinned: Boolean) {
-        sessionActions.setPinned(id, pinned)
-    }
-
-    private fun regenerateTitle(id: String) {
-        generationOrchestrator.generateTitle(id)
-    }
-
     /**
      * 数据管理页可能恢复了任意备份分区。返回时同步刷新配置快照，并重新加载、校验
-     * 聊天记录与提示上下文；TTS 和全局变量由使用方按次读取持久化存储，无需额外快照刷新。
+     * 聊天记录与提示上下文；全局变量由存储变化流更新，TTS 由使用方读取。
      */
     private fun refreshAfterDataManagement() {
         model.reload(currentCard?.name)
@@ -566,55 +549,10 @@ class ChatViewModel(
         input.beginEditing(current)
     }
 
-    /** 取消编辑：退出编辑态并清空输入 */
-    private fun cancelEdit() {
-        input.cancelEditing()
-    }
-
-    private fun stopGenerate() {
-        generationOrchestrator.stop()
-    }
-
-    /** 切换联网搜索开关（持久化，面板开关据此点亮/熄灭） */
-    private fun toggleSearch() {
-        search.toggle()
-    }
-
-    private fun toggleBuiltInSearch() {
-        model.toggleBuiltInSearch(currentCard?.name)
-    }
-
-    /** 选择搜索服务商（面板卡片点击，按下标） */
-    private fun selectSearchProvider(index: Int) {
-        search.selectProvider(index)
-    }
-
-    private fun reloadSearchConfig() {
-        search.reload()
-    }
-
     /** 朗读/停止朗读指定 AI 消息：同一消息再次点击即停止，换消息则打断旧朗读 */
     private fun speakMessage(message: ChatMessage) {
         val current = overlays[message.ts] ?: message
         tts.speak(current.ts, current.content)
-    }
-
-    private fun stopSpeaking() {
-        tts.stop()
-    }
-
-    private fun pauseTts() = tts.pause()
-    private fun resumeTts() = tts.resume()
-    private fun fastForwardTts() = tts.fastForward()
-
-    /** 循环切换朗读速度：0.8x → 1.0x → 1.2x → 1.5x → 0.8x */
-    private fun cycleTtsSpeed() {
-        tts.cycleSpeed()
-    }
-
-    /** 重新计算 UI 插槽类扩展的产出（快捷回复等）。扩展配置变更后调用（如从扩展设置返回）。 */
-    private fun refreshExtensionSlots() {
-        quickReplies.refresh()
     }
 
     /** 点击快捷回复：send=true 直接发送，否则插入输入框末尾。 */
@@ -630,7 +568,7 @@ class ChatViewModel(
 
     /** AI 消息重答：保留旧版本，新回复作为新版本（可左右切换）；其后的消息保留，由所有版本共享 */
     private fun regenerateAi(ts: Long): ChatSendOutcome {
-        if (generating) return ChatSendOutcome.SKIPPED
+        if (generating || sessionActions.isSelecting) return ChatSendOutcome.SKIPPED
         if (!promptContext.isLoadedFor(session?.charFile.orEmpty())) return ChatSendOutcome.SKIPPED
         val sessionId = session?.id ?: return ChatSendOutcome.SKIPPED
         return launchRegeneration(sessionId) { ChatRegenerationPlanner.forAssistant(it, ts) }
@@ -638,7 +576,7 @@ class ChatViewModel(
 
     /** 用户消息重答：对其后的 AI 回复生成新版本 */
     private fun regenerateAfterUser(ts: Long): ChatSendOutcome {
-        if (generating) return ChatSendOutcome.SKIPPED
+        if (generating || sessionActions.isSelecting) return ChatSendOutcome.SKIPPED
         if (!promptContext.isLoadedFor(session?.charFile.orEmpty())) return ChatSendOutcome.SKIPPED
         val sessionId = session?.id ?: return ChatSendOutcome.SKIPPED
         return launchRegeneration(sessionId) { ChatRegenerationPlanner.afterUser(it, ts) }
@@ -649,28 +587,7 @@ class ChatViewModel(
         createPlan: (ChatSession) -> ChatRegenerationPlan?,
     ): ChatSendOutcome {
         val (prov, modelId) = currentProviderAndModel() ?: return ChatSendOutcome.NO_MODEL
-        val started = generationOrchestrator.launch {
-            val fullSession = chatRepository.get(sessionId) ?: return@launch
-            when (val plan = createPlan(fullSession) ?: return@launch) {
-                is ChatRegenerationPlan.Regenerate -> generationOrchestrator.generate(
-                    sessionId = sessionId,
-                    provider = prov,
-                    modelId = modelId,
-                    mode = ChatGenerationMode.REGENERATE,
-                    targetTimestamp = plan.targetTimestamp,
-                )
-                is ChatRegenerationPlan.TruncateAndSend -> {
-                    chatRepository.truncateAfter(sessionId, plan.afterTimestamp)
-                    generationOrchestrator.generate(
-                        sessionId = sessionId,
-                        provider = prov,
-                        modelId = modelId,
-                        mode = ChatGenerationMode.SEND,
-                        targetTimestamp = null,
-                    )
-                }
-            }
-        }
+        val started = generationOrchestrator.launchRegeneration(sessionId, prov, modelId, createPlan)
         return if (started) ChatSendOutcome.STARTED else ChatSendOutcome.SKIPPED
     }
 
@@ -695,45 +612,43 @@ class ChatViewModel(
     private fun switchAlt(message: ChatMessage, dir: Int) {
         if (generating) return
         messageMutations.switchAlternative(message, dir)
-        emitFrontendEvent("message_swiped", JSONObject().put("message_ts", message.ts).toString())
     }
 
     /** 删除消息：多版本时只删当前显示的版本（下文不受影响），单版本删除整条 */
     private fun deleteMessage(ts: Long) {
         if (generating) return
         messageMutations.deleteMessage(ts)
-        emitFrontendEvent("message_deleted", JSONObject().put("message_ts", ts).toString())
     }
 
     /** 删除消息的全部版本（整条消息） */
     private fun deleteAllVersions(ts: Long) {
         if (generating) return
         messageMutations.deleteAllVersions(ts)
-        emitFrontendEvent("message_deleted", JSONObject().put("message_ts", ts).toString())
     }
 
     private fun updateMessage(message: ChatMessage, content: String) {
+        if (generating) return
         messageMutations.updateMessage(message, content)
-        emitFrontendEvent("message_edited", JSONObject().put("message_ts", message.ts).toString())
     }
 
     private fun replaceFrontendVariables(scope: String, values: Map<String, String>) {
-        if (scope == "global") {
-            viewModelScope.launch {
-                runCatching { generationDependencies.generationResources.saveGlobalVariables(values) }
-                    .onSuccess { frontendVariablesRevision.intValue++ }
-                    .onFailure { SafeLog.warn(CHAT_VIEW_MODEL_TAG, "frontend_global_variables_save_failed", it) }
-            }
-            return
-        }
-        val current = session ?: return
-        conversation.updateCurrent(current.id) { it.copy(localVariables = values) }
+        val sessionId = if (scope == "global") null else (session?.id ?: return)
         viewModelScope.launch {
-            runCatching { chatRepository.saveLocalVariables(current.id, values) }
-                .onFailure { error ->
-                    SafeLog.warn(CHAT_VIEW_MODEL_TAG, "frontend_chat_variables_save_failed", error)
-                    chatRepository.get(current.id)?.let(conversation::replacePersistedCurrent)
+            try {
+                variableWriteMutex.withLock {
+                    if (sessionId == null) {
+                        generationDependencies.generationResources.saveGlobalVariables(values)
+                        globalVariables = values
+                    } else {
+                        chatRepository.saveLocalVariables(sessionId, values)
+                        conversation.updateCurrent(sessionId) { it.copy(localVariables = values) }
+                    }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                handleOperationFailure(error)
+            }
         }
     }
 
@@ -751,15 +666,6 @@ class ChatViewModel(
 
     private fun emitFrontendEvent(type: String, payloadJson: String = "{}") {
         _frontendEvents.tryEmit(ChatFrontendEvent(frontendEventSequence.incrementAndGet(), type, payloadJson))
-    }
-
-    /** UI 检测到分页已把该 ts 的最终内容补齐后调用：撤下顶替显示的 overlay */
-    private fun clearOverlay(ts: Long) {
-        conversation.removeOverlay(ts)
-    }
-
-    private fun updateUserProfile(name: String, description: String) {
-        profileCoordinator.update(name, description)
     }
 
 }

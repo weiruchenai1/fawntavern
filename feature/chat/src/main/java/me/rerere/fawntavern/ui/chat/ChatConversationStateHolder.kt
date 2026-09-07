@@ -77,6 +77,11 @@ class ChatConversationStateHolder {
         overlays = overlays - timestamp
     }
 
+    fun reconcileOverlay(sessionId: String, timestamp: Long, message: ChatMessage?) {
+        if (current?.id != sessionId) return
+        overlays = if (message == null) overlays - timestamp else overlays + (timestamp to message)
+    }
+
     fun retainOverlays(timestamps: Set<Long>) {
         overlays = overlays.filterKeys { it in timestamps }
     }

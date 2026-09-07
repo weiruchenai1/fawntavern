@@ -1,6 +1,5 @@
 package me.rerere.fawntavern.ui.character
 
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -28,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextFieldLineLimits
-import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -48,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -82,6 +81,9 @@ import kotlinx.coroutines.launch
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.character.CharacterCard
+import me.rerere.fawntavern.data.character.DepthPrompt
+import me.rerere.fawntavern.ui.components.LoadingState
+import me.rerere.fawntavern.ui.components.rememberEditorDraft
 import me.rerere.fawntavern.ui.components.ModelSelectorSheet
 import me.rerere.fawntavern.ui.components.PickerRow
 import me.rerere.fawntavern.ui.components.rememberModelSelectorState
@@ -94,27 +96,54 @@ import me.rerere.fawntavern.ui.components.Space8
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.settings.ModelCard
-import org.json.JSONArray
-import org.json.JSONObject
 
 @OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName: String = card.name) {
+    val controller = LocalAppContainer.current.features.characterEditor
+    val editor = rememberEditorDraft("character", cardFileName, CharacterEditorState(card), CharacterEditorState.serializer(), onBack)
+    val draft = editor?.value
+    if (draft == null) {
+        LoadingState()
+        return
+    }
+    CharacterEditorContent(
+        draft = draft,
+        cardFileName = cardFileName,
+        modelKey = card.name.ifBlank { cardFileName },
+        onDraftChange = editor::update,
+        onSave = { snapshot ->
+            editor.update(snapshot)
+            editor.save { controller.save(cardFileName, it.card) }
+        },
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun CharacterEditorContent(
+    draft: CharacterEditorState,
+    cardFileName: String,
+    modelKey: String,
+    onDraftChange: (CharacterEditorState) -> Unit,
+    onSave: (CharacterEditorState) -> Unit,
+) {
+    val card = draft.card
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val controller = LocalAppContainer.current.features.characterEditor
     var name by remember { mutableStateOf(card.name) }
     // 多行字段用 TextFieldState（BTF2）：限高交给 AppTextArea 的 lineLimits，滚动在测量期完成
-    val description = rememberTextFieldState(card.description)
-    val personality = rememberTextFieldState(card.personality)
-    val scenario = rememberTextFieldState(card.scenario)
-    val systemPrompt = rememberTextFieldState(card.systemPrompt)
-    val postHistory = rememberTextFieldState(card.postHistoryInstructions)
-    val mesExample = rememberTextFieldState(card.mesExample)
-    val creatorNotes = rememberTextFieldState(card.creatorNotes)
-    val depthPromptText = rememberTextFieldState(card.depthPrompt?.prompt ?: "")
-    var depthPromptDepth by remember { mutableStateOf((card.depthPrompt?.depth ?: 4).toString()) }
+    val description = remember { TextFieldState(card.description) }
+    val personality = remember { TextFieldState(card.personality) }
+    val scenario = remember { TextFieldState(card.scenario) }
+    val systemPrompt = remember { TextFieldState(card.systemPrompt) }
+    val postHistory = remember { TextFieldState(card.postHistoryInstructions) }
+    val mesExample = remember { TextFieldState(card.mesExample) }
+    val creatorNotes = remember { TextFieldState(card.creatorNotes) }
+    val depthPromptText = remember { TextFieldState(card.depthPrompt?.prompt ?: "") }
+    var depthPromptDepth by remember { mutableStateOf(draft.depthInput) }
     var depthPromptRole by remember { mutableStateOf(card.depthPrompt?.role ?: "system") }
     var tags by remember {
         mutableStateOf(
@@ -138,10 +167,11 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     }
 
     var showAddTagDialog by remember { mutableStateOf(false) }
-    val charModelKey = card.name.ifBlank { cardFileName }
+    val charModelKey = modelKey
     var charModel by remember { mutableStateOf(controller.model(charModelKey)) }
-    var showGreetingDialog by remember { mutableStateOf(false) }
-    var editingGreetingIdx by remember { mutableStateOf<Int?>(null) }
+    var showGreetingDialog by remember { mutableStateOf(draft.addingGreeting) }
+    var editingGreetingIdx by remember { mutableStateOf(draft.greetingIndex) }
+    var greetingDraft by remember { mutableStateOf(draft.greetingDraft) }
     var deletingGreetingIdx by remember { mutableStateOf<Int?>(null) }
     var advancedExpanded by remember { mutableStateOf(false) }
 
@@ -226,51 +256,36 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
         )
     }
 
-    suspend fun patchCard(block: (JSONObject) -> Unit): Boolean = try {
-        controller.updateJson(cardFileName, block)
-        true
-    } catch (e: Exception) {
-        Toast.makeText(
-            context,
-            resources.getString(R.string.char_save_failed_fmt, e.message.orEmpty()),
-            Toast.LENGTH_SHORT,
-        ).show()
-        false
+    fun snapshot() = CharacterEditorState(
+        card = card.copy(
+            name = name,
+            description = description.text.toString(),
+            personality = personality.text.toString(),
+            scenario = scenario.text.toString(),
+            systemPrompt = systemPrompt.text.toString(),
+            postHistoryInstructions = postHistory.text.toString(),
+            mesExample = mesExample.text.toString(),
+            creatorNotes = creatorNotes.text.toString(),
+            tags = tags,
+            firstMes = greetings.firstOrNull().orEmpty(),
+            alternateGreetings = greetings.drop(1),
+            enabledWorldBookIds = enabledWorldBookIds,
+            linkedPresetId = linkedPresetId,
+            enabledRegexIds = enabledRegexIds,
+            streaming = streaming,
+            depthPrompt = DepthPrompt(depthPromptText.text.toString(), depthPromptDepth.toIntOrNull() ?: 4, depthPromptRole),
+        ),
+        depthInput = depthPromptDepth,
+        addingGreeting = showGreetingDialog,
+        greetingIndex = editingGreetingIdx,
+        greetingDraft = greetingDraft,
+    )
+
+    LaunchedEffect(cardFileName) {
+        snapshotFlow { snapshot() }.collect(onDraftChange)
     }
 
-    // 返回时保存全部可编辑字段
-    fun saveAndBack() {
-        scope.launch {
-            val saved = patchCard { d ->
-                d.put("name", name.trim())
-                d.put("description", description.text.toString())
-                d.put("personality", personality.text.toString())
-                d.put("scenario", scenario.text.toString())
-                d.put("system_prompt", systemPrompt.text.toString())
-                d.put("post_history_instructions", postHistory.text.toString())
-                d.put("mes_example", mesExample.text.toString())
-                d.put("creator_notes", creatorNotes.text.toString())
-                d.put("tags", JSONArray(tags))
-                d.put("first_mes", greetings.firstOrNull() ?: "")
-                d.put("alternate_greetings", JSONArray(greetings.drop(1)))
-                d.put("enabled_world_book_ids", JSONArray(enabledWorldBookIds))
-                d.put("linked_preset_id", linkedPresetId)
-                d.put("enabled_regex_ids", JSONArray(enabledRegexIds))
-                d.put("streaming", streaming)
-                // 角色注入提示写回 extensions.depth_prompt（空则移除）
-                val ext = d.optJSONObject("extensions") ?: JSONObject().also { d.put("extensions", it) }
-                if (depthPromptText.text.isBlank()) {
-                    ext.remove("depth_prompt")
-                } else {
-                    ext.put("depth_prompt", JSONObject()
-                        .put("prompt", depthPromptText.text.toString())
-                        .put("depth", depthPromptDepth.toIntOrNull() ?: 4)
-                        .put("role", depthPromptRole))
-                }
-            }
-            if (saved) onBack()
-        }
-    }
+    fun saveAndBack() = onSave(snapshot())
 
     // API 配置：角色卡模型选择器和模型选择面板都要用
     val apiConfig = remember(controller) { controller.apiConfig() }
@@ -320,7 +335,10 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
     if (showGreetingDialog || editingGreetingIdx != null) {
         val idx = editingGreetingIdx
         val greeting = remember(idx) {
-            TextFieldState(if (idx != null) greetings.getOrElse(idx) { "" } else "")
+            TextFieldState(greetingDraft)
+        }
+        LaunchedEffect(greeting) {
+            snapshotFlow { greeting.text.toString() }.collect { greetingDraft = it }
         }
         val greetingSheetState = rememberBottomSheetState(
             initialValue = SheetValue.Hidden,
@@ -462,7 +480,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                         Modifier.fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceContainer)
-                            .clickable { editingGreetingIdx = idx }
+                            .clickable { greetingDraft = greetings[idx]; editingGreetingIdx = idx }
                             .padding(Space12),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -480,7 +498,7 @@ fun CharacterEditorScreen(card: CharacterCard, onBack: () -> Unit, cardFileName:
                         )
                     }
                 }
-                Row(Modifier.fillMaxWidth().clickable { showGreetingDialog = true }.padding(Space8),
+                Row(Modifier.fillMaxWidth().clickable { greetingDraft = ""; showGreetingDialog = true }.padding(Space8),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically) {
                     Icon(Lucide.Plus, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)

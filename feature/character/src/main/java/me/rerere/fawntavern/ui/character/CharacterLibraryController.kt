@@ -43,12 +43,16 @@ class CharacterLibraryController(
 ) {
     fun defaultCardName(): String? = dataSource.defaultCardName()
 
+    suspend fun load(name: String): CharacterCard = dataSource.load(name)
+
     suspend fun load(): CharacterLibraryState {
         val names = dataSource.names()
         val cards = buildMap {
             names.forEach { name ->
                 try {
                     put(name, dataSource.load(name))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (error: Exception) {
                     onLoadError(name, error)
                 }

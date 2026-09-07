@@ -1,8 +1,11 @@
 package me.rerere.fawntavern.data.preset
 
+import kotlinx.serialization.Serializable
+
 /**
  * 预设的顶层数据。
  */
+@Serializable
 data class StPreset(
     val name: String = "",
     val id: String = "",
@@ -40,6 +43,7 @@ data class StPreset(
     val regexScripts: List<RegexScript> = emptyList(),
 )
 
+@Serializable
 data class PromptItem(
     val identifier: String,
     val name: String = "",
@@ -53,16 +57,19 @@ data class PromptItem(
     val forbidOverrides: Boolean = false,
 )
 
+@Serializable
 data class PromptOrderEntry(
     val characterId: Int = 100001,
     val order: List<PromptToggle> = emptyList(),
 )
 
+@Serializable
 data class PromptToggle(
     val identifier: String,
     val enabled: Boolean,
 )
 
+@Serializable
 data class RegexScript(
     val id: String = "",
     val scriptName: String = "",

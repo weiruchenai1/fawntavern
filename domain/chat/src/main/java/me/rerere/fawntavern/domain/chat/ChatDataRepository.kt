@@ -5,31 +5,16 @@ import kotlinx.coroutines.flow.Flow
 import me.rerere.fawntavern.data.chat.ChatMessage
 import me.rerere.fawntavern.data.chat.ChatSession
 
-/** Chat persistence contract consumed by chat use cases and implemented by the data layer. */
-interface ChatDataRepository {
+/** 聊天持久化契约；会话用例只依赖其中的 ChatSessionDataSource 能力。 */
+interface ChatDataRepository : ChatSessionDataSource {
     data class SearchResult(val sessionId: String, val title: String, val content: String)
 
-    fun observeSessions(): Flow<List<ChatSession>>
     fun messagesPaged(sessionId: String, initialKey: Int? = null): Flow<PagingData<ChatMessage>>
-    suspend fun listSummaries(): List<ChatSession>
     suspend fun searchMessages(
         characterFile: String,
         query: String,
         limit: Int = 100,
     ): List<SearchResult>
-    suspend fun count(): Int
-    suspend fun get(id: String): ChatSession?
-    /** Reads session metadata and message count without loading message bodies. */
-    suspend fun getMetadata(id: String): ChatSession? =
-        get(id)?.let {
-            it.copy(
-                messages = emptyList(),
-                totalMessageCount = it.messages.size,
-                messageTimestamps = it.messages.map(ChatMessage::ts),
-            )
-        }
-    suspend fun save(session: ChatSession)
-    suspend fun delete(id: String)
     suspend fun messageCount(sessionId: String): Int
     suspend fun getMessage(sessionId: String, timestamp: Long): ChatMessage? =
         get(sessionId)?.messages?.firstOrNull { it.ts == timestamp }
@@ -43,9 +28,6 @@ interface ChatDataRepository {
     suspend fun deleteMessage(sessionId: String, timestamp: Long)
     suspend fun deleteAllVersions(sessionId: String, timestamp: Long)
     suspend fun editMessage(sessionId: String, timestamp: Long, content: String)
-    suspend fun truncateAfter(sessionId: String, timestamp: Long)
-    suspend fun updateTitle(sessionId: String, title: String)
-    suspend fun updatePinned(sessionId: String, pinned: Boolean)
     suspend fun saveLocalVariables(sessionId: String, variables: Map<String, String>)
     suspend fun collectUnusedAttachments()
 }

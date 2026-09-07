@@ -20,7 +20,7 @@ FawnTavern 是一款轻量 AI 角色扮演聊天的 Android 客户端（Kotlin +
 - 需要 JDK 17；minSdk 26、compile/targetSdk 37；Android SDK 路径在 `local.properties` 中。
 - debug 版包名带 `.debug` 后缀，与 release 版可并存安装、数据互不干扰。
 - release 签名读根目录的 `keystore.properties`（不入库）；文件缺失时 release 走未签名，debug 构建不受影响。
-- JVM 单元测试位于 `app/src/test`，通过 `testDebugUnitTest` 运行；Compose 仪器测试位于 `app/src/androidTest`，由 GitHub Actions 的 Android 模拟器执行。
+- JVM 单元测试位于各模块 `src/test`；`app/src/test` 的 Compose + Robolectric 测试验证编辑恢复、滚动和 IME 布局。全仓通过 `testDebugUnitTest` 运行，CI 无需模拟器。纯 JVM 模块的同名入口委托给标准 `test` 任务。
 - 依赖版本集中在 `gradle/libs.versions.toml`（AGP 9.x、Kotlin 2.4、Compose BOM）。
 - 开发过程中的验证方式是安装到设备/模拟器上实际运行查看。
 
@@ -45,7 +45,13 @@ FawnTavern 是一款轻量 AI 角色扮演聊天的 Android 客户端（Kotlin +
 - `*Repository` 对象（`data/character`、`data/preset`、`data/worldbook`）— 每个条目对应 `filesDir` 子目录下的一个 JSON 文件，每个领域配有对应的 `*Parser` 和 `*Models` 文件。Repository 提供 `load/save/import/delete/rename/clear` 等挂起函数；目录/文件级共用操作抽在 `data/JsonFileDir`。UI 页面不直接访问 Repository、SharedPreferences 或目录：搜索通过 `ChatSearchController`，数据统计/清理/备份通过 `DataManagementController`；Android 数据源实现负责连接实际存储。
 - **聊天记录是例外**：`:data:chat` 底层是 Room 数据库（`sessions` + `messages`，消息主键为 `(sessionId, ts)`）。v9 是公开发布迁移基线，后续每次 schema 变更都必须注册显式 `Migration`、提交 `data/chat/schemas` 快照并增加旧库升级测试，禁止 destructive migration。消息列表按 Paging 3 渲染，所有消息修改统一为按 `ts` 的单条 DB 操作；流式生成走内存 overlay，中途不逐帧写库。
 
-聊天主布局由 `ChatContent` 负责，附件选择、拍照、剪贴板与 TXT 导出由 `rememberChatMediaActions` 持有；它和 `rememberChatOverlayState` 必须位于全屏页面切换之前，保留待返回的 Activity Result 和弹层状态。`ChatMessageOverlays` 渲染消息菜单、文本面板与确认框。`ChatFrontendBindings` 统一前端消息 JSON、上下文与回调的消息 ID 映射，缓存键必须包含分页索引。聊天交互回归位于 `ChatContentInteractionTest`、`ChatScrollInteractionTest`、`ChatBindingsStateTest`；键盘测试通过可控 IME Insets 验证真实列表布局，避免依赖设备输入法动画时序。
+聊天主布局由 `ChatContent` 负责，附件选择、拍照、剪贴板与 TXT 导出由 `rememberChatMediaActions` 持有；它和 `rememberChatOverlayState` 必须位于全屏页面切换之前，保留待返回的 Activity Result 和弹层状态。`ChatMessageOverlays` 渲染消息菜单、文本面板与确认框。`ChatFrontendBindings` 统一前端消息 JSON、上下文与回调的消息 ID 映射，缓存键必须包含分页索引。布局回归位于 `app/src/test` 的 `ChatScrollInteractionTest`，通过可控 IME Insets 验证真实列表布局；`EditorRestorationTest` 验证编辑路由和草稿在清理 ViewModel 后从文件恢复。
+
+纯模型与生成规则分别位于 Kotlin/JVM 模块 `:core:model`、`:domain:generation`。扩展设置与诊断设置控制器合并在 `:feature:settings`，不再单独建模块。`ChatDataRepository` 直接继承 `ChatSessionDataSource`；重答只有 `ChatGenerationOrchestrator.launchRegeneration` 一个编排入口。UI 状态 getter 只读取内存快照：模型选择在明确的变更入口刷新，全局变量观察存储变化流。会话选择采用请求序号和取消，消息修改失败恢复数据库结果，`CancellationException` 必须继续抛出。
+
+编辑页使用 `EditorDraftViewModel` 和 `FileEditorDraftStorage`：可保存路由中只放名称与草稿键，大草稿原子写入 `noBackupFilesDir/editor_drafts`，正式保存成功后清理。长文本不要重新塞进状态 Bundle；预设提示词和正则弹窗的临时编辑也属于草稿。新增恢复测试应同时清理 ViewModel，避免只验证同一进程的内存缓存。
+
+草稿提交和清理期间收到的新输入必须再次保存，确认最后一次输入已提交后才能退出。`EditorRestorationTest` 覆盖角色、预设、世界书及未确认的提示词、开场白和条目弹窗；`SendChatMessageUseCaseTest` 覆盖用户消息先落盘、停止后继续发送、失败回滚和协程取消。变量编辑按请求顺序写入，成功后只更新对应会话，失败不能切回原会话。
 
 消息渲染按职责拆在 `ui/chat/`：`ChatMessageContent` 编排 Markdown/HTML，`ChatCodeBlock` 渲染代码块，`ChatMarkdownTable` 负责表格、复制和图片导出；HTML 进一步拆为 `HtmlMessageContent`、`HtmlDocumentProcessor`、`HtmlWebResources`、`FrontendWebViewRegistry` 与 `TavernBridge`。不要把存储权限、文件导出或大块子渲染逻辑重新塞回 `ChatMessageContent`。
 

@@ -25,24 +25,6 @@ interface ChatSessionDataSource {
     suspend fun truncateAfter(id: String, timestamp: Long)
 }
 
-class RepositoryChatSessionDataSource(
-    private val repository: ChatDataRepository,
-) : ChatSessionDataSource {
-    override fun observeSessions(): Flow<List<ChatSession>> = repository.observeSessions()
-    override suspend fun listSummaries(): List<ChatSession> = repository.listSummaries()
-    override suspend fun count(): Int = repository.count()
-    override suspend fun get(id: String): ChatSession? = repository.get(id)
-    override suspend fun getMetadata(id: String): ChatSession? = repository.getMetadata(id)
-    override suspend fun save(session: ChatSession) = repository.save(session)
-    override suspend fun delete(id: String) = repository.delete(id)
-    override suspend fun updateTitle(id: String, title: String) =
-        repository.updateTitle(id, title)
-    override suspend fun updatePinned(id: String, pinned: Boolean) =
-        repository.updatePinned(id, pinned)
-    override suspend fun truncateAfter(id: String, timestamp: Long) =
-        repository.truncateAfter(id, timestamp)
-}
-
 data class DeletedSessionChoice(
     val nextSessionId: String?,
     val shouldCreateNew: Boolean,

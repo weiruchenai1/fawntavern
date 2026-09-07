@@ -58,7 +58,10 @@ internal class SendChatMessageUseCase(
         } catch (error: Exception) {
             val before = originalSession
             if (before == null) {
-                runCatching { attachments.collectUnused() }
+                runCatching { attachments.collectUnused() }.onFailure { cleanupError ->
+                    if (cleanupError is CancellationException) throw cleanupError
+                    error.addSuppressed(cleanupError)
+                }
                 return SendChatMessageResult.Failed(error, null, null, rollbackFailed = false)
             }
 
@@ -66,6 +69,7 @@ internal class SendChatMessageUseCase(
                 if (createdNewSession) repository.delete(before.id)
                 else repository.save(before)
             }.onFailure { rollbackError ->
+                if (rollbackError is CancellationException) throw rollbackError
                 error.addSuppressed(rollbackError)
                 SafeLog.error(TAG, "send_rollback_failed", rollbackError)
             }.isSuccess
@@ -82,6 +86,7 @@ internal class SendChatMessageUseCase(
             runCatching { repository.get(before.id) }
                 .onSuccess { refreshed = it }
                 .onFailure { refreshError ->
+                    if (refreshError is CancellationException) throw refreshError
                     error.addSuppressed(refreshError)
                     SafeLog.error(TAG, "send_rollback_refresh_failed", refreshError)
                 }

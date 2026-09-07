@@ -22,9 +22,10 @@ internal class ChatSendCoordinator(
     private val generation: ChatGenerationOrchestrator,
     private val resolveModel: () -> Pair<ApiProvider, String>?,
     private val onFailure: (ChatSendFailure) -> Unit,
+    private val canSend: () -> Boolean = { true },
 ) {
     fun send(): ChatSendOutcome {
-        if (generation.isRunning) return ChatSendOutcome.SKIPPED
+        if (generation.isRunning || !canSend()) return ChatSendOutcome.SKIPPED
         if (!promptContext.isLoadedFor(conversation.current?.charFile.orEmpty())) {
             return ChatSendOutcome.SKIPPED
         }

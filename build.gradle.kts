@@ -31,11 +31,9 @@ tasks.register("checkArchitecture") {
             "app" to setOf("core", "domain", "data", "feature", "platform"),
         )
         val projectDependency = Regex("""project\("(:[^"]+)"\)""")
-        val graph = rootDir.walkTopDown()
-            .filter { it.name == "build.gradle.kts" && it != rootProject.buildFile && "build" !in it.invariantSeparatorsPath.split('/') }
-            .associate { file ->
-                val module = ":" + file.parentFile.relativeTo(rootDir).invariantSeparatorsPath.replace('/', ':')
-                module to projectDependency.findAll(file.readText()).map { it.groupValues[1] }.toList()
+        val graph = subprojects.filter { it.buildFile.isFile }
+            .associate { module ->
+                module.path to projectDependency.findAll(module.buildFile.readText()).map { it.groupValues[1] }.toList()
             }
         fun layer(module: String): String = module.removePrefix(":").substringBefore(':')
         val dependencyViolations = graph.flatMap { (source, dependencies) ->
@@ -121,8 +119,6 @@ tasks.register("checkArchitecture") {
             "/feature/preset/" to commonFeatureRules,
             "/feature/worldbook/" to commonFeatureRules,
             "/feature/api/" to commonFeatureRules,
-            "/feature/diagnostics/" to commonFeatureRules,
-            "/feature/extension/" to commonFeatureRules,
             "/feature/regex/" to commonFeatureRules,
             "/feature/settings/" to commonFeatureRules,
             "/feature/statistics/" to commonFeatureRules,

@@ -1,5 +1,6 @@
 package me.rerere.fawntavern.ui.preset
 
+import kotlinx.serialization.json.Json
 import me.rerere.fawntavern.data.preset.PromptItem
 import me.rerere.fawntavern.data.preset.RegexScript
 import me.rerere.fawntavern.data.preset.StPreset
@@ -51,7 +52,7 @@ class PresetEditorStateTest {
         )
         val refreshedSource = StPreset(name = "demo", prompts = listOf(prompt.copy(name = "Repository value")))
 
-        // 页面以 preset.name 作为 remember 键，此处不应重建 edited。
+        // 数据源刷新不能替换编辑器持有的未保存草稿。
         assertEquals("Local draft", edited.draft.prompts.single().name)
         assertEquals("Repository value", refreshedSource.prompts.single().name)
     }
@@ -114,5 +115,26 @@ class PresetEditorStateTest {
         assertEquals(emptyList<RegexScript>(), dismissed.draft.regexScripts)
         assertEquals("Saved", saved.draft.regexScripts.single().scriptName)
         assertNull(saved.editingRegex)
+    }
+
+    @Test
+    fun restoredRegexDraftCanBeDiscardedWithoutChangingTheSavedRegex() {
+        val initial = PresetEditorState(StPreset(regexScripts = listOf(regex)))
+        val editing = reducePresetEditor(initial, PresetEditorAction.EditRegex(regex))
+        val pending = regex.copy(findRegex = "unconfirmed pattern", replaceString = "unconfirmed replacement")
+        val changed = reducePresetEditor(editing, PresetEditorAction.UpdateRegexDraft(pending))
+        val restored = Json.decodeFromString(
+            PresetEditorState.serializer(),
+            Json.encodeToString(PresetEditorState.serializer(), changed),
+        )
+
+        assertEquals(pending, restored.editingRegexDraft)
+        assertEquals(regex, restored.draft.regexScripts.single())
+        val dismissed = reducePresetEditor(restored, PresetEditorAction.DismissRegexEditor)
+        assertEquals(regex, dismissed.draft.regexScripts.single())
+        assertNull(dismissed.editingRegexDraft)
+        val saved = reducePresetEditor(restored, PresetEditorAction.SaveRegex(pending))
+        assertEquals(pending, saved.draft.regexScripts.single())
+        assertNull(saved.editingRegexDraft)
     }
 }

@@ -239,6 +239,8 @@
     <string name="file_too_large_to_send">文件过大（超过 20MB），无法发送</string>
     <string name="attachment_send_failed">附件处理失败，请重试</string>
     <string name="chat_send_failed_fmt">发送失败，输入内容已恢复：%1$s</string>
+    <string name="chat_operation_failed_fmt">操作未完成：%1$s</string>
+    <string name="editor_draft_failed_fmt">编辑内容保存或恢复失败：%1$s</string>
     <string name="chat_send_rollback_failed_fmt">发送和回滚均失败，消息状态已重新读取。请检查记录，不要直接重发：%1$s</string>
     <string name="chat_generation_failed_fmt">生成失败：%1$s</string>
     <string name="toast_rename_name_label">名称</string>

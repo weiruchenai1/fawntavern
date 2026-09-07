@@ -22,6 +22,8 @@ interface ChatPromptEnvironment {
     fun enabledExtensions(): List<Extension>
     fun extensionConfig(id: String): String
     fun globalVariables(): Map<String, String>
+    fun observeGlobalVariables(): kotlinx.coroutines.flow.Flow<Map<String, String>> =
+        kotlinx.coroutines.flow.flowOf(globalVariables())
     fun userDescription(): String
     fun worldInfoSettings(): WorldInfoSettings
     fun filesDir(): File

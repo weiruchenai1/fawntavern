@@ -4,6 +4,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.fawntavern.data.api.ApiMessage
 import me.rerere.fawntavern.data.api.GeneratedImage
 import me.rerere.fawntavern.data.api.ToolSpec
@@ -193,11 +196,10 @@ class GenerationEngine(
                     val (result, final) = try {
                         toolExecutor.execute(call)
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         if (e is GenerationCancelled) throw e
                         // 工具失败不打断生成：把错误回传给模型自行处理
-                        org.json.JSONObject()
-                            .put("error", e.message ?: "tool failed")
-                            .toString() to
+                        buildJsonObject { put("error", e.message ?: "tool failed") }.toString() to
                             pending?.copy(searching = false)
                     }
                     if (pending != null) {
@@ -235,6 +237,8 @@ class GenerationEngine(
                 requestSnapshots = requestSnapshots,
             )
         } catch (_: GenerationCancelled) {
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             val displayError = if (e is GenerationRequestException) {
                 if (e.snapshot !in requestSnapshots) {

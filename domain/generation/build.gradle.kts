@@ -1,9 +1,5 @@
 plugins {
-    id("fawntavern.android.library")
-}
-
-android {
-    namespace = "me.rerere.fawntavern.domain.generation"
+    id("fawntavern.kotlin.library")
 }
 
 dependencies {
@@ -11,5 +7,4 @@ dependencies {
     api(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.json)
-    testImplementation(libs.kotlinx.coroutines.core)
 }

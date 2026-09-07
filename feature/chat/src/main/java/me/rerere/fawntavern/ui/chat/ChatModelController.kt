@@ -50,8 +50,10 @@ class ChatModelController(
     fun resolveProvider(
         characterName: String?,
         apiConfig: ApiConfig,
-    ): Pair<ApiProvider, String>? {
-        val spec = effectiveModelSpec(characterName, apiConfig) ?: return null
+    ): Pair<ApiProvider, String>? = providerFor(effectiveModelSpec(characterName, apiConfig), apiConfig)
+
+    fun providerFor(modelSpec: String?, apiConfig: ApiConfig): Pair<ApiProvider, String>? {
+        val spec = modelSpec ?: return null
         val providerId = spec.substringBefore("::")
         val modelId = spec.substringAfter("::", "")
         val provider = apiConfig.providers.find { it.id == providerId && it.enabled }

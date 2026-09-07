@@ -19,6 +19,8 @@ internal class AndroidChatPromptEnvironment(
 
     override fun globalVariables(): Map<String, String> = GlobalVariableStore.get(context)
 
+    override fun observeGlobalVariables() = GlobalVariableStore.observe(context)
+
     override fun userDescription(): String = UserProfileStore.getDescription(context)
 
     override fun worldInfoSettings(): WorldInfoSettings = WorldInfoSettingsStore.get(context)

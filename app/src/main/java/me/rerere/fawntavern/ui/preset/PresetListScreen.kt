@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +33,7 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.ui.components.ImportableListScreen
+import me.rerere.fawntavern.ui.components.ResourceEditorRoute
 import me.rerere.fawntavern.ui.components.CreateItemSpec
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.appClickable
@@ -40,14 +42,15 @@ import me.rerere.fawntavern.ui.components.appClickable
 fun PresetListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val controller = LocalAppContainer.current.features.presets
-    var selectedPreset by remember { mutableStateOf<StPreset?>(null) }
+    var selectedName by rememberSaveable { mutableStateOf<String?>(null) }
     // SaveableStateHolder：进入编辑器时列表离开组合，其 LazyListState 被暂存；
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
     val stateHolder = rememberSaveableStateHolder()
 
-    if (selectedPreset != null) {
-        stateHolder.SaveableStateProvider("editor") {
-            PresetEditorScreen(preset = selectedPreset!!, onBack = { selectedPreset = null })
+    val selected = selectedName
+    if (selected != null) {
+        ResourceEditorRoute(selected, controller::load, onBack = { selectedName = null }) { preset ->
+            PresetEditorScreen(preset = preset, onBack = { selectedName = null })
         }
         return
     }
@@ -66,7 +69,7 @@ fun PresetListScreen(onBack: () -> Unit) {
         deleteTitleRes = R.string.delete_preset_title,
         deleteMsgFmtRes = R.string.delete_preset_msg_fmt,
         controller = controller,
-        onOpen = { selectedPreset = it },
+        onOpen = { selectedName = it.name },
         canDeleteItem = { !controller.isDefault(it) },
         createItem = CreateItemSpec(
             titleRes = R.string.add_preset,

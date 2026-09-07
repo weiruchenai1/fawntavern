@@ -16,6 +16,7 @@ interface ChatTextProvider {
     fun generationFailed(message: String): String
     fun rollbackFailed(message: String): String
     fun sendFailed(message: String): String
+    fun operationFailed(message: String): String
 }
 
 class ChatFeatureDependencies(

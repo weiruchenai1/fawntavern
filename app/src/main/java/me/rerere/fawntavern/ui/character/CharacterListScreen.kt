@@ -43,6 +43,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveable
+import me.rerere.fawntavern.ui.components.ResourceEditorRoute
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,7 +107,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     var names by remember { mutableStateOf<List<String>>(emptyList()) }
     var chars by remember { mutableStateOf<Map<String, CharacterCard>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
-    var selectedChar by remember { mutableStateOf<CharacterCard?>(null) }
+    var editingFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }
 
     var longPressName by remember { mutableStateOf<String?>(null) }
@@ -241,19 +243,15 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     }
 
     // 保存世界书关联时需要用到卡片文件名
-    var editingFileName by remember { mutableStateOf("") }
     // SaveableStateHolder：进入编辑器时列表离开组合，其 LazyListState 被暂存；
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
     val stateHolder = rememberSaveableStateHolder()
-    if (selectedChar != null) {
-        // 编辑器里的 TextFieldState 只属于当前这次编辑。不要放进固定 key 的
-        // SaveableStateProvider，否则打开另一张卡时会恢复上一张卡的角色定义。
-        BackHandler { selectedChar = null; imageVersion++; refresh() }
-        CharacterEditorScreen(
-            card = selectedChar!!,
-            onBack = { selectedChar = null; imageVersion++; refresh() },
-            cardFileName = editingFileName,
-        )
+    val selected = editingFileName
+    if (selected != null) {
+        val closeEditor = { editingFileName = null; imageVersion++; refresh() }
+        ResourceEditorRoute(selected, controller::load, onBack = closeEditor) { card ->
+            CharacterEditorScreen(card = card, onBack = closeEditor, cardFileName = selected)
+        }
         return
     }
 
@@ -299,7 +297,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                                 c = c,
                                 imageKey = imageVersion,
                                 imageFile = controller.imageFile(name),
-                                onClick = { selectedChar = c; editingFileName = name },
+                                onClick = { editingFileName = name },
                                 onLongPress = { longPressName = name },
                                 dragging = dragging,
                                 modifier = Modifier.longPressDraggableHandle(),

@@ -48,38 +48,21 @@ internal class ChatGenerationOrchestrator(
 
     fun launch(block: suspend () -> Unit): Boolean = generationState.launch(block)
 
-    fun launchGeneration(
+    fun launchRegeneration(
         sessionId: String,
         provider: ApiProvider,
         modelId: String,
-        mode: ChatGenerationMode,
-        targetTimestamp: Long?,
+        createPlan: (ChatSession) -> ChatRegenerationPlan?,
     ): Boolean = launch {
-        generate(sessionId, provider, modelId, mode, targetTimestamp)
-    }
-
-    fun launchRegeneration(
-        session: ChatSession,
-        provider: ApiProvider,
-        modelId: String,
-        plan: ChatRegenerationPlan,
-    ): Boolean = when (plan) {
-        is ChatRegenerationPlan.Regenerate -> launchGeneration(
-            session.id,
-            provider,
-            modelId,
-            ChatGenerationMode.REGENERATE,
-            plan.targetTimestamp,
-        )
-        is ChatRegenerationPlan.TruncateAndSend -> launch {
-            sessions.truncateAfter(session.id, plan.afterTimestamp)
-            generate(
-                session.id,
-                provider,
-                modelId,
-                ChatGenerationMode.SEND,
-                null,
+        val session = sessions.loadFull(sessionId) ?: return@launch
+        when (val plan = createPlan(session) ?: return@launch) {
+            is ChatRegenerationPlan.Regenerate -> generate(
+                sessionId, provider, modelId, ChatGenerationMode.REGENERATE, plan.targetTimestamp,
             )
+            is ChatRegenerationPlan.TruncateAndSend -> {
+                sessions.truncateAfter(sessionId, plan.afterTimestamp)
+                generate(sessionId, provider, modelId, ChatGenerationMode.SEND, null)
+            }
         }
     }
 

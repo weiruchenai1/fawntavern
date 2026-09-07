@@ -1,5 +1,8 @@
 package me.rerere.fawntavern.data.worldbook
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class WorldBook(
     val name: String = "",
     val id: String = "",
@@ -11,6 +14,7 @@ data class WorldBook(
  * selectiveLogic 取值同 ST：0=AND_ANY 1=NOT_ALL 2=NOT_ANY 3=AND_ALL。
  * position 取 [WorldBookPos] 的 8 个字符串之一；role 仅在 position=at_depth 时有意义。
  */
+@Serializable
 data class WorldBookEntry(
     val id: Int,
     val keys: List<String>,

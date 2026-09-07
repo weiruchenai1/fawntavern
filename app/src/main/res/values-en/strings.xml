@@ -241,6 +241,8 @@
     <string name="file_too_large_to_send">File too large (over 20 MB), cannot send</string>
     <string name="attachment_send_failed">Failed to process attachment, please retry</string>
     <string name="chat_send_failed_fmt">Send failed. Your draft was restored: %1$s</string>
+    <string name="chat_operation_failed_fmt">The operation could not be completed: %1$s</string>
+    <string name="editor_draft_failed_fmt">Could not save or restore your edits: %1$s</string>
     <string name="chat_send_rollback_failed_fmt">Send and rollback both failed. The conversation was reloaded; check it before sending again: %1$s</string>
     <string name="chat_generation_failed_fmt">Generation failed: %1$s</string>
     <string name="toast_rename_name_label">Name</string>

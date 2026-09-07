@@ -1,5 +1,8 @@
 package me.rerere.fawntavern.data.character
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class CharacterCard(
     val name: String = "",
     val description: String = "",
@@ -22,6 +25,7 @@ data class CharacterCard(
 )
 
 /** 角色注入提示：按深度插入聊天历史。 */
+@Serializable
 data class DepthPrompt(
     val prompt: String = "",
     val depth: Int = 4,
