@@ -1,6 +1,7 @@
 package me.rerere.fawntavern.di
 
 import android.content.Context
+import me.rerere.fawntavern.data.api.ApiConfigRepository
 import me.rerere.fawntavern.ui.api.AndroidApiConfigDataSource
 import me.rerere.fawntavern.ui.api.ApiConfigController
 import me.rerere.fawntavern.ui.character.AndroidCharacterEditorDataSource
@@ -40,12 +41,16 @@ import me.rerere.fawntavern.ui.worldbook.WorldBookDataController
 import me.rerere.fawntavern.ui.worldbook.WorldInfoSettingsController
 
 /** 跨页面复用的类型化 Feature 入口；具体 Store/Repository 只在 Android 适配器中出现。 */
-internal class AppFeatureControllers(context: Context, chatRepository: ChatDataRepository) {
+internal class AppFeatureControllers(
+    context: Context,
+    chatRepository: ChatDataRepository,
+    apiConfigRepository: ApiConfigRepository,
+) {
     private val appContext = context.applicationContext
 
     val apiConfig = ApiConfigController(AndroidApiConfigDataSource(appContext))
     val characterLibrary = CharacterLibraryController(AndroidCharacterLibraryDataSource(appContext))
-    val characterEditor = CharacterEditorController(AndroidCharacterEditorDataSource(appContext))
+    val characterEditor = CharacterEditorController(AndroidCharacterEditorDataSource(appContext, apiConfigRepository))
     val chatSearch = ChatSearchController(AndroidChatSearchDataSource(appContext, chatRepository))
     val chatUserProfile = ChatUserProfileController(AndroidChatUserProfileDataSource(appContext))
     val extensions = ExtensionSettingsController(AndroidExtensionSettingsDataSource(appContext))

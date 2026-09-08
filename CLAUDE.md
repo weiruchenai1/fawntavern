@@ -53,6 +53,16 @@ FawnTavern 是一款轻量 AI 角色扮演聊天的 Android 客户端（Kotlin +
 
 草稿提交和清理期间收到的新输入必须再次保存，确认最后一次输入已提交后才能退出。`EditorRestorationTest` 覆盖角色、预设、世界书及未确认的提示词、开场白和条目弹窗；`SendChatMessageUseCaseTest` 覆盖用户消息先落盘、停止后继续发送、失败回滚和协程取消。变量编辑按请求顺序写入，成功后只更新对应会话，失败不能切回原会话。
 
+角色编辑器通过 `AppContainer.apiConfigRepository` 读取模型配置。编辑恢复测试注入内存配置以隔离 Android KeyStore，角色/预设/世界书与草稿继续读写真实文件；正式运行仍使用加密的 `PreferencesApiConfigRepository`。
+
+Robolectric 恢复测试等待文件写入时，需同时推进 Android 主线程队列和 Compose 更新；只在 `waitUntil` 中轮询磁盘会使 `viewModelScope` 的主线程续体停在队列中。统一使用测试内的 `waitForExternalWork`，保留明确的等待阶段描述和超时。
+
+角色开场白的 `TextFieldState` 由编辑页持有，并直接纳入页面草稿快照；弹层复用同一输入状态，避免经第二个 `snapshotFlow` 中转文本。打开另一条或新增开场白时显式设置输入内容。
+
+Compose 回归使用 `junit4.v2.createComposeRule`，Robolectric 用例由 `TimeoutRule` 限制为 90 秒，app 测试任务执行阶段上限为 15 分钟。流式跟随已贴底时不再重复请求滚动，避免布局与滚动互相触发；IME 跟随使用键盘高度变化前的贴底状态，避免视口先缩小后误判为正在阅读历史。
+
+切消息版本的锚定复用 `pinJob` 和 `MutatorMutex`：先登记位置，再观察一秒内的实际布局结果，仅在目标偏移改变时校准，最多校准 60 次。新的导航、钉底、用户手势或列表条数变化会取消旧锚定；列表边界无法达到原偏移时结束校准。不要只等待测试时钟帧数，子项实际测量可能尚未完成。
+
 消息渲染按职责拆在 `ui/chat/`：`ChatMessageContent` 编排 Markdown/HTML，`ChatCodeBlock` 渲染代码块，`ChatMarkdownTable` 负责表格、复制和图片导出；HTML 进一步拆为 `HtmlMessageContent`、`HtmlDocumentProcessor`、`HtmlWebResources`、`FrontendWebViewRegistry` 与 `TavernBridge`。不要把存储权限、文件导出或大块子渲染逻辑重新塞回 `ChatMessageContent`。
 
 **SillyTavern 兼容性**是数据层的核心：`CharacterRepository.import` 可以从纯 JSON 文件、或从 PNG 的 `tEXt`/`zTXt` 块（关键字为 `chara`/`ccv3`，base64/zlib 编码）中提取角色 JSON，并自动将内嵌的 `character_book` 提取为独立的世界书文件、把**实际**文件名写进卡的 `enabled_world_books`（书名撞车时 `JsonFileDir.uniqueName` 会加后缀，只靠解析层拿 `character_book.name` 兜底会指到同名的别人那本书上）。**卡内 `character_book` 只是导入载荷、不参与激活**（同 ST 的 `checkEmbeddedWorld`：它只用来显示导入按钮，生效与否只看关联），抽出来的独立文件才是唯一事实源——否则编辑/删除条目后卡内那份旧内容还会照旧注入、取消关联也只生效一半；旧版导入的卡由 `CharacterRepository.migrateEmbeddedWorldBooks` 在启动时补抽并写下关联（判据是「有 `character_book` 但没有 `enabled_world_books` 键」，同名书文件已存在则直接关联而不是再抽一份副本，可反复调用）。导出时 `data/worldbook/WorldBookSerializer` 按当前关联的世界书重新生成 `character_book`（关联多本就合并、id 重排避免跨书主键相撞，每条未建模的 ST 私有字段——`automation_id`/`triggers`/`ignore_budget`/`match_*`——从源文件原样搬回 `extensions`），不重新生成的话用户在世界书里的编辑一条都导不出去。导入/导出格式需保持与 SillyTavern 兼容。正则脚本有三个来源：角色卡内嵌（`extensions.regex_scripts` → `CharacterCard.regexScripts`，随角色卡生效）与**预设私有**（存进预设 JSON 的 `regex_scripts` 数组 → `StPreset.regexScripts`，`RegexScript.toCharRegex()` 转成统一类型，**只在关联该预设的聊天里生效**；在 `PresetEditorScreen` 的「正则」Tab 内导入/编辑/删除，随预设一起落盘）与**全局**（`data/regex/GlobalRegexRepository`，落在 `regex/global.json`，与当前角色卡/预设无关、对所有聊天生效），统一由 `domain/RegexEngine` 套用（对齐 ST 的 JS `/pattern/flags` 字面量与 `$1`/`{{match}}` 替换语法）——**显示侧** `applyForDisplay`（`ChatMessageContent` 按消息深度用 `depthKey` 做 remember 缓存，避免新消息到达时重算旧消息）与**发送侧** `applyForPrompt`（`PromptMessageAssembler.assemble` 构建请求时逐条历史套用）互补：`promptOnly` 只在发送侧生效、`markdownOnly` 只在显示侧生效、两个标志都为 false 的两侧都生效。

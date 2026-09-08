@@ -40,8 +40,11 @@ object CharacterParser {
             }
         }
 
+        // optDouble 缺少字段时返回 NaN；转为 Float 后也可能溢出，均须回退以免草稿序列化失败。
         val talkativeness = d.optJSONObject("extensions")?.optDouble("talkativeness")?.toFloat()
-            ?: json.optDouble("talkativeness", 0.5).toFloat()
+            ?.takeIf { it.isFinite() }
+            ?: json.optDouble("talkativeness", 0.5).toFloat().takeIf { it.isFinite() }
+            ?: 0.5f
 
         // 角色注入提示 extensions.depth_prompt {prompt, depth, role}
         val depthPrompt = d.optJSONObject("extensions")?.optJSONObject("depth_prompt")?.let { dp ->

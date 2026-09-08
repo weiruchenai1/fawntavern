@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -25,6 +26,7 @@ internal fun <T> rememberEditorDraft(
 ): EditorDraftViewModel<T>? {
     val storage = LocalAppContainer.current.editorDrafts
     val context = LocalContext.current
+    val resources = LocalResources.current
     val onSavedState = rememberUpdatedState(onSaved)
     val key = rememberSaveable(kind, resource) { "$kind:${UUID.randomUUID()}" }
     val model: EditorDraftViewModel<T> = viewModel(
@@ -40,10 +42,10 @@ internal fun <T> rememberEditorDraft(
     LaunchedEffect(model, key, model.completedKey) {
         if (model.completedKey == key) onSavedState.value()
     }
-    LaunchedEffect(model, context) {
+    LaunchedEffect(model, context, resources) {
         model.errors.collect { error ->
             SafeLog.error("EditorDraft", "draft_persistence_failed", error)
-            Toast.makeText(context, context.getString(R.string.editor_draft_failed_fmt, error.message.orEmpty()), Toast.LENGTH_LONG).show()
+            Toast.makeText(context, resources.getString(R.string.editor_draft_failed_fmt, error.message.orEmpty()), Toast.LENGTH_LONG).show()
         }
     }
     return model.takeIf { it.key == key }

@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -171,7 +172,7 @@ private fun CharacterEditorContent(
     var charModel by remember { mutableStateOf(controller.model(charModelKey)) }
     var showGreetingDialog by remember { mutableStateOf(draft.addingGreeting) }
     var editingGreetingIdx by remember { mutableStateOf(draft.greetingIndex) }
-    var greetingDraft by remember { mutableStateOf(draft.greetingDraft) }
+    val greetingDraft = remember { TextFieldState(draft.greetingDraft) }
     var deletingGreetingIdx by remember { mutableStateOf<Int?>(null) }
     var advancedExpanded by remember { mutableStateOf(false) }
 
@@ -278,7 +279,7 @@ private fun CharacterEditorContent(
         depthInput = depthPromptDepth,
         addingGreeting = showGreetingDialog,
         greetingIndex = editingGreetingIdx,
-        greetingDraft = greetingDraft,
+        greetingDraft = greetingDraft.text.toString(),
     )
 
     LaunchedEffect(cardFileName) {
@@ -334,12 +335,6 @@ private fun CharacterEditorContent(
 
     if (showGreetingDialog || editingGreetingIdx != null) {
         val idx = editingGreetingIdx
-        val greeting = remember(idx) {
-            TextFieldState(greetingDraft)
-        }
-        LaunchedEffect(greeting) {
-            snapshotFlow { greeting.text.toString() }.collect { greetingDraft = it }
-        }
         val greetingSheetState = rememberBottomSheetState(
             initialValue = SheetValue.Hidden,
             enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
@@ -364,7 +359,7 @@ private fun CharacterEditorContent(
                     )
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = {
-                        val trimmed = greeting.text.toString().trim()
+                        val trimmed = greetingDraft.text.toString().trim()
                         if (trimmed.isNotBlank()) {
                             greetings = if (idx != null) {
                                 greetings.toMutableList().also { it[idx] = trimmed }
@@ -379,7 +374,7 @@ private fun CharacterEditorContent(
                     }
                 }
                 androidx.compose.foundation.text.BasicTextField(
-                    state = greeting,
+                    state = greetingDraft,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(
                         color = MaterialTheme.colorScheme.onSurface,
                     ),
@@ -480,7 +475,10 @@ private fun CharacterEditorContent(
                         Modifier.fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceContainer)
-                            .clickable { greetingDraft = greetings[idx]; editingGreetingIdx = idx }
+                            .clickable {
+                                greetingDraft.setTextAndPlaceCursorAtEnd(greetings[idx])
+                                editingGreetingIdx = idx
+                            }
                             .padding(Space12),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -498,7 +496,10 @@ private fun CharacterEditorContent(
                         )
                     }
                 }
-                Row(Modifier.fillMaxWidth().clickable { greetingDraft = ""; showGreetingDialog = true }.padding(Space8),
+                Row(Modifier.fillMaxWidth().clickable {
+                    greetingDraft.setTextAndPlaceCursorAtEnd("")
+                    showGreetingDialog = true
+                }.padding(Space8),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically) {
                     Icon(Lucide.Plus, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)

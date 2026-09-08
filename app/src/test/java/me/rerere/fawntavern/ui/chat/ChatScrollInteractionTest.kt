@@ -10,13 +10,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import me.rerere.fawntavern.ui.hooks.ImeLazyListAutoScroller
 import org.junit.Assert.assertEquals
@@ -26,14 +28,18 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.junit.rules.TimeoutRule
 
 /** 使用真实列表测量和可控 IME 高度验证锚定，避免依赖设备输入法动画。 */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
+@OptIn(ExperimentalTestApi::class)
 class ChatScrollInteractionTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule(order = 0) val timeout = TimeoutRule.seconds(90)
+    @get:Rule(order = 1) val compose = createComposeRule()
     private lateinit var controller: ChatScrollController
     private val keyboardHeight = mutableIntStateOf(0)
+    private val middleHeight = mutableIntStateOf(240)
     private val lastHeight = mutableIntStateOf(72)
     private val generating = mutableStateOf(false)
 
@@ -81,23 +87,63 @@ class ChatScrollInteractionTest {
     }
 
     @Test
-    fun switchingALongMiddleAlternativeKeepsTheNextMessageAnchored() {
-        val expanded = mutableStateOf(true)
-        compose.setContent {
-            controller = rememberChatScrollController()
-            controller.inputs.messageCount = 30
-            controller.inputs.hasMessages = true
-            LazyColumn(Modifier.height(400.dp).testTag("scroll_test_list"), state = controller.listState) {
-                items(30, key = { it }) { index ->
-                    Text("row $index", Modifier.height(if (index == 10 && expanded.value) 240.dp else 72.dp))
-                }
-                item { Spacer(Modifier.height(1.dp)) }
-            }
+    fun streamingAtBottomBecomesIdleAndStillFollowsNewContent() {
+        showList()
+        compose.runOnIdle {
+            controller.scrollToBottom()
+            generating.value = true
         }
+        assertAtBottom()
+        // 流仍打开但没有新内容时，也必须能结束布局同步。
+        compose.mainClock.advanceTimeBy(160)
+        compose.waitForIdle()
+        compose.runOnIdle { lastHeight.intValue = 240 }
+        assertAtBottom()
+        compose.runOnIdle { lastHeight.intValue = 480 }
+        assertAtBottom()
+    }
+
+    @Test
+    fun switchingALongMiddleAlternativeKeepsTheNextMessageAnchored() {
+        showList()
         compose.onNodeWithTag("scroll_test_list").performScrollToIndex(10)
         val before = compose.onNodeWithText("row 11").fetchSemanticsNode().boundsInRoot.top
-        compose.runOnIdle { controller.switchAnchored(10, false) { expanded.value = false } }
+        compose.runOnIdle { controller.switchAnchored(10, false) { middleHeight.intValue = 72 } }
         assertEquals(before, compose.onNodeWithText("row 11").fetchSemanticsNode().boundsInRoot.top, 2f)
+    }
+
+    @Test
+    fun switchingAShortMiddleAlternativeKeepsTheNextMessageAnchored() {
+        middleHeight.intValue = 72
+        showList()
+        compose.onNodeWithTag("scroll_test_list").performScrollToIndex(10)
+        val before = compose.onNodeWithText("row 11").fetchSemanticsNode().boundsInRoot.top
+        compose.runOnIdle { controller.switchAnchored(10, false) { middleHeight.intValue = 240 } }
+        assertEquals(before, compose.onNodeWithText("row 11").fetchSemanticsNode().boundsInRoot.top, 2f)
+    }
+
+    @Test
+    fun aLaterContentMeasurementKeepsTheOriginalAlternativeAnchor() {
+        showList()
+        compose.onNodeWithTag("scroll_test_list").performScrollToIndex(10)
+        val before = compose.onNodeWithText("row 11").fetchSemanticsNode().boundsInRoot.top
+        compose.runOnIdle { controller.switchAnchored(10, false) { middleHeight.intValue = 180 } }
+        assertEquals(before, compose.onNodeWithText("row 11").fetchSemanticsNode().boundsInRoot.top, 2f)
+        compose.runOnIdle { middleHeight.intValue = 72 }
+        assertEquals(before, compose.onNodeWithText("row 11").fetchSemanticsNode().boundsInRoot.top, 2f)
+    }
+
+    @Test
+    fun navigationCancelsAnAlternativeAnchorStillInProgress() {
+        showList()
+        compose.onNodeWithTag("scroll_test_list").performScrollToIndex(10)
+        compose.runOnIdle {
+            controller.switchAnchored(10, false) { middleHeight.intValue = 72 }
+            controller.scrollToTop()
+        }
+        assertEquals(0 to 0, position())
+        compose.mainClock.advanceTimeBy(160)
+        assertEquals(0 to 0, position())
     }
 
     private fun showList() {
@@ -109,18 +155,24 @@ class ChatScrollInteractionTest {
                 generatingAtEnd = generating.value
             }
             LaunchedEffect(controller) { controller.runLoops() }
+            val keyboardHeightPx = with(LocalDensity.current) { keyboardHeight.intValue.dp.roundToPx() }
             ImeLazyListAutoScroller(
                 lazyListState = controller.listState,
                 shouldFollow = controller::isAtBottom,
                 onFollow = controller::snapToBottom,
-                imeInsets = WindowInsets(bottom = keyboardHeight.intValue),
+                imeInsets = WindowInsets(bottom = keyboardHeightPx),
             )
             LazyColumn(
                 Modifier.height((400 - keyboardHeight.intValue).dp).testTag("scroll_test_list"),
                 state = controller.listState,
             ) {
                 items(30, key = { it }) { index ->
-                    Text("row $index", Modifier.height(if (index == 29) lastHeight.intValue.dp else 72.dp))
+                    val height = when (index) {
+                        10 -> middleHeight.intValue
+                        29 -> lastHeight.intValue
+                        else -> 72
+                    }
+                    Text("row $index", Modifier.height(height.dp))
                 }
                 item { Spacer(Modifier.height(1.dp)) }
             }
@@ -130,6 +182,9 @@ class ChatScrollInteractionTest {
 
     private fun assertAtBottom() {
         compose.waitForIdle()
+        compose.waitUntil("The final anchor must become visible", timeoutMillis = 5_000) {
+            compose.runOnUiThread { !controller.listState.canScrollForward }
+        }
         compose.runOnIdle { assertFalse("The final anchor must remain visible", controller.listState.canScrollForward) }
     }
 

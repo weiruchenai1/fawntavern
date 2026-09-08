@@ -1,3 +1,5 @@
+import java.time.Duration
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -191,4 +193,9 @@ dependencies {
 googleServices {
     missingGoogleServicesStrategy =
         com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy.IGNORE
+}
+
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    // 为测试进程卡住提供兜底；这里只限制执行阶段，不包含编译和依赖下载。
+    timeout.set(Duration.ofMinutes(15))
 }

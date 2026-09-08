@@ -19,7 +19,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 聊天列表滚动状态机 —— 所有滚动位置的单一所有者。
@@ -152,7 +154,32 @@ internal class ChatScrollController(
     }
 
     private fun anchorTo(index: Int, offsetPx: Int) {
+        val initialLayout = listState.layoutInfo
         listState.requestScrollToItem(index, -offsetPx)
+        pinJob = scope.launch {
+            pinMutex.mutate(MutatePriority.Default) {
+                var corrections = 0
+                withTimeoutOrNull(AnchorTrackingMs) {
+                    snapshotFlow { listState.layoutInfo }.first { layout ->
+                        if (dragging || listState.isScrollInProgress ||
+                            layout.totalItemsCount != initialLayout.totalItemsCount) return@first true
+                        if (layout === initialLayout) return@first false
+                        val anchor = layout.visibleItemsInfo.firstOrNull { it.index == index }
+                        if (anchor?.offset == offsetPx) return@first false
+                        // 已到列表边界时无法继续补偿，不反复请求不可达的位置。
+                        if (anchor != null) {
+                            val pastStart = anchor.offset < offsetPx && !listState.canScrollBackward
+                            val pastEnd = anchor.offset > offsetPx && !listState.canScrollForward
+                            if (pastStart || pastEnd) return@first true
+                        }
+                        if (corrections++ >= MaxAnchorCorrections) return@first true
+                        // 子项可能晚于第一次列表测量才更新高度，保留原锚点直到布局稳定。
+                        listState.requestScrollToItem(index, -offsetPx)
+                        false
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -319,9 +346,11 @@ internal class ChatScrollController(
      */
     private suspend fun runAutoFollowLoop() {
         snapshotFlow { listState.layoutInfo }.collect {
-            if (!inputs.generatingAtEnd || !autoFollow || listState.isScrollInProgress) {
+            if (!inputs.generatingAtEnd || !autoFollow || listState.isScrollInProgress ||
+                !listState.canScrollForward) {
                 return@collect
             }
+            // 已贴底时再次请求会触发新测量，使布局观察和滚动请求互相唤醒。
             listState.requestScrollToItem(it.totalItemsCount + BottomOvershoot)
         }
     }
@@ -331,6 +360,8 @@ internal class ChatScrollController(
         const val BottomOvershoot = 5
         const val MaxPinFrames = 60
         const val StableFrames = 3
+        const val AnchorTrackingMs = 1000L
+        const val MaxAnchorCorrections = 60
         const val NavButtonsHideDelayMs = 2000L
     }
 }

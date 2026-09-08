@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.Uri
 import java.io.File
 import me.rerere.fawntavern.data.api.ApiConfig
-import me.rerere.fawntavern.data.api.ApiConfigStore
+import me.rerere.fawntavern.data.api.ApiConfigRepository
 import me.rerere.fawntavern.data.character.CharacterRepository
 import me.rerere.fawntavern.data.preset.PresetRepository
 import me.rerere.fawntavern.data.regex.RegexSetRepository
@@ -14,6 +14,7 @@ import org.json.JSONObject
 
 internal class AndroidCharacterEditorDataSource(
     private val context: Context,
+    private val apiConfigRepository: ApiConfigRepository,
 ) : CharacterEditorDataSource {
     override fun imageFile(name: String): File = CharacterRepository.imageFile(context, name)
     override suspend fun saveImage(name: String, uri: Uri): Boolean =
@@ -21,7 +22,7 @@ internal class AndroidCharacterEditorDataSource(
     override suspend fun deleteImage(name: String) = CharacterRepository.deleteImage(context, name)
     override suspend fun updateJson(name: String, transform: (JSONObject) -> Unit) =
         CharacterRepository.updateJson(context, name, transform)
-    override fun apiConfig(): ApiConfig = ApiConfigStore.loadConfig(context)
+    override fun apiConfig(): ApiConfig = apiConfigRepository.load()
     override fun model(key: String): String = CharacterModelStore.get(context, key)
     override fun saveModel(key: String, model: String) = CharacterModelStore.set(context, key, model)
     override suspend fun presetOptions(): List<CharacterAssociationOption> =

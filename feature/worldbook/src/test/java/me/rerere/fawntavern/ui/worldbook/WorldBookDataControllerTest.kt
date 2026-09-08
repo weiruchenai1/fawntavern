@@ -47,12 +47,12 @@ class WorldBookDataControllerTest {
             created = name
             return WorldBook(name = "$name (2)")
         }
-        override suspend fun import(uri: Uri): WorldBook = WorldBook(name = "imported")
+        override suspend fun import(source: Uri): WorldBook = WorldBook(name = "imported")
         override suspend fun rename(old: String, new: String): Boolean {
             renamed = old to new
             return true
         }
-        override suspend fun delete(name: String) { deleted = name }
+        override suspend fun delete(key: String) { deleted = key }
         override suspend fun saveEntries(name: String, entries: List<WorldBookEntry>) {
             savedEntries = name to entries
         }

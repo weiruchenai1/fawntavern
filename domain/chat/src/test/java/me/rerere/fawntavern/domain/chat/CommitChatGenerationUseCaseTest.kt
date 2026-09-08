@@ -71,9 +71,9 @@ private class RecordingChatRepository(
     override suspend fun deleteMessage(sessionId: String, timestamp: Long) = Unit
     override suspend fun deleteAllVersions(sessionId: String, timestamp: Long) = Unit
     override suspend fun editMessage(sessionId: String, timestamp: Long, content: String) = Unit
-    override suspend fun truncateAfter(sessionId: String, timestamp: Long) = Unit
-    override suspend fun updateTitle(sessionId: String, title: String) = Unit
-    override suspend fun updatePinned(sessionId: String, pinned: Boolean) = Unit
+    override suspend fun truncateAfter(id: String, timestamp: Long) = Unit
+    override suspend fun updateTitle(id: String, title: String) = Unit
+    override suspend fun updatePinned(id: String, pinned: Boolean) = Unit
     override suspend fun saveLocalVariables(sessionId: String, variables: Map<String, String>) = Unit
     override suspend fun collectUnusedAttachments() = Unit
 }

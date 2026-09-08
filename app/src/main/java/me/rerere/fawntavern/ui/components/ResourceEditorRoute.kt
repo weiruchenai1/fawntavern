@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import kotlinx.coroutines.CancellationException
 import me.rerere.fawntavern.R
 import me.rerere.fawntavern.core.diagnostics.SafeLog
@@ -21,6 +22,7 @@ internal fun <T> ResourceEditorRoute(
     content: @Composable (T) -> Unit,
 ) = key(name) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val loaded by produceState<Result<T>?>(null, name) {
         value = try {
             Result.success(load(name))
@@ -35,10 +37,10 @@ internal fun <T> ResourceEditorRoute(
     if (result == null) {
         LoadingState()
     } else if (result.isFailure) {
-        LaunchedEffect(result) {
+        LaunchedEffect(result, resources) {
             val error = result.exceptionOrNull()
             SafeLog.error("ResourceEditor", "resource_load_failed", error)
-            Toast.makeText(context, context.getString(R.string.editor_draft_failed_fmt, error?.message.orEmpty()), Toast.LENGTH_LONG).show()
+            Toast.makeText(context, resources.getString(R.string.editor_draft_failed_fmt, error?.message.orEmpty()), Toast.LENGTH_LONG).show()
             onBack()
         }
     } else {
