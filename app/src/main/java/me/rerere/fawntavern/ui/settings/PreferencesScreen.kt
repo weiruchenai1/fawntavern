@@ -48,6 +48,7 @@ import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.settings.NavButtonsMode
 import me.rerere.fawntavern.data.settings.Preferences
 import me.rerere.fawntavern.ui.components.SettingsSubPage
+import me.rerere.fawntavern.ui.components.PageTransition
 import me.rerere.fawntavern.ui.components.noRippleClickable
 import me.rerere.fawntavern.ui.components.vibrate
 
@@ -67,7 +68,8 @@ fun PreferencesScreen(
     var page by remember { mutableStateOf<PrefPage?>(null) }
     BackHandler { if (page != null) page = null else onBack() }
 
-    when (page) {
+    PageTransition(targetState = page) { currentPage ->
+    when (currentPage) {
         null -> PrefHomeScreen(onBack = onBack, onOpen = { page = it })
         PrefPage.THEME -> ThemeSettingsScreen(
             onBack = { page = null },
@@ -78,6 +80,7 @@ fun PreferencesScreen(
         PrefPage.RENDERING -> RenderingSettingsScreen(onBack = { page = null })
         PrefPage.BEHAVIOR -> BehaviorStartupScreen(onBack = { page = null })
         PrefPage.HAPTICS -> HapticsScreen(onBack = { page = null })
+    }
     }
 }
 
@@ -115,7 +118,7 @@ private fun PrefNavRow(icon: ImageVector, label: String, onClick: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f))
         Icon(Lucide.ChevronRight, null, Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            tint = MaterialTheme.colorScheme.outline)
     }
 }
 

@@ -66,6 +66,7 @@ import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.preset.RegexScript
 import me.rerere.fawntavern.ui.components.AddItemSheet
 import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.PageTransition
 import me.rerere.fawntavern.ui.components.ConfirmDeleteDialog
 import me.rerere.fawntavern.ui.components.EmptyState
 import me.rerere.fawntavern.ui.components.RenameDialog
@@ -226,7 +227,10 @@ fun RegexListScreen(onBack: () -> Unit) {
         reloadGroups()
     }
 
-    val selected = selectedSource
+    PageTransition(
+        targetState = selectedSource,
+        contentKey = { it?.let { source -> "${source.scope}:${source.name}" } ?: "list" },
+    ) { selected ->
     if (selected != null) {
         val closeDetail = {
             longPressRegex = null
@@ -334,6 +338,8 @@ fun RegexListScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
+
     }
 
     addTarget?.let { target ->
@@ -662,7 +668,7 @@ private fun RegexGroupCard(group: RegexGroup, onClick: () -> Unit, onLongPress: 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Icon(Lucide.ChevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(Lucide.ChevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 

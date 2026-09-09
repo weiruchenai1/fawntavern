@@ -76,15 +76,15 @@ internal class AndroidRegexLibraryDataSource(
         }
     }
 
-    override suspend fun rename(source: RegexSource, name: String): Boolean = when (source.scope) {
-        RegexScope.GLOBAL, RegexScope.LOCAL -> CharacterRepository.renameRegexSet(context, source.name, name)
-        RegexScope.PRESET -> PresetRepository.rename(context, source.name, name)
+    override suspend fun rename(old: RegexSource, new: String): Boolean = when (old.scope) {
+        RegexScope.GLOBAL, RegexScope.LOCAL -> CharacterRepository.renameRegexSet(context, old.name, new)
+        RegexScope.PRESET -> PresetRepository.rename(context, old.name, new)
     }
 
-    override suspend fun delete(source: RegexSource) {
-        when (source.scope) {
-            RegexScope.GLOBAL, RegexScope.LOCAL -> CharacterRepository.deleteRegexSet(context, source.name)
-            RegexScope.PRESET -> CharacterRepository.deletePreset(context, source.name)
+    override suspend fun delete(key: RegexSource) {
+        when (key.scope) {
+            RegexScope.GLOBAL, RegexScope.LOCAL -> CharacterRepository.deleteRegexSet(context, key.name)
+            RegexScope.PRESET -> CharacterRepository.deletePreset(context, key.name)
         }
     }
 }

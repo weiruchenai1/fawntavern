@@ -18,9 +18,9 @@ internal class AndroidPresetDataSource(
     }
     override suspend fun load(name: String): StPreset = PresetRepository.load(context, name)
     override suspend fun create(name: String): StPreset = PresetRepository.create(context, name)
-    override suspend fun import(uri: Uri): StPreset = PresetRepository.import(context, uri)
+    override suspend fun import(source: Uri): StPreset = PresetRepository.import(context, source)
     override suspend fun rename(old: String, new: String): Boolean = PresetRepository.rename(context, old, new)
-    override suspend fun delete(name: String) = CharacterRepository.deletePreset(context, name)
+    override suspend fun delete(key: String) = CharacterRepository.deletePreset(context, key)
     override suspend fun save(preset: StPreset) = PresetRepository.save(context, preset)
     override suspend fun parseRegex(uri: Uri): RegexScript = PresetRepository.parseRegexUri(context, uri)
 }

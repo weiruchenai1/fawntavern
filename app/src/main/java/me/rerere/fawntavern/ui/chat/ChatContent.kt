@@ -24,7 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.CircularProgressIndicator
+import me.rerere.fawntavern.ui.components.LoadingState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,7 +32,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import me.rerere.fawntavern.ui.components.PageTransition
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -155,9 +155,9 @@ internal fun ChatContent(
     }
 
     // ── 滚动状态提升到全屏页面切换上方 ──
-    // 全屏页面（设置/角色列表等）通过 when 分支 + return 实现，命中时整个聊天区域离开组合，
+    // 全屏页面（设置/角色列表等）过渡结束后，整个聊天区域离开组合，
     // 其内所有 remember 状态被销毁。返回时从零重建 → 滚动位置丢失 + LaunchedEffect 误触钉底。
-    // 把滚动状态机提升到 when 上方，使其存活在 ChatScreen 作用域内，不受 when 分支切换影响。
+    // 把滚动状态机提升到页面过渡上方，使其存活在 ChatScreen 作用域内。
     val scrollCtrl = rememberChatScrollController()
     // 记录上次因为"开/切会话"钉底的 session id，切换全屏页返回不触发重钉
     var lastPinnedSessionId by remember { mutableStateOf<String?>(null) }
@@ -185,15 +185,16 @@ internal fun ChatContent(
         )
     }
 
-    // ── 全屏页面：渲染栈顶 ──
-    // SaveableStateProvider 包裹每个分支：从 Settings 进入 Characters 再返回时，
-    // Settings 的 ScrollState 被暂存→恢复；否则 Settings 离开组合后重建，滚动回到顶部。
-    val screenStateHolder = rememberSaveableStateHolder()
-    val activeDestination = nav.lastOrNull()
+    // 页面过渡统一保留旧页，并按路由保存、恢复滚动位置。
+    PageTransition(
+        targetState = nav.toList(),
+        depth = { it.size },
+        contentKey = { it.lastOrNull()?.name ?: "chat" },
+    ) { backStack ->
+    val activeDestination = backStack.lastOrNull()
     if (activeDestination != null) {
         ChatDestinationHost(
             destination = activeDestination,
-            stateHolder = screenStateHolder,
             state = state,
             onAction = onAction,
             themeMode = themeMode,
@@ -208,7 +209,7 @@ internal fun ChatContent(
                 navBack()
             },
         )
-        return
+        return@PageTransition
     }
 
     model.revision
@@ -483,7 +484,7 @@ internal fun ChatContent(
                     if (msgs.isEmpty()) {
                         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                             if (waitingForInitialMessagePage) {
-                                CircularProgressIndicator()
+                                LoadingState()
                             } else {
                                 Text(stringResource(R.string.chat_empty_hint),
                                     style = MaterialTheme.typography.bodyMedium,
@@ -662,4 +663,5 @@ internal fun ChatContent(
         },
         onAction = onAction,
     )
+}
 }

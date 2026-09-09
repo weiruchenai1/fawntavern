@@ -327,7 +327,7 @@ private fun ExtensionCard(
                 Text(stringResource(R.string.settings), style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 Icon(Lucide.ChevronRight, null, Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    tint = MaterialTheme.colorScheme.outline)
             }
         }
     }

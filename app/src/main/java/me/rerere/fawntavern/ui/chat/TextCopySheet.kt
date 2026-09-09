@@ -195,7 +195,7 @@ internal fun TextCopySheet(
     val transformVisibleChunks = actualView && preview?.applyDisplayTransforms == true
 
     androidx.compose.runtime.LaunchedEffect(transformVisibleChunks, visibleRanges, preview) {
-        if (!transformVisibleChunks || preview == null) return@LaunchedEffect
+        if (!transformVisibleChunks) return@LaunchedEffect
         val missing = visibleRanges.filter { it.first !in renderedActualWindows }
         if (missing.isEmpty()) return@LaunchedEffect
         val generated = withContext(Dispatchers.Default) {

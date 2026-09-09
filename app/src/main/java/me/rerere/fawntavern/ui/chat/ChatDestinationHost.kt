@@ -1,7 +1,6 @@
 package me.rerere.fawntavern.ui.chat
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.saveable.SaveableStateHolder
 import me.rerere.fawntavern.data.settings.ThemeMode
 import me.rerere.fawntavern.domain.GenerationActionGuard
 import me.rerere.fawntavern.ui.api.ApiConfigScreen
@@ -29,7 +28,6 @@ import me.rerere.fawntavern.ui.worldbook.WorldBookListScreen
 @Composable
 internal fun ChatDestinationHost(
     destination: ChatDestination,
-    stateHolder: SaveableStateHolder,
     state: ChatUiState,
     onAction: (ChatAction) -> Unit,
     themeMode: ThemeMode,
@@ -40,8 +38,7 @@ internal fun ChatDestinationHost(
     onNavigate: (ChatDestination) -> Unit,
     onOpenSearchSession: (String) -> Unit,
 ) {
-    stateHolder.SaveableStateProvider(destination.name) {
-        when (destination) {
+    when (destination) {
         ChatDestination.Translator -> {
             TranslatorScreen(
                 onBack = onBack,
@@ -161,7 +158,6 @@ internal fun ChatDestinationHost(
                 onBack()
                 onAction(ChatAction.ReloadPromptData)
             })
-        }
         }
     }
 }

@@ -13,9 +13,9 @@ internal class AndroidWorldBookDataSource(
     override suspend fun names(): List<String> = WorldBookRepository.listNames(context)
     override suspend fun load(name: String): WorldBook = WorldBookRepository.load(context, name)
     override suspend fun create(name: String): WorldBook = WorldBookRepository.create(context, name)
-    override suspend fun import(uri: Uri): WorldBook = WorldBookRepository.import(context, uri)
+    override suspend fun import(source: Uri): WorldBook = WorldBookRepository.import(context, source)
     override suspend fun rename(old: String, new: String): Boolean = WorldBookRepository.rename(context, old, new)
-    override suspend fun delete(name: String) = CharacterRepository.deleteWorldBook(context, name)
+    override suspend fun delete(key: String) = CharacterRepository.deleteWorldBook(context, key)
     override suspend fun saveEntries(name: String, entries: List<WorldBookEntry>) =
         WorldBookRepository.saveEntries(context, name, entries)
     override suspend fun exportJson(name: String): ByteArray =

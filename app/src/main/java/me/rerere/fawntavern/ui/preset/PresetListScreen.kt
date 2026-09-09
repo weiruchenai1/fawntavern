@@ -33,7 +33,9 @@ import me.rerere.fawntavern.R
 import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.preset.StPreset
 import me.rerere.fawntavern.ui.components.ImportableListScreen
+import me.rerere.fawntavern.ui.components.ImportableListState
 import me.rerere.fawntavern.ui.components.ResourceEditorRoute
+import me.rerere.fawntavern.ui.components.PageTransition
 import me.rerere.fawntavern.ui.components.CreateItemSpec
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.appClickable
@@ -42,17 +44,18 @@ import me.rerere.fawntavern.ui.components.appClickable
 fun PresetListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val controller = LocalAppContainer.current.features.presets
+    val listState = remember(controller) { ImportableListState<StPreset>() }
     var selectedName by rememberSaveable { mutableStateOf<String?>(null) }
     // SaveableStateHolder：进入编辑器时列表离开组合，其 LazyListState 被暂存；
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
     val stateHolder = rememberSaveableStateHolder()
 
-    val selected = selectedName
+    PageTransition(targetState = selectedName) { selected ->
     if (selected != null) {
         ResourceEditorRoute(selected, controller::load, onBack = { selectedName = null }) { preset ->
             PresetEditorScreen(preset = preset, onBack = { selectedName = null })
         }
-        return
+        return@PageTransition
     }
 
     stateHolder.SaveableStateProvider("list") {
@@ -69,6 +72,7 @@ fun PresetListScreen(onBack: () -> Unit) {
         deleteTitleRes = R.string.delete_preset_title,
         deleteMsgFmtRes = R.string.delete_preset_msg_fmt,
         controller = controller,
+        listState = listState,
         onOpen = { selectedName = it.name },
         canDeleteItem = { !controller.isDefault(it) },
         createItem = CreateItemSpec(
@@ -89,6 +93,7 @@ fun PresetListScreen(onBack: () -> Unit) {
         },
     )
     } // SaveableStateProvider("list")
+    }
 }
 
 @Composable
@@ -129,6 +134,6 @@ private fun PresetCard(
             }
         }
         Icon(Lucide.ChevronRight, null, Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            tint = MaterialTheme.colorScheme.outline)
     }
 }

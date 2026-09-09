@@ -24,9 +24,9 @@ internal class AndroidCharacterLibraryDataSource(
     override suspend fun load(name: String): CharacterCard = CharacterRepository.load(context, name)
     override suspend fun create(name: String): CharacterCard =
         CharacterRepository.create(context, name, defaultPresetId())
-    override suspend fun import(uri: Uri): CharacterCard =
-        CharacterRepository.import(context, uri, defaultPresetId())
-    override suspend fun delete(name: String) = delete(name, false, false)
+    override suspend fun import(source: Uri): CharacterCard =
+        CharacterRepository.import(context, source, defaultPresetId())
+    override suspend fun delete(key: String) = delete(key, false, false)
     override suspend fun chatCount(name: String): Int = ChatRepository.countForCharacter(context, name)
 
     override suspend fun delete(name: String, deleteChats: Boolean, deleteAssociations: Boolean) {

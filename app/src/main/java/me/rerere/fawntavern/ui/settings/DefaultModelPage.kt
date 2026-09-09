@@ -281,7 +281,7 @@ internal fun ModelCard(
                 modifier = Modifier.weight(1f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Icon(Lucide.ChevronRight, null, Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                tint = MaterialTheme.colorScheme.outline)
         }
     }
 }

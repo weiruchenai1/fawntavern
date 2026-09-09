@@ -273,7 +273,7 @@ private fun TestResultRow(
                 Lucide.ChevronRight,
                 contentDescription = stringResource(R.string.test_view_details),
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MaterialTheme.colorScheme.outline,
             )
         }
     }

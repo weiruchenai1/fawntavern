@@ -45,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import me.rerere.fawntavern.ui.components.ResourceEditorRoute
+import me.rerere.fawntavern.ui.components.PageTransition
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -107,6 +108,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     var names by remember { mutableStateOf<List<String>>(emptyList()) }
     var chars by remember { mutableStateOf<Map<String, CharacterCard>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
+    var hasLoaded by remember { mutableStateOf(false) }
     var editingFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var showAddSheet by remember { mutableStateOf(false) }
 
@@ -126,6 +128,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
                 val loaded = controller.load()
                 names = loaded.names
                 chars = loaded.cards
+                hasLoaded = true
             } catch (error: Exception) {
                 Toast.makeText(
                     context,
@@ -246,13 +249,13 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
     // SaveableStateHolder：进入编辑器时列表离开组合，其 LazyListState 被暂存；
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
     val stateHolder = rememberSaveableStateHolder()
-    val selected = editingFileName
+    PageTransition(targetState = editingFileName) { selected ->
     if (selected != null) {
         val closeEditor = { editingFileName = null; imageVersion++; refresh() }
         ResourceEditorRoute(selected, controller::load, onBack = closeEditor) { card ->
             CharacterEditorScreen(card = card, onBack = closeEditor, cardFileName = selected)
         }
-        return
+        return@PageTransition
     }
 
     stateHolder.SaveableStateProvider("list") {
@@ -268,7 +271,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
             }
         }
     ) { padding ->
-        if (loading) {
+        if (loading && !hasLoaded) {
             LoadingState(Modifier.padding(padding))
         } else if (names.isEmpty()) {
             EmptyState(Lucide.FileJson, stringResource(R.string.no_characters_title),
@@ -338,6 +341,7 @@ fun CharacterListScreen(onBack: () -> Unit, onSelect: (CharacterCard) -> Unit = 
         }
     }
     } // SaveableStateProvider("list")
+    }
 }
 
 @Composable

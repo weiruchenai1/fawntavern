@@ -348,9 +348,9 @@ private fun SettingsRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (value != null)
                 Text(value, style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = MaterialTheme.colorScheme.outline)
             Icon(Lucide.ChevronRight, null, Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                tint = MaterialTheme.colorScheme.outline)
         }
     }
 }

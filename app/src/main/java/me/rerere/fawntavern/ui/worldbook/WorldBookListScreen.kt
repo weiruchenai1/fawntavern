@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import me.rerere.fawntavern.ui.components.ResourceEditorRoute
+import me.rerere.fawntavern.ui.components.PageTransition
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +41,7 @@ import me.rerere.fawntavern.data.worldbook.WorldBook
 import me.rerere.fawntavern.ui.components.AppIconButton
 import me.rerere.fawntavern.ui.components.CreateItemSpec
 import me.rerere.fawntavern.ui.components.ImportableListScreen
+import me.rerere.fawntavern.ui.components.ImportableListState
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.Space16
 import me.rerere.fawntavern.ui.components.appClickable
@@ -48,26 +50,31 @@ import me.rerere.fawntavern.ui.components.appClickable
 fun WorldBookListScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val controller = LocalAppContainer.current.features.worldBooks
+    val listState = remember(controller) { ImportableListState<WorldBook>() }
     var selectedName by rememberSaveable { mutableStateOf<String?>(null) }
     var showWiSettings by rememberSaveable { mutableStateOf(false) }
     // SaveableStateHolder：进入编辑器/设置时列表离开组合，其 LazyListState 被暂存；
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
     val stateHolder = rememberSaveableStateHolder()
 
-    val selected = selectedName
+    PageTransition(
+        targetState = selectedName to showWiSettings,
+        depth = { (name, settings) -> if (name != null || settings) 1 else 0 },
+        contentKey = { (name, settings) -> name?.let { "book:$it" } ?: if (settings) "settings" else "list" },
+    ) { (selected, settings) ->
     if (selected != null) {
         ResourceEditorRoute(selected, controller::load, onBack = { selectedName = null }) { book ->
             WorldBookViewScreen(book = book, onBack = { selectedName = null })
         }
-        return
+        return@PageTransition
     }
 
-    if (showWiSettings) {
+    if (settings) {
         stateHolder.SaveableStateProvider("settings") {
             BackHandler { showWiSettings = false }
             WorldInfoSettingsScreen(onBack = { showWiSettings = false })
         }
-        return
+        return@PageTransition
     }
 
     stateHolder.SaveableStateProvider("list") {
@@ -84,6 +91,7 @@ fun WorldBookListScreen(onBack: () -> Unit) {
         deleteTitleRes = R.string.delete_worldbook_title,
         deleteMsgFmtRes = R.string.delete_worldbook_msg_fmt,
         controller = controller,
+        listState = listState,
         exportItem = controller::exportJson,
         onOpen = { selectedName = it.name },
         createItem = CreateItemSpec(
@@ -107,6 +115,7 @@ fun WorldBookListScreen(onBack: () -> Unit) {
         },
     )
     } // SaveableStateProvider("list")
+    }
 }
 
 @Composable
@@ -131,6 +140,6 @@ private fun BookCard(book: WorldBook, onClick: () -> Unit, onLongPress: () -> Un
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Icon(Lucide.ChevronRight, null, Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            tint = MaterialTheme.colorScheme.outline)
     }
 }

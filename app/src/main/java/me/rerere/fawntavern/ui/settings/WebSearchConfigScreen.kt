@@ -73,6 +73,7 @@ import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.search.SearchServiceOptions
 import me.rerere.fawntavern.ui.api.ProviderIcon
 import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.PageTransition
 import me.rerere.fawntavern.ui.components.PickerRow
 import me.rerere.fawntavern.ui.components.SettingsSubPage
 import me.rerere.fawntavern.ui.components.Space8
@@ -104,9 +105,10 @@ fun WebSearchConfigScreen(onBack: () -> Unit) {
     var showAddSheet by remember { mutableStateOf(false) }
     val stateHolder = rememberSaveableStateHolder()
 
-    if (editingId != null) {
-        stateHolder.SaveableStateProvider("detail") {
-            val service = services.find { it.id == editingId } ?: return@SaveableStateProvider
+    PageTransition(targetState = editingId) { currentId ->
+    if (currentId != null) {
+        stateHolder.SaveableStateProvider("detail:$currentId") {
+            val service = services.find { it.id == currentId } ?: return@SaveableStateProvider
             SearchProviderEditScreen(
                 service = service,
                 resultSize = config.resultSize,
@@ -116,7 +118,7 @@ fun WebSearchConfigScreen(onBack: () -> Unit) {
                 },
             )
         }
-        return
+        return@PageTransition
     }
 
     if (showAddSheet) {
@@ -192,6 +194,8 @@ fun WebSearchConfigScreen(onBack: () -> Unit) {
             }
         }
     }
+}
+
 }
 
 /** 搜索提供商卡片：图标 + 名称 + 右侧拖拽手柄；点卡片编辑，长按弹下拉菜单 */

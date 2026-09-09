@@ -112,7 +112,7 @@ private fun LogNavigationRow(icon: ImageVector, label: String, onClick: () -> Un
             Lucide.ChevronRight,
             null,
             Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = MaterialTheme.colorScheme.outline,
         )
     }
 }

@@ -24,6 +24,7 @@ import me.rerere.fawntavern.di.LocalAppContainer
 import me.rerere.fawntavern.data.api.ApiProvider
 import me.rerere.fawntavern.data.api.ModelType
 import me.rerere.fawntavern.ui.components.AppTopBar
+import me.rerere.fawntavern.ui.components.PageTransition
 import me.rerere.fawntavern.ui.components.Space12
 import me.rerere.fawntavern.ui.components.rememberReorderableList
 import sh.calvin.reorderable.ReorderableItem
@@ -57,10 +58,15 @@ fun ApiConfigScreen(onBack: () -> Unit) {
     // 返回时恢复，避免列表滚动位置丢失（跳回顶部）。
     val stateHolder = rememberSaveableStateHolder()
 
-    if (editingId != null) {
-        val selectedProvider = config.providers.find { it.id == editingId }
+    PageTransition(
+        targetState = editingId to addingProvider,
+        depth = { (id, draft) -> if (id != null || draft != null) 1 else 0 },
+        contentKey = { (id, draft) -> id?.let { "edit:$it" } ?: draft?.let { "add:${it.id}" } ?: "list" },
+    ) { (selectedId, draftProvider) ->
+    if (selectedId != null) {
+        val selectedProvider = config.providers.find { it.id == selectedId }
         if (selectedProvider == null) {
-            LaunchedEffect(editingId) { editingId = null }
+            LaunchedEffect(selectedId) { if (editingId == selectedId) editingId = null }
         } else {
             key("edit:${selectedProvider.id}") {
                 BackHandler { editingId = null }
@@ -85,10 +91,9 @@ fun ApiConfigScreen(onBack: () -> Unit) {
                 )
             }
         }
-        return
+        return@PageTransition
     }
 
-    val draftProvider = addingProvider
     if (draftProvider != null) {
         key("add:${draftProvider.id}") {
             ProviderDetailScreen(
@@ -105,7 +110,7 @@ fun ApiConfigScreen(onBack: () -> Unit) {
                 onDelete = { addingProvider = null },
             )
         }
-        return
+        return@PageTransition
     }
 
     stateHolder.SaveableStateProvider("list") {
@@ -197,5 +202,6 @@ fun ApiConfigScreen(onBack: () -> Unit) {
                 }
             }
         }
+    }
     }
 }

@@ -66,6 +66,14 @@ internal data class ImportableLoadResult<T : Any>(
     val failures: Map<String, Exception>,
 )
 
+/** 仅驻留当前资源页面，编辑器返回时沿用快照并重新读取；大对象不写入 Bundle。 */
+class ImportableListState<T : Any> {
+    var names by mutableStateOf<List<String>>(emptyList())
+    var items by mutableStateOf<Map<String, T>>(emptyMap())
+    var failures by mutableStateOf<Map<String, Exception>>(emptyMap())
+    var hasLoaded by mutableStateOf(false)
+}
+
 internal suspend fun <T : Any> loadImportableItems(
     listNames: suspend () -> List<String>,
     loadItem: suspend (String) -> T,
@@ -121,6 +129,7 @@ fun <T : Any> ImportableListScreen(
     canDeleteItem: (String) -> Boolean = { true },
     createItem: CreateItemSpec? = null,
     actions: (@Composable () -> Unit)? = null,
+    listState: ImportableListState<T> = remember { ImportableListState<T>() },
 ) {
     val listNames = controller::names
     val loadItem = controller::load
@@ -130,9 +139,9 @@ fun <T : Any> ImportableListScreen(
     val context = LocalContext.current
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    var names by remember { mutableStateOf<List<String>>(emptyList()) }
-    var items by remember { mutableStateOf<Map<String, T>>(emptyMap()) }
-    var failedItems by remember { mutableStateOf<Map<String, Exception>>(emptyMap()) }
+    val names = listState.names
+    val items = listState.items
+    val failedItems = listState.failures
     var loadError by remember { mutableStateOf<Exception?>(null) }
     var loading by remember { mutableStateOf(true) }
     var showAddSheet by remember { mutableStateOf(false) }
@@ -148,9 +157,10 @@ fun <T : Any> ImportableListScreen(
             loadError = null
             try {
                 val result = loadImportableItems(listNames, loadItem)
-                names = result.names
-                items = result.items
-                failedItems = result.failures
+                listState.names = result.names
+                listState.items = result.items
+                listState.failures = result.failures
+                listState.hasLoaded = true
                 result.failures.forEach { (name, error) ->
                     SafeLog.error(IMPORTABLE_LIST_TAG, "item_load_failed", error)
                 }
@@ -169,13 +179,13 @@ fun <T : Any> ImportableListScreen(
         scope.launch {
             try {
                 val item = loadItem(name)
-                items = items + (name to item)
-                failedItems = failedItems - name
+                listState.items = listState.items + (name to item)
+                listState.failures = listState.failures - name
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
                 SafeLog.error(IMPORTABLE_LIST_TAG, "item_reload_failed", error)
-                failedItems = failedItems + (name to error)
+                listState.failures = listState.failures + (name to error)
             }
         }
     }
@@ -317,7 +327,7 @@ fun <T : Any> ImportableListScreen(
             }
         }
     ) { padding ->
-        if (loading) {
+        if (loading && !listState.hasLoaded) {
             LoadingState(Modifier.padding(padding))
         } else if (loadError != null) {
             ErrorState(
