@@ -271,12 +271,7 @@ internal class MessageWebView(
         isHorizontalScrollBarEnabled = false
         overScrollMode = View.OVER_SCROLL_NEVER
         isNestedScrollingEnabled = false
-        // LazyColumn 移除已聚焦的平台视图时会把焦点交还 AndroidComposeView；Android 10 会在
-        // Compose 应用变更期间同步触发越界组合并导致崩溃。消息 HTML 仍可触摸和运行脚本，
-        // 但不参与平台焦点链。
-        descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-        isFocusable = false
-        isFocusableInTouchMode = false
+        enableInputFocus()
         settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = allowContentJavaScript
@@ -379,6 +374,7 @@ internal class MessageWebView(
         onOpenLink: (String) -> Unit,
     ) {
         active = true
+        enableInputFocus()
         this.chatMessagesJson = chatMessagesJson
         this.frontendContextJson = frontendContextJson
         FrontendWebViewRegistry.register(this, frontendContextJson)
@@ -412,6 +408,13 @@ internal class MessageWebView(
         isFocusable = false
         isFocusableInTouchMode = false
         parent?.requestDisallowInterceptTouchEvent(false)
+    }
+
+    private fun enableInputFocus() {
+        // HTML 表单需要平台焦点才能连接输入法；回收时禁用，重新绑定时恢复。
+        descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        isFocusable = true
+        isFocusableInTouchMode = true
     }
 
     private fun dispatchToMain(block: () -> Unit) {
