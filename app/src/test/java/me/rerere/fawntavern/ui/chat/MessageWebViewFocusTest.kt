@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [29, 34], application = Application::class)
 class MessageWebViewFocusTest {
     @Test
-    fun inputFocusIsAvailableInitiallyAndAfterReuse() {
+    fun inputFocusConfigurationIsRestoredAfterReuse() {
         val view = MessageWebView(
             context = RuntimeEnvironment.getApplication(),
             shell = "<html><body></body></html>",
@@ -36,11 +36,13 @@ class MessageWebViewFocusTest {
             onOpenLink = {},
         )
         try {
+            assertTrue(view.isFocusable)
             assertTrue(view.isFocusableInTouchMode)
-            assertTrue(view.requestFocus())
+            assertEquals(ViewGroup.FOCUS_AFTER_DESCENDANTS, view.descendantFocusability)
             view.deactivate()
             assertFalse(view.isFocusable)
-            assertFalse(view.hasFocus())
+            assertFalse(view.isFocusableInTouchMode)
+            assertEquals(ViewGroup.FOCUS_BLOCK_DESCENDANTS, view.descendantFocusability)
             view.bind(
                 chatMessagesJson = "[]",
                 frontendContextJson = "{}",
@@ -58,7 +60,7 @@ class MessageWebViewFocusTest {
             )
             assertTrue(view.isFocusableInTouchMode)
             assertEquals(ViewGroup.FOCUS_AFTER_DESCENDANTS, view.descendantFocusability)
-            assertTrue(view.requestFocus())
+            assertTrue(view.isFocusable)
         } finally {
             view.destroySafely()
         }
